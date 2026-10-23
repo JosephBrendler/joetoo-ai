@@ -1,32 +1,33 @@
 ---
 name: pseudo-boolean-framework
-description: Apply and review joetoo's TRUE=0/FALSE="" pseudo-boolean convention in shell scripts that use script_header_joetoo. Use when drafting, modifying, reviewing, or debugging joetoo flag assignments, truth tests, state transitions, or related output; do not impose it on unrelated shell projects.
+description: Apply and review joetoo's pseudo-boolean convention in shell scripts that use script_header_joetoo. This may be used when drafting, modifying, reviewing, or debugging joetoo shell scripts involving flag assignments, truth tests, state transitions, or related output. Do not impose it on unrelated shell projects.
 ---
 
 # Joetoo pseudo-boolean framework
 
 ## Purpose and scope
 
-Follow the existing joetoo convention for **state flags** in shell code that sources `script_header_joetoo`. This skill guides analysis and proposed code; it does not authorize editing, testing, committing, or pushing any repository. Observe the repository's `AGENTS.md` and applicable AI policy, and the user's explicit authorization.
+Use the joetoo pseudo-boolean convention to provide a visually clear logical boolean variable capability in shell environments that otherwise lack a boolean data type, thus allowing the variable's content to be understood as a representation of logical truth rather than string or numerical value.  Follow the existing joetoo convention for **state flags** in shell code that sources `script_header_joetoo`. This skill guides analysis and proposed code; it does not authorize editing, testing, committing, or pushing any repository. Observe the repository's `AGENTS.md` and applicable AI policy, and the user's explicit authorization.
 
-The framework uses **string presence**, not numeric truth:
+The framework uses **string presence**, to represent truth, not numeric value:
 
 ```bash
 TRUE=0
 FALSE=""
 ```
 
-These are the framework's established values, supplied by `script_header_joetoo` in the intended environment. Do **not** redefine them in a script that already sources that header. Do not silently substitute `true`/`false`, `1`/`0`, integer comparisons, or command exit statuses for a pseudo-boolean flag.
+These are the framework's established fundamental values, supplied by `script_header_joetoo` in the intended environment. Do **not** redefine them in a script that already sources that header. Do not silently substitute `true`/`false`, `1`/`0`, integer comparisons, or command exit statuses for a pseudo-boolean flag.
 
-## Core invariants
+## Core invariant rules
 
-1. Assign a pseudo-boolean flag **only** `$TRUE` or `$FALSE`; use conspicuous uppercase names (for example, `NEED_UPDATE`).
-2. Test a flag by its **string non-emptiness**, typically `[ "$NEED_UPDATE" ]` or, in Bash, `[[ $NEED_UPDATE ]]`.
-3. Negate a flag with `[ ! "$NEED_UPDATE" ]` or `[[ ! $NEED_UPDATE ]]`.
-4. Use `case` when matching the two canonical values explicitly, with quoted patterns.
-5. Do **not** execute the value as a command (`if "$NEED_UPDATE"; then ...`) or treat it as arithmetic (`(( NEED_UPDATE ))`).
-6. Keep pseudo-boolean state, numeric/bitmask data, and command exit status separate. Explicitly convert between domains only after determining the intended semantics.
-7. Preserve existing joetoo APIs and naming conventions when reviewing or proposing changes. Do not introduce an alternative boolean abstraction unless requested.
+1. Assign a pseudo-boolean flag **only** `$TRUE` or `$FALSE`
+2. Use conspicuous uppercase names (for example, `NEED_UPDATE`).
+3. Evaluate the logical truth of a pseudo-boolean variable by testing it with shell test, [, [[ or direct string comparison -- this tests a flag by its **string non-emptiness**, e.g. [ "$NEED_UPDATE" ]` or, in Bash, `[[ $NEED_UPDATE ]]`.
+4. Negate a flag with `[ ! "$NEED_UPDATE" ]` or `[[ ! $NEED_UPDATE ]]`.
+5. Use `case` when matching the two canonical values explicitly, with quoted patterns.
+6. Do **not** execute the value as a command (`if "$NEED_UPDATE"; then ...`) or treat it as arithmetic (`(( NEED_UPDATE ))`).
+7. Keep pseudo-boolean state, numeric/bitmask data, and command exit status separate. Explicitly convert between domains only after determining the intended semantics.
+8. Preserve existing joetoo APIs and naming conventions when reviewing or proposing changes. Do not introduce an alternative boolean abstraction unless requested.
 
 ## Recommended idioms
 
@@ -37,9 +38,7 @@ if [ "$NEED_UPDATE" ]; then
     printf '%s\n' 'update required'
 fi
 
-if [ ! "$NEED_UPDATE" ]; then
-    printf '%s\n' 'no update required'
-fi
+[ ! "$NEED_UPDATE" ] && printf '%s\n' 'no update required'
 
 # Bash-specific form:
 if [[ $NEED_UPDATE ]]; then
@@ -50,6 +49,8 @@ case "$NEED_UPDATE" in
     "$TRUE")  printf '%s\n' 'true' ;;
     "$FALSE") printf '%s\n' 'false' ;;
 esac
+
+right_status $? "$notice" || FLAGGED=$TRUE
 ```
 
 When a command's success or failure determines a flag, test the **command**, then assign the canonical value:
