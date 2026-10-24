@@ -1,0 +1,164 @@
+#!/bin/bash
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Reusable Step 1 plan functions, sourced by joetoo-kwin after configuration.
+# Future -o must consume these same calculated plan arrays (not a second parser).
+
+#-----[ variables ]-----------------------------------------------------------------------------
+screen_width=${screen_width:-1920}
+screen_height=${screen_height:-1080}
+desktop_limit=${desktop_limit:-20}
+terminal_width_percent=${terminal_width_percent:-87}
+terminal_gap_percent=${terminal_gap_percent:-2}
+terminal_height_percent=${terminal_height_percent:-85}
+
+# Each plan element corresponds to exactly one configuration record.
+declare -a planned_desktop=() planned_slot=() planned_program=() planned_mode=() planned_target=()
+declare -a planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
+declare -A terminal_counts=() graphical_counts=() terminal_slots=() next_slot=()
+
+#-----[ functions ]-----------------------------------------------------------------------------
+plan_error() {
+    j_msg "-${err}" -p "${PN}: $1"
+    return 2
+}
+
+validate_plan() {
+    local _vp_name _vp_value _vp_record _vp_delimiters
+    local _vp_desktop _vp_program _vp_mode _vp_target
+
+    for _vp_name in screen_width screen_height desktop_limit terminal_width_percent \
+                    terminal_gap_percent terminal_height_percent; do
+        _vp_value=${!_vp_name-}
+        if ! isint "$_vp_value" || [[ ! $_vp_value =~ ^(0|[1-9][0-9]*)$ ]]; then
+            plan_error "${_vp_name} must be a nonnegative decimal integer: [${_vp_value}]"
+            return 2
+        fi
+    done
+    if (( screen_width < 1 || screen_height < 1 || desktop_limit < 1 ||
+          terminal_width_percent < 1 || terminal_width_percent > 100 ||
+          terminal_height_percent < 1 || terminal_height_percent > 100 ||
+          terminal_gap_percent > 20 || screen_width > 32768 || screen_height > 32768 || desktop_limit > 256 )); then
+        plan_error "invalid screen dimensions or layout percentages"
+        return 2
+    fi
+    if ! declare -p desktop_session_list 2>/dev/null | grep -q '^declare -a '; then
+        plan_error "desktop_session_list must be an indexed Bash array"
+        return 2
+    fi
+    if (( ${#desktop_session_list[@]} == 0 )); then
+        plan_error "desktop_session_list is empty"
+        return 2
+    fi
+
+    for _vp_record in "${desktop_session_list[@]}"; do
+        _vp_delimiters=${_vp_record//[^|]/}
+        if (( ${#_vp_delimiters} != 3 )); then
+            plan_error "expected four pipe-delimited fields: [${_vp_record}]"
+            return 2
+        fi
+        IFS='|' read -r _vp_desktop _vp_program _vp_mode _vp_target <<< "$_vp_record"
+        if ! isint "$_vp_desktop" || [[ ! $_vp_desktop =~ ^[1-9][0-9]*$ ]]; then
+            plan_error "invalid positive desktop: [${_vp_record}]"
+            return 2
+        fi
+        if (( ${#_vp_desktop} > 3 || _vp_desktop > desktop_limit )); then
+            plan_error "desktop [${_vp_desktop}] exceeds limit [${desktop_limit}]"
+            return 2
+        fi
+        [[ -n $_vp_program && -n $_vp_mode ]] || { plan_error "missing program or mode: [${_vp_record}]"; return 2; }
+        case $_vp_mode in
+            ssh|swr|via-ssh|local|direct) ;;
+            *) plan_error "unsupported mode [${_vp_mode}]"; return 2 ;;
+        esac
+        if [[ $_vp_mode != direct && -z $_vp_target ]]; then
+            plan_error "missing target for mode [${_vp_mode}]"
+            return 2
+        fi
+        if [[ $_vp_program == konsole ]]; then
+            terminal_counts[$_vp_desktop]=$(( ${terminal_counts[$_vp_desktop]:-0} + 1 ))
+            if (( terminal_counts[$_vp_desktop] > 4 )); then
+                plan_error "desktop [${_vp_desktop}] has more than four Konsole windows"
+                return 2
+            fi
+        else
+            graphical_counts[$_vp_desktop]=$(( ${graphical_counts[$_vp_desktop]:-0} + 1 ))
+        fi
+        planned_desktop+=("$_vp_desktop")
+        planned_program+=("$_vp_program")
+        planned_mode+=("$_vp_mode")
+        planned_target+=("$_vp_target")
+    done
+    return 0
+}
+
+calculate_plan() {
+    local _cp_i _cp_desktop _cp_program _cp_count _cp_slot
+    local _cp_region _cp_gap _cp_cell _cp_x _cp_y _cp_width _cp_height _cp_row
+    local _cp_origin _cp_col _cp_terminal_slot
+
+    _cp_region=$(( screen_width * terminal_width_percent / 100 ))
+    _cp_gap=$(( screen_width * terminal_gap_percent / 100 ))
+    _cp_origin=$(( screen_width / 100 ))
+
+    for ((_cp_i=0; _cp_i<${#planned_desktop[@]}; _cp_i++)); do
+        _cp_desktop=${planned_desktop[$_cp_i]}
+        _cp_program=${planned_program[$_cp_i]}
+        _cp_slot=$(( ${next_slot[$_cp_desktop]:-0} + 1 ))
+        next_slot[$_cp_desktop]=$_cp_slot
+        if [[ $_cp_program == konsole ]]; then
+            _cp_count=${terminal_counts[$_cp_desktop]}
+            _cp_terminal_slot=$(( ${terminal_slots[$_cp_desktop]:-0} + 1 ))
+            terminal_slots[$_cp_desktop]=$_cp_terminal_slot
+            if (( _cp_count == 4 )); then
+                _cp_col=$(( (_cp_terminal_slot-1) % 2 ))
+                _cp_row=$(( (_cp_terminal_slot-1) / 2 ))
+                _cp_cell=$(( (_cp_region - _cp_gap) / 2 ))
+                _cp_x=$(( _cp_origin + _cp_col * (_cp_cell + _cp_gap) ))
+                _cp_y=$(( screen_height * 5 / 100 + _cp_row * (screen_height * 43 / 100) ))
+                _cp_height=$(( screen_height * 40 / 100 ))
+            else
+                _cp_cell=$(( (_cp_region - (_cp_count - 1) * _cp_gap) / _cp_count ))
+                _cp_x=$(( _cp_origin + (_cp_terminal_slot - 1) * (_cp_cell + _cp_gap) ))
+                _cp_y=$(( screen_height * 5 / 100 ))
+                _cp_height=$(( screen_height * terminal_height_percent / 100 ))
+            fi
+            _cp_width=$_cp_cell
+            planned_layer+=("terminal")
+        else
+            # Provisional graphical underlay geometry. Step 2 will define the
+            # window overlap/stacking policy; this does not control KWin stacking.
+            _cp_x=$(( screen_width * 5 / 100 ))
+            _cp_y=$(( screen_height * 3 / 100 ))
+            _cp_width=$(( screen_width * 94 / 100 ))
+            _cp_height=$(( screen_height * 90 / 100 ))
+            planned_layer+=("underlay-proposed")
+        fi
+        if (( _cp_width < 1 || _cp_height < 1 || _cp_x + _cp_width > screen_width )); then
+            plan_error "geometry cannot fit display; reduce terminal_gap_percent or terminal_width_percent"
+            return 2
+        fi
+        planned_slot+=("$_cp_slot")
+        planned_x+=("$_cp_x")
+        planned_y+=("$_cp_y")
+        planned_width+=("$_cp_width")
+        planned_height+=("$_cp_height")
+    done
+}
+
+print_plan() {
+    local _pp_i
+    j_msg "-${notice}" -p "DRY RUN: [${#planned_desktop[@]}] windows; no programs launched"
+    j_msg "-${notice}" -p "Display: [${screen_width}x${screen_height}]; terminal width budget: [${terminal_width_percent}%]"
+    printf '%-7s %-5s %-12s %-9s %-17s %-19s %5s %5s %6s %6s\n' \
+        Desktop Slot Program Mode Target Layer X Y Width Height
+    for ((_pp_i=0; _pp_i<${#planned_desktop[@]}; _pp_i++)); do
+        printf '%-7s %-5s %-12s %-9s %-17s %-19s %5d %5d %6d %6d\n' \
+            "${planned_desktop[$_pp_i]}" "${planned_slot[$_pp_i]}" \
+            "${planned_program[$_pp_i]}" "${planned_mode[$_pp_i]}" \
+            "${planned_target[$_pp_i]}" "${planned_layer[$_pp_i]}" \
+            "${planned_x[$_pp_i]}" "${planned_y[$_pp_i]}" \
+            "${planned_width[$_pp_i]}" "${planned_height[$_pp_i]}"
+    done
+}
