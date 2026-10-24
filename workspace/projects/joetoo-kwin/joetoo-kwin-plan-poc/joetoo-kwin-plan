@@ -1,0 +1,156 @@
+#!/bin/bash
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# joetoo-kwin-plan - validate declarative window sessions and print dry-run geometry
+# Does not start applications, make connections, or contact the KWin bridge.
+
+source /usr/sbin/script_header_joetoo
+
+PN=${0##*/}
+if [ -f /etc/joetoolkit/BUILD ]; then . /etc/joetoolkit/BUILD; else BUILD="0.0.1"; fi
+[ -z "$verbosity" ] && verbosity="${notice}"
+
+#-----[ variables ]-----------------------------------------------------------------------------
+
+# hard-coded defaults
+screen_width=1024
+screen_height=768
+desktop_limit=20
+
+config="./desktop_sessions.conf"
+
+declare -A next_slot=()
+declare -A desktop_counts=()
+declare -a planned_desktop=()
+declare -a planned_program=()
+declare -a planned_mode=()
+declare -a planned_target=()
+
+#-----[ functions ]-----------------------------------------------------------------------------
+usage() {
+    j_msg "-${notice}" -p "Usage: ${PN} [-c CONFIG_FILE]"
+    j_msg "-${notice}" -m " Dry run only: validate configured sessions and report planned geometry"
+}
+
+parse_cmdline() {
+    while getopts ':c:h' opt; do
+        case "$opt" in
+            c) config=$OPTARG ;;
+            h) usage; exit 0 ;;
+            :) j_msg "-${err}" -p "${PN} option -${OPTARG} requires a value"; exit 2 ;;
+            *) usage >&2; exit 2 ;;
+        esac
+    done
+    shift "$((OPTIND-1))"
+    if (( $# != 0 )); then usage >&2; exit 2; fi
+    if [[ ! -r $config ]]; then  j_msg "-${err}" -p "${PN} cannot read config: [$config]"; exit 1; fi
+}
+
+validate_plan() {
+    # validate config
+    for name in screen_width screen_height desktop_limit; do
+        value=${!name-}
+        if ! isint "$value"; then
+            j_msg "-${err}" -p "${BRon}Error:${Boff} ${PN} requires ${name}: [${value}] to be a positive decimal integer"
+            exit 2
+        fi
+    done
+    if ! declare -p desktop_session_list 2>/dev/null | grep -q 'declare -a '; then
+        printf '%s: desktop_session_list must be an indexed Bash array\n' "$PN" >&2
+        exit 2
+    fi
+
+    # First pass: validate records and count intended windows on each desktop.
+    for record in "${desktop_session_list[@]}"; do
+        delimiters=${record//[^|]/}
+        if (( ${#delimiters} != 3 )); then
+            j_msg "-${err}" -p "${BRon}Error:${Boff} ${PN} expected exactly 4 pipe-delimited fields: [$record]"
+            exit 2
+        fi
+        IFS='|' read -r desktop program mode target <<< "$record"
+        if ! isint "$desktop"; then
+            j_msg "-${err}" -p "${BRon}Error:${Boff} ${PN}: invalid desktop number in [$record]"
+            exit 2
+        fi
+        if (( desktop > desktop_limit )); then
+            j_msg "-${err}" -p "${BRon}Error:${Boff} ${PN}: desktop [$desktop] exceeds configured desktop_limit [$desktop_limit]"
+            exit 2
+        fi
+        if [[ -z $program || -z $mode ]]; then
+            j_msg "-${err}" -p "${BRon}Error:${Boff} ${PN}: missing program or mode in [$record]"
+            exit 2
+        fi
+        case "$mode" in
+            swr|via-ssh|local|direct) ;;
+            *) j_msg "-${err}" -p "${BRon}Error:${Boff} ${PN}: unrecognized mode [$mode] in [$record]"; exit 2 ;;
+        esac
+        if [[ $mode != direct && -z $target ]]; then
+            j_msg "-${err}" -p "${BRon}Error:${Boff} ${PN}: mode [$mode] needs a target in [$record]" >&2
+            exit 2
+        fi
+        desktop_counts[$desktop]=$((${desktop_counts[$desktop]:-0} + 1))
+        if (( desktop_counts[$desktop] > 4 )); then
+            j_msg "-${err}" -p "${BRon}Error:${Boff} ${PN}: desktop [$desktop] has too many [${desktop_counts[$desktop]}] windows; initial planner supports 1-4"
+            exit 2
+        fi
+        planned_desktop+=("$desktop")
+        planned_program+=("$program")
+        planned_mode+=("$mode")
+        planned_target+=("$target")
+    done
+}
+# Percentage presets retain the legacy two-column arrangement (1%, 51%; 46%).
+# For 3-4 windows, two rows (5%, 49%) of 40% height are planned.
+percent() { printf '%d' "$(($1 * $2 / 100))"; }
+
+#-----[ main script ]---------------------------------------------------------------------------
+checknotroot
+separator "${PN}-${BUILD}" "(kwin plan)"
+
+# bash assignments in user's config override hard-coded defaults
+source "$config"
+
+# command line overrides user's config
+parse_cmdline "$@"
+
+validate_plan || die "failed to validate_plan"
+
+j_msg "-${notice}" -p "${BCon}DRY RUN:${Boff} ${BBon}[${BMon}${#planned_desktop[@]}${BBon}]${Boff} configured window(s); no programs launched"
+msg="${BCon}Display:${Boff} ${BBon}[${BMon}${screen_width}x${screen_height}${BBon}]${Boff};"
+msg+=" configured desktops: ${BBon}[${BMon}$desktop_limit${BBon}]${Boff}\n"
+j_msg "-${notice}" -p "$msg"
+titles=( 'Desktop' 'Slot' 'Program' 'Mode' 'Target' 'X' 'Y' 'Width' 'Height' )
+
+printf '%s%-7s %-5s %-12s %-9s %-17s %5s %5s %6s %6s%s\n' "${BWon}" "${titles[@]}" "${Boff}"
+printf '%s\n' '-------------------------------------------------------------------------------'
+
+for ((i=0; i<${#planned_desktop[@]}; i++)); do
+    desktop=${planned_desktop[$i]}
+    slot=$((${next_slot[$desktop]:-0} + 1))
+    next_slot[$desktop]=$slot
+    count=${desktop_counts[$desktop]}
+    if (( count == 1 )); then
+        x=$(percent "$screen_width" 1)
+        y=$(percent "$screen_height" 5)
+        width=$(percent "$screen_width" 94)
+        height=$(percent "$screen_height" 85)
+    else
+        col=$(((slot - 1) % 2))
+        x=$(percent "$screen_width" "$((col == 0 ? 1 : 51))")
+        width=$(percent "$screen_width" 46)
+        if (( count == 2 )); then
+            y=$(percent "$screen_height" 5)
+            height=$(percent "$screen_height" 85)
+        else
+            row=$(((slot - 1) / 2))
+            y=$(percent "$screen_height" "$((row == 0 ? 5 : 49))")
+            height=$(percent "$screen_height" 40)
+        fi
+    fi
+    values=( "$desktop" "$slot" "${planned_program[$i]}"
+           "${planned_mode[$i]}" "${planned_target[$i]}"
+           "$x" "$y" "$width" "$height")
+
+    printf '%-7d %-5d %-12s %-9s %-17s %5d %5d %6d %6d\n' "${values[@]}"
+done

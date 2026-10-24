@@ -1,0 +1,49 @@
+#!/bin/bash
+# joetoo-kwin - client for the experimental resident KWin bridge
+# Usage: joetoo-kwin move DESKTOP X Y WIDTH HEIGHT
+
+source /usr/sbin/script_header_joetoo
+PN=${0##*/}
+
+if [[ ${1:-} != move || $# -ne 6 ]]; then
+    printf 'Usage: %s move DESKTOP X Y WIDTH HEIGHT\n' "$PN" >&2
+    exit 2
+fi
+shift
+
+for arg in "$@"; do
+    if ! isint "$arg"; then
+        printf '%s: not an integer: %s\n' "$PN" "$arg" >&2
+        exit 2
+    fi
+done
+
+for value in "$1" "$4" "$5"; do
+    if [[ ! $value =~ ^0*[1-9][0-9]*$ ]]; then
+        printf '%s: desktop, width, and height must be positive\n' "$PN" >&2
+        exit 2
+    fi
+done
+
+bus=org.joetoo.KWinBridge
+path=/org/joetoo/KWinBridge
+iface=org.joetoo.KWinBridge
+
+request=$(qdbus6 "$bus" "$path" "$iface.Submit" "$@") || exit 1
+
+# Already tested on gmki91 (X11) and q552u01 (Wayland).
+qdbus6 org.kde.kglobalaccel /component/kwin \
+    org.kde.kglobalaccel.Component.invokeShortcut \
+    joetoo_bridge_move >/dev/null || exit 1
+
+for ((attempt=0; attempt<50; attempt++)); do
+    status=$(qdbus6 "$bus" "$path" "$iface.Status" "$request") || exit 1
+    case $status in
+        OK*)     printf '%s\n' "$status"; exit 0 ;;
+        ERROR*|UNKNOWN*) printf '%s\n' "$status" >&2; exit 1 ;;
+    esac
+    sleep 0.1
+done
+
+printf '%s: timed out waiting for KWin (request %s)\n' "$PN" "$request" >&2
+exit 1
