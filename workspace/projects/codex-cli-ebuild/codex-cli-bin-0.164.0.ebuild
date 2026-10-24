@@ -15,7 +15,7 @@ SRC_URI="
 "
 
 S="${WORKDIR}"
-# Known licenses; bundled Rust/native dependency audit remains a release gate.
+# Known license terms; bundled dependency notice inventory remains incomplete.
 LICENSE="Apache-2.0 BSD MIT LGPL-2+"
 SLOT="0"
 # Candidate only: add testing keywords after native Gentoo validation.
@@ -59,7 +59,9 @@ src_install() {
 
 	newdoc "${DISTDIR}/${P}.LICENSE" LICENSE
 	newdoc "${DISTDIR}/${P}.NOTICE" NOTICE
-	dodoc "${FILESDIR}/Ratatui-MIT"
+	dodoc "${FILESDIR}/Ratatui-MIT" \
+		"${FILESDIR}/libcap-2.75-LICENSE" \
+		"${FILESDIR}/libcap-2.75-COPYRIGHTS"
 	newdoc "${DISTDIR}/${P}.bubblewrap-COPYING" bubblewrap-COPYING
 }
 
