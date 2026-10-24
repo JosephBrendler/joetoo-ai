@@ -3,56 +3,70 @@
 
 EAPI=8
 
-DESCRIPTION="OpenAI Codex command-line coding agent (upstream prebuilt binary)"
+DESCRIPTION="OpenAI Codex command-line coding agent (upstream prebuilt binaries)"
 HOMEPAGE="https://github.com/openai/codex https://developers.openai.com/codex"
 
-# Candidate: verify that BOTH release asset paths and the LICENSE URL resolve.
-# Keep the download filenames distinct across architectures.
 SRC_URI="
-    amd64? ( https://github.com/openai/codex/releases/download/rust-v${PV}/codex-x86_64-unknown-linux-musl.tar.gz -> ${P}-amd64.tar.gz )
-    arm64? ( https://github.com/openai/codex/releases/download/rust-v${PV}/codex-aarch64-unknown-linux-musl.tar.gz -> ${P}-arm64.tar.gz )
-    https://raw.githubusercontent.com/openai/codex/rust-v${PV}/LICENSE -> ${P}.LICENSE
+	amd64? ( https://github.com/openai/codex/releases/download/rust-v${PV}/codex-package-x86_64-unknown-linux-musl.tar.gz -> ${P}-amd64-package.tar.gz )
+	arm64? ( https://github.com/openai/codex/releases/download/rust-v${PV}/codex-package-aarch64-unknown-linux-musl.tar.gz -> ${P}-arm64-package.tar.gz )
+	https://raw.githubusercontent.com/openai/codex/rust-v${PV}/LICENSE -> ${P}.LICENSE
+	https://raw.githubusercontent.com/openai/codex/rust-v${PV}/NOTICE -> ${P}.NOTICE
+	https://raw.githubusercontent.com/openai/codex/rust-v${PV}/codex-rs/vendor/bubblewrap/COPYING -> ${P}.bubblewrap-COPYING
 "
 
 S="${WORKDIR}"
-LICENSE="Apache-2.0"
+# Known licenses; bundled Rust/native dependency audit remains a release gate.
+LICENSE="Apache-2.0 BSD MIT LGPL-2+"
 SLOT="0"
-# Intentional: do not claim tested stable or testing keywords before verification.
+# Candidate only: add testing keywords after native Gentoo validation.
 KEYWORDS=""
 IUSE=""
-RESTRICT="test strip"
+# In particular, modifying bwrap can break Codex's embedded digest check.
+RESTRICT="strip test"
 
-# The shipped executable is statically linked for musl, but requires a
-# supported Linux kernel and may use additional runtime sandbox helpers.
-# Do not promise that Codex's sandbox works on every hardened configuration.
+RDEPEND="sys-apps/ripgrep"
+
+QA_PREBUILT="
+	usr/libexec/codex/bin/codex
+	usr/libexec/codex/bin/codex-code-mode-host
+	usr/libexec/codex/codex-resources/bwrap
+"
 
 src_unpack() {
-    local archive
-    case ${ARCH} in
-        amd64) archive=${P}-amd64.tar.gz ;;
-        arm64) archive=${P}-arm64.tar.gz ;;
-        *) die "Unsupported architecture: ${ARCH}" ;;
-    esac
-    unpack "${archive}"
-    cp "${DISTDIR}/${P}.LICENSE" "${WORKDIR}/LICENSE" || die
+	local archive
+	case ${ARCH} in
+		amd64) archive=${P}-amd64-package.tar.gz ;;
+		arm64) archive=${P}-arm64-package.tar.gz ;;
+		*) die "Unsupported architecture: ${ARCH}" ;;
+	esac
+	unpack "${archive}"
 }
 
+src_configure() { :; }
+src_compile() { :; }
+
 src_install() {
-    local binary
-    case ${ARCH} in
-        amd64) binary=codex-x86_64-unknown-linux-musl ;;
-        arm64) binary=codex-aarch64-unknown-linux-musl ;;
-        *) die "Unsupported architecture: ${ARCH}" ;;
-    esac
-    [[ -f ${binary} ]] || die "Missing expected binary: ${binary}"
-    newbin "${binary}" codex
-    dodoc LICENSE
+	# Preserve relative paths used by upstream's install-context discovery.
+	# Install only the CLI, code-mode host and matching sandbox helper.
+	# Voice and bundled ripgrep are deliberately excluded; see README.md.
+	exeinto /usr/libexec/codex/bin
+	doexe bin/codex bin/codex-code-mode-host
+	exeinto /usr/libexec/codex/codex-resources
+	doexe codex-resources/bwrap
+	insinto /usr/libexec/codex
+	doins codex-package.json
+	dosym ../libexec/codex/bin/codex /usr/bin/codex
+
+	newdoc "${DISTDIR}/${P}.LICENSE" LICENSE
+	newdoc "${DISTDIR}/${P}.NOTICE" NOTICE
+	dodoc "${FILESDIR}/Ratatui-MIT"
+	newdoc "${DISTDIR}/${P}.bubblewrap-COPYING" bubblewrap-COPYING
 }
 
 pkg_postinst() {
-    elog "Run 'codex --version' to verify the installed CLI."
-    elog "Use 'codex' to sign in with ChatGPT, or configure API authentication."
-    elog "Start within an explicitly authorized joetoo-ai workspace."
-    elog "Review sandbox and approval settings before permitting command execution."
-    elog "Do not grant this agent access to joetoo or joetoo-upstream."
+	elog "Run 'codex --version' to verify the installed CLI."
+	elog "Use 'codex' to sign in with ChatGPT, or configure API authentication."
+	elog "This candidate does not install upstream's optional voice runtime."
+	elog "Review sandbox and approval settings before permitting command execution."
+	elog "Sandbox operation depends on kernel and host security policy."
 }
