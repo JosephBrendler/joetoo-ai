@@ -29,12 +29,19 @@ KEYWORDS=""
 # Note: modifying bwrap can break Codex's embedded digest check
 RESTRICT="strip test"
 
-RDEPEND="sys-apps/ripgrep"
+# upstream arm64 rg is GNU-linked even in the musl-named package
+RDEPEND="
+	arm64? (
+		>=sys-libs/glibc-2.18
+		sys-devel/gcc
+	)
+"
 
 QA_PREBUILT="
 	usr/libexec/codex/bin/codex
 	usr/libexec/codex/bin/codex-code-mode-host
 	usr/libexec/codex/codex-resources/bwrap
+	usr/libexec/codex/codex-path/rg
 "
 
 src_unpack() {
@@ -52,10 +59,12 @@ src_compile() { :; }
 
 src_install() {
 	# preserve relative paths used by upstream's install-context discovery
-	# install only the CLI, code-mode host and matching sandbox helper
-	# voice and bundled ripgrep are deliberately excluded; see README.md
+	# retain every resource required for daemon package preparation
+	# only voice is excluded; see DAEMON-FIX.md
 	exeinto /usr/libexec/codex/bin
 	doexe bin/codex bin/codex-code-mode-host
+	exeinto /usr/libexec/codex/codex-path
+	doexe codex-path/rg
 	exeinto /usr/libexec/codex/codex-resources
 	doexe codex-resources/bwrap
 	insinto /usr/libexec/codex
@@ -66,7 +75,10 @@ src_install() {
 	newdoc "${DISTDIR}/${P}.NOTICE" NOTICE
 	dodoc "${FILESDIR}/Ratatui-MIT" \
 		"${FILESDIR}/libcap-2.75-LICENSE" \
-		"${FILESDIR}/libcap-2.75-COPYRIGHTS"
+		"${FILESDIR}/libcap-2.75-COPYRIGHTS" \
+		"${FILESDIR}/ripgrep-15.2.0-COPYING" \
+		"${FILESDIR}/ripgrep-15.2.0-LICENSE-MIT" \
+		"${FILESDIR}/ripgrep-15.2.0-UNLICENSE"
 	newdoc "${DISTDIR}/${P}.bubblewrap-COPYING" bubblewrap-COPYING
 }
 

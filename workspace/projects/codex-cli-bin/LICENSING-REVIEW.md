@@ -1,7 +1,10 @@
 # Concrete licensing and provenance follow-up for Codex 0.164.0
 
+This records the original three-executable investigation. Revision r1 adds
+upstream ripgrep and its verified original license files; see DAEMON-FIX.md.
+
 This follow-up concerns the proposed `dev-util/codex-cli-bin` package. The
-workspace candidate is now named `codex-cli-bin-0.164.0.ebuild`; the user's
+workspace candidate is now named `codex-cli-bin-0.164.0-r1.ebuild`; the user's
 official candidate has not been accessed. No official overlay or upstream
 repository was accessed. No policy change is needed to investigate or prepare candidate files.
 
