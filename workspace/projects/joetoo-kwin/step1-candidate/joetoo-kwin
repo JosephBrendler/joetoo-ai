@@ -1,0 +1,115 @@
+#!/bin/bash
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# joetoo-kwin - interactive KWin movement and declarative window-plan validation
+# Step 1 candidate: -o is deliberately reserved, not yet implemented.
+
+source /usr/sbin/script_header_joetoo
+
+PN=${0##*/}
+if [ -f /etc/joetoolkit/BUILD ]; then . /etc/joetoolkit/BUILD; else BUILD="0.0.1"; fi
+[ -z "$verbosity" ] && verbosity="${notice}"
+
+#-----[ variables ]-----------------------------------------------------------------------------
+config_dir="/etc/${PN}"
+config="${config_dir}/${PN}.conf"
+operation=""
+
+bus=org.joetoo.KWinBridge
+path=/org/joetoo/KWinBridge
+iface=org.joetoo.KWinBridge
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P) || exit 1
+
+#-----[ functions ]-----------------------------------------------------------------------------
+usage() {
+    j_msg "-${notice}" -p "Usage: ${PN} -c [-f CONFIG]"
+    j_msg "-${notice}" -p "       ${PN} -m DESKTOP X Y WIDTH HEIGHT"
+    j_msg "-${notice}" -p "       ${PN} move DESKTOP X Y WIDTH HEIGHT  (compatibility)"
+    j_msg "-${notice}" -p "       ${PN} -o  (reserved; not yet implemented)"
+}
+
+parse_cmdline() {
+    local _pc_opt
+    if [[ ${1:-} == move ]]; then
+        operation=move
+        shift
+    else
+        while getopts ':cmof:h' _pc_opt; do
+            case "$_pc_opt" in
+                c) [[ -z $operation ]] || { usage; return 2; }; operation=check ;;
+                m) [[ -z $operation ]] || { usage; return 2; }; operation=move ;;
+                o) [[ -z $operation ]] || { usage; return 2; }; operation=open ;;
+                f) config=$OPTARG ;;
+                h) usage; exit 0 ;;
+                :) j_msg "-${err}" -p "${PN}: option -${OPTARG} requires a value"; return 2 ;;
+                *) usage; return 2 ;;
+            esac
+        done
+        shift "$((OPTIND - 1))"
+    fi
+
+    case "$operation" in
+        move) [[ $# -eq 5 ]] || { usage; return 2; }; move_args=("$@") ;;
+        check|open) [[ $# -eq 0 ]] || { usage; return 2; } ;;
+        *) usage; return 2 ;;
+    esac
+    return 0
+}
+
+move_active_window() {
+    local _ma_arg _ma_value _ma_request _ma_status _ma_attempt
+
+    for _ma_arg in "${move_args[@]}"; do
+        if ! isint "$_ma_arg"; then
+            j_msg "-${err}" -p "${PN}: not an integer: [${_ma_arg}]"
+            return 2
+        fi
+    done
+    # Preserve the POC's positive-value rule for desktop, width and height.
+    for _ma_value in "${move_args[0]}" "${move_args[3]}" "${move_args[4]}"; do
+        if [[ ! $_ma_value =~ ^0*[1-9][0-9]*$ ]]; then
+            j_msg "-${err}" -p "${PN}: desktop, width and height must be positive"
+            return 2
+        fi
+    done
+
+    _ma_request=$(qdbus6 "$bus" "$path" "$iface.Submit" "${move_args[@]}") || return 1
+    qdbus6 org.kde.kglobalaccel /component/kwin \
+        org.kde.kglobalaccel.Component.invokeShortcut \
+        joetoo_bridge_move >/dev/null || return 1
+
+    for ((_ma_attempt=0; _ma_attempt<50; _ma_attempt++)); do
+        _ma_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$_ma_request") || return 1
+        case $_ma_status in
+            OK*) j_msg "-${notice}" -p "$_ma_status"; return 0 ;;
+            ERROR*|UNKNOWN*) j_msg "-${err}" -p "$_ma_status"; return 1 ;;
+        esac
+        sleep 0.1
+    done
+    j_msg "-${err}" -p "${PN}: KWin move timed out (request [${_ma_request}])"
+    return 1
+}
+
+check_plan() {
+    if [[ ! -r $config ]]; then
+        j_msg "-${err}" -p "${PN}: configuration unreadable [${config}]"
+        return 1
+    fi
+    # The selected configuration is trusted executable Bash, as in the legacy tool.
+    source "$config" || return 1
+    source "${script_dir}/joetoo-kwin-plan-functions" || return 1
+    validate_plan || return $?
+    calculate_plan || return $?
+    print_plan
+}
+
+#-----[ main script ]---------------------------------------------------------------------------
+checknotroot
+parse_cmdline "$@" || exit $?
+case "$operation" in
+    move) move_active_window ;;
+    check) separator "${PN}-${BUILD}" "(kwin plan)"; check_plan ;;
+    open) j_msg "-${err}" -p "${PN}: -o not yet implemented; no windows launched"; exit 2 ;;
+esac
