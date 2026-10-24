@@ -2,16 +2,16 @@
 
 These instructions are for the human maintainer. The assistant has not accessed
 or modified `joetoo` or `joetoo-upstream`. The candidate is
-`dev-util/codex-cli-bin-0.164.0`; it remains unkeyworded.
+`dev-util/codex-cli-bin-0.164.0-r1`; it remains unkeyworded.
 
 ## 1. Obtain and review the candidate
 
 The new workspace changes must first be transferred to your machine. Until they
-are committed and pushed with your approval, fetching PR #1 does not obtain
+are committed and pushed with your approval, fetching an older merged PR does not obtain
 this revision. Alternatively, extract the supplied candidate bundle locally.
 
 In a terminal on your Gentoo machine, enter the candidate directory containing
-`codex-cli-bin-0.164.0.ebuild`, this file and `files/`, then set:
+`codex-cli-bin-0.164.0-r1.ebuild`, this file and `files/`, then set:
 
 ```bash
 candidate_dir=$PWD
@@ -22,19 +22,20 @@ package_dir="${overlay_dir}/dev-util/codex-cli-bin"
 Your existing edited ebuild should be compared before replacement:
 
 ```bash
-diff -u "${package_dir}/codex-cli-bin-0.164.0.ebuild" \
-    "${candidate_dir}/codex-cli-bin-0.164.0.ebuild"
+diff -u "${package_dir}/codex-cli-bin-0.164.0-r1.ebuild" \
+    "${candidate_dir}/codex-cli-bin-0.164.0-r1.ebuild"
 ```
 
 A diff exit status of 1 means differences were found. Keep any local changes you
-want; merge them into the candidate before the copy step. If the destination
-ebuild does not yet exist, skip this comparison. Check any existing supplemental
+want; merge them into the candidate before the copy step. If the r1 ebuild does not yet exist, compare against your edited original
+`codex-cli-bin-0.164.0.ebuild` and retain your QA fixes in the new revision.
+Skip comparison only when there is no existing candidate. Check any existing supplemental
 notice files too. Do not automatically discard your local edits.
 
 ## 2. Back up the existing package and copy the reviewed files
 
 After deciding which version to keep, preserve the existing package outside the
-overlay and copy only the ebuild and its three supplemental notice files:
+overlay and copy only the ebuild and its six supplemental notice files:
 
 ```bash
 backup_dir=$(mktemp -d /tmp/codex-cli-bin-backup.XXXXXX)
@@ -44,11 +45,14 @@ fi
 printf 'Existing-package backup: %s\n' "${backup_dir}"
 
 install -d "${package_dir}/files"
-install -m 0644 "${candidate_dir}/codex-cli-bin-0.164.0.ebuild" "${package_dir}/"
+install -m 0644 "${candidate_dir}/codex-cli-bin-0.164.0-r1.ebuild" "${package_dir}/"
 install -m 0644 \
     "${candidate_dir}/files/Ratatui-MIT" \
     "${candidate_dir}/files/libcap-2.75-LICENSE" \
     "${candidate_dir}/files/libcap-2.75-COPYRIGHTS" \
+    "${candidate_dir}/files/ripgrep-15.2.0-COPYING" \
+    "${candidate_dir}/files/ripgrep-15.2.0-LICENSE-MIT" \
+    "${candidate_dir}/files/ripgrep-15.2.0-UNLICENSE" \
     "${package_dir}/files/"
 ```
 
@@ -66,8 +70,8 @@ From the destination package directory:
 
 ```bash
 cd "${package_dir}"
-bash -n codex-cli-bin-0.164.0.ebuild
-ebuild codex-cli-bin-0.164.0.ebuild manifest
+bash -n codex-cli-bin-0.164.0-r1.ebuild
+ebuild codex-cli-bin-0.164.0-r1.ebuild manifest
 ```
 
 Manifest generation fetches/hashes the declared artifacts and local files. It
@@ -96,14 +100,14 @@ entry through your normal package.accept_keywords configuration. For example,
 if the configured repository name is `joetoo`:
 
 ```text
-=dev-util/codex-cli-bin-0.164.0::joetoo **
+=dev-util/codex-cli-bin-0.164.0-r1::joetoo **
 ```
 
 Do not globally accept unkeyworded packages. On the test system, run:
 
 ```bash
-emerge --pretend --verbose --oneshot '=dev-util/codex-cli-bin-0.164.0::joetoo'
-emerge --ask --verbose --oneshot '=dev-util/codex-cli-bin-0.164.0::joetoo'
+emerge --pretend --verbose --oneshot '=dev-util/codex-cli-bin-0.164.0-r1::joetoo'
+emerge --ask --verbose --oneshot '=dev-util/codex-cli-bin-0.164.0-r1::joetoo'
 ```
 
 Replace `joetoo` in those atoms if the repository is configured under another
@@ -120,20 +124,22 @@ command -v codex
 readlink -f /usr/bin/codex
 codex --version
 codex --help
-rg --version
+/usr/libexec/codex/codex-path/rg --version
 ls -l /usr/libexec/codex/bin/ /usr/libexec/codex/codex-resources/
-ls -l /usr/share/doc/codex-cli-bin-0.164.0/
-codex sandbox linux -- /bin/true
+ls -l /usr/share/doc/codex-cli-bin-0.164.0-r1/
+codex sandbox -- /bin/true
 ```
 
 Expected CLI version: `codex-cli 0.164.0`. The public command should resolve to
 `/usr/libexec/codex/bin/codex`. The companion host and matching bwrap should be
-executable without setuid bits. All six documents should be present, possibly
+executable without setuid bits. All nine documents should be present, possibly
 compressed: LICENSE, NOTICE, Ratatui-MIT, libcap-2.75-LICENSE,
-libcap-2.75-COPYRIGHTS, and bubblewrap-COPYING.
+libcap-2.75-COPYRIGHTS, bubblewrap-COPYING, ripgrep-15.2.0-COPYING,
+ripgrep-15.2.0-LICENSE-MIT, and ripgrep-15.2.0-UNLICENSE.
 
 Use a disposable project for an interactive/authenticated session when ready.
-Verify file search with system ripgrep, code-mode functionality if used, and
+Verify normal session resume, bundled ripgrep search, code-mode functionality
+if used, and
 sandbox allow/deny behavior relevant to your workflow. The `/bin/true` smoke
 check alone does not demonstrate confinement. Do not put an isolated CODEX_HOME
 under `/tmp`; upstream rejects helper alias creation there. Never share keys or
@@ -157,3 +163,15 @@ as a separate decision. It does not prevent doing local installation tests.
 
 Review the final diff, then make the official commit/push yourself. Candidate
 review in joetoo-ai and publication in the official overlay are separate steps.
+
+
+## 7. Return the incorporated baseline to joetoo-ai
+
+After native integration/testing, copy the actual resulting candidate files
+(including metadata.xml and Manifest) back to
+`joetoo-ai/workspace/projects/codex-cli-bin/`. Commit and push that feedback with
+a short description of local changes and tests, and identify the feedback commit
+to the agent. Do not include credentials, daemon state or build/cache directories.
+
+The agent must fetch and inspect that feedback before its next revision. The
+standing process is documented in [../../README.md](../../README.md#collaboration-cycle).
