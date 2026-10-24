@@ -1,5 +1,5 @@
 # Copyright 2026 Joseph Brendler
-# SPDX-License-Identifier: GPL-2.0-or-later
+# Distributed under the terms of the GNU General Public License v2
 
 EAPI=8
 
@@ -7,21 +7,26 @@ DESCRIPTION="OpenAI Codex command-line coding agent (upstream prebuilt binaries)
 HOMEPAGE="https://github.com/openai/codex https://developers.openai.com/codex"
 
 SRC_URI="
-	amd64? ( https://github.com/openai/codex/releases/download/rust-v${PV}/codex-package-x86_64-unknown-linux-musl.tar.gz -> ${P}-amd64-package.tar.gz )
-	arm64? ( https://github.com/openai/codex/releases/download/rust-v${PV}/codex-package-aarch64-unknown-linux-musl.tar.gz -> ${P}-arm64-package.tar.gz )
+	amd64? ( https://github.com/openai/codex/releases/download/rust-v${PV}/codex-package-x86_64-unknown-linux-musl.tar.gz
+		 -> ${P}-amd64-package.tar.gz )
+	arm64? ( https://github.com/openai/codex/releases/download/rust-v${PV}/codex-package-aarch64-unknown-linux-musl.tar.gz
+		 -> ${P}-arm64-package.tar.gz )
 	https://raw.githubusercontent.com/openai/codex/rust-v${PV}/LICENSE -> ${P}.LICENSE
 	https://raw.githubusercontent.com/openai/codex/rust-v${PV}/NOTICE -> ${P}.NOTICE
-	https://raw.githubusercontent.com/openai/codex/rust-v${PV}/codex-rs/vendor/bubblewrap/COPYING -> ${P}.bubblewrap-COPYING
+	https://raw.githubusercontent.com/openai/codex/rust-v${PV}/codex-rs/vendor/bubblewrap/COPYING \
+		 -> ${P}.bubblewrap-COPYING
 "
 
 S="${WORKDIR}"
-# Known license terms; bundled dependency notice inventory remains incomplete.
+# known license terms; bundled dependency notice inventory remains incomplete
 LICENSE="Apache-2.0 BSD MIT LGPL-2+"
 SLOT="0"
-# Candidate only: add testing keywords after native Gentoo validation.
+
+# Note: add testing keywords after native Gentoo validation
 KEYWORDS=""
-IUSE=""
-# In particular, modifying bwrap can break Codex's embedded digest check.
+#IUSE=""   # pkgcheck scan dislikes empty globals
+
+# Note: modifying bwrap can break Codex's embedded digest check
 RESTRICT="strip test"
 
 RDEPEND="sys-apps/ripgrep"
@@ -46,9 +51,9 @@ src_configure() { :; }
 src_compile() { :; }
 
 src_install() {
-	# Preserve relative paths used by upstream's install-context discovery.
-	# Install only the CLI, code-mode host and matching sandbox helper.
-	# Voice and bundled ripgrep are deliberately excluded; see README.md.
+	# preserve relative paths used by upstream's install-context discovery
+	# install only the CLI, code-mode host and matching sandbox helper
+	# voice and bundled ripgrep are deliberately excluded; see README.md
 	exeinto /usr/libexec/codex/bin
 	doexe bin/codex bin/codex-code-mode-host
 	exeinto /usr/libexec/codex/codex-resources
@@ -68,7 +73,7 @@ src_install() {
 pkg_postinst() {
 	elog "Run 'codex --version' to verify the installed CLI."
 	elog "Use 'codex' to sign in with ChatGPT, or configure API authentication."
-	elog "This candidate does not install upstream's optional voice runtime."
+	elog "This ebuild does not install upstream's optional voice runtime."
 	elog "Review sandbox and approval settings before permitting command execution."
 	elog "Sandbox operation depends on kernel and host security policy."
 }

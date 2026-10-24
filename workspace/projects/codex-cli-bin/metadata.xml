@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "http://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<longdescription>
+		OpenAI Codex CLI is a terminal-based coding agent that can inspect
+		projects, propose and edit code, and execute commands subject to
+		configured approval and sandbox policies. This package installs
+		upstream prebuilt Linux binaries and companion executables.
+		Thus, codex CLI is a tool designed to supportTerminal Workflow:
+		Piping output, generating code blocks from strings, running automated
+		workspace scans, etc. It is a light, text-only client alternative to
+		running codex in VS Code, or to running a full Desktop App.
+		Note that desktop widgets for purposes such as usage monitoring
+		exist separately
+	</longdescription>
+	<maintainer type="person">
+		<email>joe.brendler@gmail.com</email>
+		<name>Joe Brendler</name>
+	</maintainer>
+	<upstream>
+		<remote-id type="github">openai/codex</remote-id> 
+	</upstream>
+</pkgmetadata>

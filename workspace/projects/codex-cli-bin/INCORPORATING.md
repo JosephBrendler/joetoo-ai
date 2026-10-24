@@ -15,8 +15,7 @@ In a terminal on your Gentoo machine, enter the candidate directory containing
 
 ```bash
 candidate_dir=$PWD
-# Replace this with the actual local overlay root, not its dev-util subdirectory.
-overlay_dir=/absolute/path/to/joetoo
+overlay_dir=~/joetoo
 package_dir="${overlay_dir}/dev-util/codex-cli-bin"
 ```
 
