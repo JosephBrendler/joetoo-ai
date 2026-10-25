@@ -94,20 +94,28 @@ files: the Python broker in `/usr/libexec/`, the OpenRC **user** service in
 installed by the POC helper):
 
 - `/etc/conf.d/joetoo-kwind` — authoritative global executable default;
-- `/etc/user/conf.d/joetoo-kwind` — OpenRC user-service bridge that explicitly
-  sources the global file when readable.
+- `/etc/user/conf.d/joetoo-kwind` — in the **previous validated candidate**,
+  a bridge sourcing the global file. The **proposed new config-chain draft**
+  replaces this with an optional administrator override; the OpenRC service
+  explicitly sources `/etc/conf.d/joetoo-kwind`, which then loads later layers.
 
 The optional `$XDG_CONFIG_HOME/rc/conf.d/joetoo-kwind` user override is a
 **separate, fifth location**, installed by the POC helper for testing but
 not mandatory in a future system package. OpenRC's upstream user-service
-documentation describes user `conf.d` settings overriding `/etc/user/conf.d`,
-while the shared `/etc/conf.d` file requires the deliberate bridge above.
-See <https://github.com/OpenRC/openrc/blob/master/user-guide.md>.
+documentation describes user `conf.d` settings overriding `/etc/user/conf.d`.
+The earlier bridge-based design connected these files; the proposed new
+global-first chain makes the order explicit. It also adds a joetoo canonical
+pseudo-boolean reentrancy guard and validates HOME/XDG_CONFIG_HOME on startup
+to prevent unintended lookups under `/.config`. The existing supervisor
+PID file and respawn parameters remain unchanged. See the source loader at
+<https://github.com/OpenRC/openrc/blob/master/sh/openrc-run.sh.in>.
 
-The intended load order and precedence with **both** templates installed,
-with and without a per-user override, have not been tested natively. Their
-headless simulated source-order test passed, but that is not proof of how
-the installed OpenRC implementation loads these files. This is a distinct
+The old bridge-based source ordering was exercised in a headless simulation,
+not tested natively with both system templates installed. The subsequent
+**explicit global-entry-point config chain is a new proposed change**; its
+headless isolated tests do not establish the behavior of the actual installed
+OpenRC service with packaged templates and per-account overrides. This is a
+distinct
 **packaging/configuration acceptance item** before adopting the hierarchy
 system-wide (see the project's later packaging gate, Step 1.9); it need not
 block acceptance of the already demonstrated **user-owned POC lifecycle**.

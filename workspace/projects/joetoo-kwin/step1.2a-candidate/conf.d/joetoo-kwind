@@ -1,6 +1,50 @@
 # Copyright 2025-2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Packaged global joetoo-kwind config -> /etc/conf.d/joetoo-kwind.
-# Do not install this template from the ordinary-user POC installer.
-JOETOO_KWIND_EXEC="/usr/libexec/joetoo-kwind"
+# Packaged global configuration -> /etc/conf.d/joetoo-kwind.
+# This file is explicitly sourced by the OpenRC USER service script whenever
+# that service is inspected or managed. `rc-service -U` does not change UID:
+# under a normal graphical user session, this runs as that invoking user and
+# HOME refers to that user's home. The service's start_pre validates HOME.
+#
+# The global configuration owns load order: defaults, system-provided user
+# service overrides, then optional per-account overrides.
+#
+# Establish joetoo pseudo-booleans here: script_header_joetoo is NOT sourced
+# by the OpenRC service or all configuration consumers.
+TRUE=0
+FALSE=""
+
+# A legacy bridge may source this file again while it is loading.
+# This pseudo-boolean guards *nested* recursion only, avoiding an infinite
+# source loop. Repeated independent OpenRC configuration loads are allowed:
+# this flag is shell-local and reset below; do not export/persist it.
+if [ ! "${_JOETOO_KWIND_CONFIG_LOADING:-${FALSE}}" ]; then
+    _JOETOO_KWIND_CONFIG_LOADING=$TRUE
+
+    # The ebuild-installed executable, unless overridden below.
+    JOETOO_KWIND_EXEC="/usr/libexec/joetoo-kwind"
+
+    # Root-managed policy for all users of this user service.
+    if [ -r /etc/user/conf.d/joetoo-kwind ]; then
+        . /etc/user/conf.d/joetoo-kwind
+    fi
+
+    # Optional account-specific override. XDG_CONFIG_HOME, if set, must be
+    # absolute; otherwise HOME must be absolute. Never construct /.config.
+    _joetoo_kwind_conf_home=""
+    if [ -n "${XDG_CONFIG_HOME:-}" ]; then
+        case $XDG_CONFIG_HOME in
+            /*) _joetoo_kwind_conf_home=$XDG_CONFIG_HOME ;;
+        esac
+    elif [ -n "${HOME:-}" ]; then
+        case $HOME in
+            /*) _joetoo_kwind_conf_home=$HOME/.config ;;
+        esac
+    fi
+    if [ -n "$_joetoo_kwind_conf_home" ] &&
+       [ -r "$_joetoo_kwind_conf_home/rc/conf.d/joetoo-kwind" ]; then
+        . "$_joetoo_kwind_conf_home/rc/conf.d/joetoo-kwind"
+    fi
+    unset _joetoo_kwind_conf_home _JOETOO_KWIND_CONFIG_LOADING
+fi
