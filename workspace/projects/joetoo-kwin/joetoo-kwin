@@ -1,0 +1,118 @@
+#!/bin/bash
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# joetoo-kwin - early KWin bridge client (Step 1.2b manual-resident stage)
+# Active-window movement and one-window launch placement only.
+
+source /usr/sbin/script_header_joetoo
+
+PN=${0##*/}
+if [ -f /etc/joetoolkit/BUILD ]; then . /etc/joetoolkit/BUILD; else BUILD="0.0.1"; fi
+[ -z "$verbosity" ] && verbosity="${notice}"
+
+bus=org.joetoo.KWinBridge
+path=/org/joetoo/KWinBridge
+iface=org.joetoo.KWinBridge
+
+usage() {
+    j_msg "-${notice}" -p "Usage: ${PN} -m DESKTOP X Y WIDTH HEIGHT"
+    j_msg "-${notice}" -p "       ${PN} move DESKTOP X Y WIDTH HEIGHT  (compatibility)"
+    j_msg "-${notice}" -p "       ${PN} test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]"
+    j_msg "-${notice}" -p "       ${PN} -h"
+    j_msg "-${notice}" -p "       ${PN} -c/-o (not yet integrated)"
+}
+
+bad_args() {
+    j_msg "-${err}" -p "${PN}: $1"
+    usage
+    return 2
+}
+
+validate_geometry() {
+    local _vg_arg _vg_positive
+    for _vg_arg in "$@"; do
+        if ! isint "$_vg_arg"; then
+            j_msg "-${err}" -p "${PN}: invalid integer [${_vg_arg}]"
+            return 2
+        fi
+    done
+    for _vg_positive in "$1" "$4" "$5"; do
+        if [[ ! $_vg_positive =~ ^0*[1-9][0-9]*$ ]]; then
+            j_msg "-${err}" -p "${PN}: desktop, width and height must be positive"
+            return 2
+        fi
+    done
+    return 0
+}
+
+wait_for_request() {
+    local _wr_request=$1 _wr_label=$2 _wr_attempt _wr_status
+    local _wr_limit=50
+    [ "$_wr_label" = launch ] && _wr_limit=150
+    for ((_wr_attempt=0; _wr_attempt<_wr_limit; _wr_attempt++)); do
+        _wr_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$_wr_request") || return 1
+        case $_wr_status in
+            OK*) j_msg "-${notice}" -p "$_wr_status"; return 0 ;;
+            ERROR*|UNKNOWN*) j_msg "-${err}" -p "$_wr_status"; return 1 ;;
+        esac
+        sleep 0.1
+    done
+    j_msg "-${err}" -p "${PN}: ${_wr_label} timed out (request [${_wr_request}])"
+    return 1
+}
+
+move_active_window() {
+    local _ma_request
+    validate_geometry "$@" || return $?
+    _ma_request=$(qdbus6 "$bus" "$path" "$iface.Submit" "$@") || return 1
+    qdbus6 org.kde.kglobalaccel /component/kwin \
+        org.kde.kglobalaccel.Component.invokeShortcut \
+        joetoo_bridge_move >/dev/null || return 1
+    wait_for_request "$_ma_request" move
+}
+
+launch_one_window() {
+    local _lw_class=$1 _lw_request _lw_child
+    shift
+    # Arguments: five geometry values, --, executable and its arguments.
+    if (( $# < 7 )) || [[ ${6:-} != -- || -z ${7:-} ]]; then
+        bad_args 'test-launch requires CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]'
+        return 2
+    fi
+    validate_geometry "$1" "$2" "$3" "$4" "$5" || return $?
+    if [[ -z $_lw_class || ${#_lw_class} -gt 128 ]]; then
+        j_msg "-${err}" -p "${PN}: expected KWin class must contain 1-128 characters"
+        return 2
+    fi
+    local -a _lw_geometry=("$1" "$2" "$3" "$4" "$5")
+    shift 6
+    if ! command -v "$1" >/dev/null 2>&1; then
+        j_msg "-${err}" -p "${PN}: program not found [${1}]"
+        return 1
+    fi
+    # The request must be armed before the program creates its window.
+    _lw_request=$(qdbus6 "$bus" "$path" "$iface.SubmitLaunch" \
+        "$_lw_class" "${_lw_geometry[@]}") || return 1
+    j_msg "-${notice}" -p "Armed class [${_lw_class}], request [${_lw_request}]"
+    "$@" &
+    _lw_child=$!
+    j_msg "-${notice}" -p "Launched [${1}], shell PID [${_lw_child}]"
+    # The launched application is independent of joetoo-kwind supervision.
+    wait_for_request "$_lw_request" launch
+}
+
+checknotroot
+case ${1:-} in
+    -m|move)
+        shift
+        if (( $# != 5 )); then bad_args 'move requires five geometry values'; exit 2; fi
+        move_active_window "$@" ;;
+    test-launch)
+        shift
+        if (( $# < 8 )); then bad_args 'test-launch requires a class, geometry and program'; exit 2; fi
+        launch_one_window "$@" ;;
+    -h|--help) usage ;;
+    -c|-o) j_msg "-${err}" -p "${PN}: ${1} not yet integrated; see archived Step 1 prototype"; exit 2 ;;
+    *) bad_args 'unrecognized operation'; exit 2 ;;
+esac
