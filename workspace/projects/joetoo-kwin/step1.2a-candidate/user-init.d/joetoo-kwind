@@ -4,6 +4,8 @@
 #
 # Proposed user-level OpenRC service; install as /etc/user/init.d/joetoo-kwind.
 # Do not install in /etc/init.d or launch as root.
+# OpenRC consumes configuration globals after sourcing; ShellCheck cannot see them.
+# shellcheck disable=SC2034
 
 description="joetoo KWin session D-Bus broker (user service)"
 supervisor="supervise-daemon"
@@ -39,7 +41,10 @@ start_pre() {
         if [ -S "$XDG_RUNTIME_DIR/bus" ]; then
             export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
         else
-            eerror "No session bus address or XDG_RUNTIME_DIR/bus socket"
+            eerror "No graphical D-Bus session address was passed to joetoo-kwind"
+            eerror "OpenRC may have filtered DBUS_SESSION_BUS_ADDRESS, and no XDG_RUNTIME_DIR/bus socket exists"
+            eerror "Allow DBUS_SESSION_BUS_ADDRESS in the user OpenRC rc.conf, preserving other entries"
+            eerror "See step1.2a-candidate/README.md (or run tools/joetoo-kwind-configure-openrc-user --apply)"
             return 1
         fi
     fi

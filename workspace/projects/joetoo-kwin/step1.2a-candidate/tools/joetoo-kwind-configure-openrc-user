@@ -1,0 +1,86 @@
+#!/bin/sh
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Step 1.2a POC: opt-in, non-root user OpenRC environment configuration.
+# This helper does not install/start the broker and never edits /etc/rc.conf.
+
+set -eu
+
+rcdir=${XDG_CONFIG_HOME:-"$HOME/.config"}/rc
+rcconf=$rcdir/rc.conf
+begin='# BEGIN joetoo-kwind Step 1.2a environment'
+end='# END joetoo-kwind Step 1.2a environment'
+
+usage() {
+    printf 'Usage: %s --check | --apply\n' "${0##*/}" >&2
+    exit 2
+}
+
+[ "$#" -eq 1 ] || usage
+case $1 in
+    --check|--apply) mode=$1 ;;
+    *) usage ;;
+esac
+
+# This is deliberately a user operation, not an ebuild post-install action.
+if [ "$(id -u)" -eq 0 ]; then
+    printf 'Run this helper as the graphical user, not root.\n' >&2
+    exit 1
+fi
+
+if [ -L "$rcconf" ] || { [ -e "$rcconf" ] && [ ! -f "$rcconf" ]; }; then
+    printf 'Refusing unexpected rc.conf path: %s\n' "$rcconf" >&2
+    exit 1
+fi
+
+if [ -f "$rcconf" ]; then
+    if [ "$(stat -c %u -- "$rcconf")" != "$(id -u)" ]; then
+        printf 'Refusing rc.conf owned by another user: %s\n' "$rcconf" >&2
+        exit 1
+    fi
+    count_begin=$(grep -Fxc -- "$begin" "$rcconf" || :)
+    count_end=$(grep -Fxc -- "$end" "$rcconf" || :)
+    if [ "$count_begin" != "$count_end" ] || [ "$count_begin" -gt 1 ]; then
+        printf 'Found incomplete or duplicate joetoo-kwind block; inspect %s\n' "$rcconf" >&2
+        exit 1
+    fi
+    if [ "$count_begin" -eq 1 ]; then
+        printf 'joetoo-kwind allowlist block present in %s\n' "$rcconf"
+        exit 0
+    fi
+fi
+
+if [ "$mode" = --check ]; then
+    printf 'No managed allowlist block in %s; run --apply to add one.\n' "$rcconf"
+    exit 1
+fi
+
+# Only --apply modifies the user's configuration. Retain all existing text,
+# ownership and permissions, and atomically replace the file in its directory.
+umask 077
+mkdir -p -- "$rcdir"
+tmp=$(mktemp "$rcconf.joetoo-kwind.XXXXXXXX") || exit 1
+trap 'rm -f -- "$tmp"' EXIT HUP INT TERM
+if [ -f "$rcconf" ]; then
+    cp -p -- "$rcconf" "$tmp" || exit 1
+    printf '\n' >> "$tmp"
+fi
+cat >> "$tmp" <<'BLOCK'
+# BEGIN joetoo-kwind Step 1.2a environment
+# Extend, never replace, other services' rc_env_allow entries.
+case " ${rc_env_allow:-} " in
+    *" DBUS_SESSION_BUS_ADDRESS "*) ;;
+    *) rc_env_allow="${rc_env_allow:+${rc_env_allow} }DBUS_SESSION_BUS_ADDRESS" ;;
+esac
+case " ${rc_env_allow:-} " in
+    *" JOETOO_KWIND_EXEC "*) ;;
+    *) rc_env_allow="${rc_env_allow:+${rc_env_allow} }JOETOO_KWIND_EXEC" ;;
+esac
+# END joetoo-kwind Step 1.2a environment
+BLOCK
+sh -n "$tmp" || { printf 'Configuration syntax check failed; original unchanged.\n' >&2; exit 1; }
+mv -f -- "$tmp" "$rcconf" || exit 1
+trap - EXIT HUP INT TERM
+printf 'Configured %s\n' "$rcconf"
+printf 'Run rc-service -U joetoo-kwind start from a graphical session with the D-Bus address exported.\n'
