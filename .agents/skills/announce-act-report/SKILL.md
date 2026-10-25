@@ -1,6 +1,6 @@
 ---
 name: joetoo-announce-act-report
-description: Develop, review, and debug joetoo shell scripts using the announce–act–report idiom or its rigorous announce–act–capture–decode–report–policy variant with j_msg, handle_result, right_status, and decode_right_status from script_header_joetoo. Use when adding visible progress reporting, status indicators, reliable error handling, or set -e-safe command execution to scripts sourcing the joetoo header.
+description: Use announce–act–report idioms in development, review, and debug of joetoo shell scripts. Understand how to employ j_msg, handle_result, right_status, and decode_right_status from script_header_joetoo in forming the short and more rigorous variants of these idioms. Use when adding visible progress reporting, status indicators, reliable error handling, or set -e-safe command execution to scripts sourcing the joetoo header.
 ---
 
 # Joetoo announce–act–report
