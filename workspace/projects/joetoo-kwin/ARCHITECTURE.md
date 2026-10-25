@@ -297,14 +297,10 @@ maintainer alone merges and integrates protected repositories.
 | **1.8** | Durable `.conf` snapshot, `-S` and `-r` | Clean-reboot launch with new UUID/PIDs, including SSH placeholders |
 | **1.9** | `eselect`, packaging and full regression | Maintainer-driven joetoo/joetoo-upstream integration; version 1 lifecycle gate |
 
-The six historical POC directories are preserved unchanged under `archive/`;
-`step1-candidate/` stays in the root as the merged Step 1 reference, while
-`step1.2a-candidate/` is the active work. Archived POCs remain regression
-references and must not be confused with the current implementation.
+The outputs of Step 1.2a broker/OpenRC implementation and tests now reside in the project root. The six historical POCs, along with the complete Step 1 and Step 1.2a candidate snapshots, reside under archive/. The Step 1 CLI and its coupled planner remain archived prototypes pending integration into the launcher.
 
-Keep the POC's known-good X11/Wayland behavior as regression tests at each
-relevant gate. OpenRC and correlation are early critical-path risks, not optional
-post-release polishing.
+Intent for archive/ -- retain candidate and POC products with known-good X11/Wayland behavior as available future-capability integration resources or references and regression tests at each
+relevant gate. OpenRC and launch-correlation were advanced to early candidate work as critical-path risks, not optional post-release polishing. As of step 1.2a graduation from candidate to implemented status, the OpenRC components are installed at project root, but the demonstrated launch-correlation capability has not yet been so-promoted.
 
 ## 11. Open questions and explicit verification tasks
 
