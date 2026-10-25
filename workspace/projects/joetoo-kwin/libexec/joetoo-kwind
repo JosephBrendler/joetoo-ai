@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # Copyright 2025-2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Step 1.2a: foreground, non-root session-bus broker for OpenRC supervision.
+"""Non-root OpenRC-supervised KWin session-bus broker.
 
-Preserves the Step 0 launch/move D-Bus contract. No application spawning,
-window ownership registry, KWin JS activation, or persistence is implemented.
+Preserves the Step 0 move/launch contract, and initializes KWin resident JS.
+Application process supervision and window persistence are not implemented.
 """
 
 import json
@@ -144,6 +144,82 @@ class Broker(dbus.service.Object):
         return r["state"] + (" " + r["detail"] if r["detail"] else "")
 
 
+KWIN_BUS = "org.kde.KWin"
+KWIN_SCRIPTING = "org.kde.kwin.Scripting"
+KWIN_SCRIPT = "org.kde.kwin.Script"
+RESIDENT_DEFAULT = "/usr/share/joetoo-kwin/joetoo-kwin-resident.js"
+SCRIPT_NAME_DEFAULT = "joetoo-bridge"
+
+
+class ResidentCoordinator:
+    """Load the resident in KWin, never supervise KWin or user applications."""
+
+    def __init__(self, bus):
+        self.bus = bus
+        self.file = os.environ.get("JOETOO_KWIND_RESIDENT_JS", RESIDENT_DEFAULT)
+        self.name = os.environ.get("JOETOO_KWIND_SCRIPT_NAME", SCRIPT_NAME_DEFAULT)
+        self.timer = None
+        self.last_error = None
+        if not os.path.isabs(self.file) or not self.name:
+            raise RuntimeError("Resident script path must be absolute and script name nonempty")
+
+    def start(self):
+        self.bus.add_signal_receiver(
+            self._owner_changed, signal_name="NameOwnerChanged",
+            dbus_interface="org.freedesktop.DBus", bus_name="org.freedesktop.DBus",
+            path="/org/freedesktop/DBus", arg0=KWIN_BUS)
+        self._schedule(1)
+
+    def _owner_changed(self, name, old_owner, new_owner):
+        if name == KWIN_BUS:
+            # KWin owns the script. A fresh KWin owner needs initialization.
+            self._schedule(1)
+
+    def _schedule(self, delay_ms):
+        if self.timer is not None:
+            GLib.source_remove(self.timer)
+        self.timer = GLib.timeout_add(delay_ms, self._attempt)
+
+    def _attempt(self):
+        self.timer = None
+        try:
+            result = self.ensure_loaded()
+        except (OSError, RuntimeError, dbus.DBusException) as exc:
+            detail = str(exc)
+            if detail != self.last_error:
+                print(f"joetoo-kwind: resident unavailable: {detail}",
+                      file=sys.stderr, flush=True)
+            self.last_error = detail
+            self._schedule(5000)
+        else:
+            self.last_error = None
+            print(f"joetoo-kwind: KWin resident {result}: {self.name}", flush=True)
+        return GLib.SOURCE_REMOVE
+
+    def ensure_loaded(self):
+        """Return 'reused' or 'started', without creating duplicate scripts."""
+        proxy = self.bus.get_object(KWIN_BUS, "/Scripting", introspect=False)
+        scripting = dbus.Interface(proxy, KWIN_SCRIPTING)
+        if scripting.isScriptLoaded(self.name, timeout=5):
+            return "reused"
+        if not os.path.isfile(self.file) or not os.access(self.file, os.R_OK):
+            raise RuntimeError(f"resident script is not readable: {self.file}")
+        script_id = int(scripting.loadScript(self.file, self.name, timeout=5))
+        if script_id < 0:
+            if scripting.isScriptLoaded(self.name, timeout=5):
+                return "reused"  # Someone else registered it first.
+            raise RuntimeError("KWin refused resident load")
+        script_path = f"/Scripting/Script{script_id}"
+        script_proxy = self.bus.get_object(KWIN_BUS, script_path, introspect=False)
+        try:
+            dbus.Interface(script_proxy, KWIN_SCRIPT).run(timeout=10)
+        except dbus.DBusException:
+            # Only undo a script this instance created; never unload another's.
+            scripting.unloadScript(self.name, timeout=5)
+            raise
+        return "started"
+
+
 def main():
     try:
         validate_session_environment()
@@ -151,7 +227,9 @@ def main():
         bus = dbus.SessionBus()
         name = dbus.service.BusName(BUS, bus=bus, do_not_queue=True)
         broker = Broker(name)  # noqa: F841 - hold D-Bus object for lifetime
+        resident = ResidentCoordinator(bus)
         loop = GLib.MainLoop()
+        resident.start()
 
         def graceful_shutdown():
             loop.quit()

@@ -63,10 +63,15 @@ def load_with_fake_dbus():
             FakeGLib.signals.append((signum, callback))
             return len(FakeGLib.signals)
 
+        @staticmethod
+        def timeout_add(milliseconds, callback):
+            return 1  # Do not run the GLib loop in the headless test.
+
     FakeGLib.MainLoop = MainLoop
 
     class SessionBus:
-        pass
+        def add_signal_receiver(self, *args, **kwargs):
+            pass
 
     fake_dbus.DBusException = DbusException
     fake_dbus.SessionBus = SessionBus
@@ -130,6 +135,49 @@ class BrokerTests(unittest.TestCase):
             with patch.dict(os.environ, {"XDG_RUNTIME_DIR": "relative"}):
                 with self.assertRaisesRegex(RuntimeError, "absolute"):
                     self.module.validate_session_environment()
+
+
+class ResidentTests(unittest.TestCase):
+    def test_load_run_once_and_reuse_existing(self):
+        module, _ = load_with_fake_dbus()
+
+        class Scripting:
+            loaded = False
+            loads = 0
+            def isScriptLoaded(self, name, **kwargs):
+                return self.loaded
+            def loadScript(self, path, name, **kwargs):
+                self.loads += 1
+                self.loaded = True
+                return 7
+
+        class Script:
+            runs = 0
+            def run(self, **kwargs):
+                self.runs += 1
+
+        scripting = Scripting()
+        script = Script()
+
+        class Bus:
+            def get_object(self, name, path, introspect):
+                self_path = path
+                return scripting if self_path == "/Scripting" else script
+
+        module.dbus.Interface = lambda obj, interface: obj
+        coordinator = module.ResidentCoordinator(Bus())
+        with patch.object(module.os.path, "isfile", return_value=True), \
+             patch.object(module.os, "access", return_value=True):
+            self.assertEqual(coordinator.ensure_loaded(), "started")
+            self.assertEqual(coordinator.ensure_loaded(), "reused")
+        self.assertEqual(scripting.loads, 1)
+        self.assertEqual(script.runs, 1)
+
+    def test_reject_relative_resident_path(self):
+        module, _ = load_with_fake_dbus()
+        with patch.dict(os.environ, {"JOETOO_KWIND_RESIDENT_JS": "relative.js"}):
+            with self.assertRaisesRegex(RuntimeError, "absolute"):
+                module.ResidentCoordinator(object())
 
 
 class ServiceTests(unittest.TestCase):
