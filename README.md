@@ -9,6 +9,7 @@ Its purpose is to improve continuity, focus, accuracy, and consistency in AI con
 
 ## Goals
 
+- Establish a collaborative workspace for human-AI interaction, so that both may contribute efficiently and effectively to project workflow
 - Preserve project conventions, constraints, and established design decisions across tools, conversations, and computers.
 - Make AI assistance evidence-based, appropriately scoped, reproducible, and reviewable.
 - Reduce repeated explanation of the joetoo environment, conventions, idioms, styles, and correction of unsupported assumptions.
