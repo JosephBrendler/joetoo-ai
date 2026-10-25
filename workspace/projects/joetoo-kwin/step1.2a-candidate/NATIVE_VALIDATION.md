@@ -1,10 +1,67 @@
 # Step 1.2a native verification and remaining release gates
 
-**Status (2026-10-25):** the maintainer's headless and native observations
-support the **user-owned Step 1.2a OpenRC POC lifecycle** on gmki91 (reported
-Plasma/X11) and q552u01 (Plasma/Wayland). The packaged global/user OpenRC
-configuration precedence remains **untested**. This is not a packaged release
-or evidence that the later resident KWin JavaScript is running.
+**Status (2026-10-25, following PR #9): Step 1.2a POC lifecycle
+accepted for closure.** Maintainer-reported tests on gmki91 (Plasma/X11) and
+q552u01 (Plasma/Wayland) demonstrate user-service restart, broker-only crash
+respawn with session D-Bus recovery, and preservation of independent Konsole
+and SSH processes. The installed global default and per-account override were
+also checked; an active administrator override and the eventual packaged
+executable are **not** natively validated. Those remain a Step 1.9 packaging
+gate. Resident KWin JavaScript activation/reconnection remains Step 1.2b.
+
+## Post-PR #9 native verification (maintainer report, 2026-10-25)
+
+The earlier observations below record the PR #8-era POC tests. Their
+"not yet shown" statements describe **that earlier test snapshot**; the
+following additional evidence supersedes those gaps where explicitly noted.
+
+- **Baseline / headless:** both hosts fast-forwarded `joetoo-ai/main` to
+  `534f251` (PR #9 merged). On gmki91, `git archive` of PR #9's task
+  branch was extracted into a temporary non-Git directory; the complete
+  suite passed **33/33** (including ten config-chain tests), both Python
+  `py_compile` commands succeeded, and the selected `sh -n` checks passed.
+  This 33-test suite was **not separately rerun on q552u01** in this round.
+- **Installed configuration / scope:** on each host the maintainer installed
+  the reviewed global `/etc/conf.d/joetoo-kwind` and administrator
+  `/etc/user/conf.d/joetoo-kwind` templates manually. The latter contained
+  no active override. The POC helper `--update` and `--check` refreshed
+  only the three user-owned service, daemon and per-user config files.
+  Sourcing the installed global config as `joe` resolved
+  `JOETOO_KWIND_EXEC=/home/joe/.local/libexec/joetoo-kwind` and left the
+  pseudo-boolean recursion guard unset. Both running supervisors confirmed
+  that actual broker executable path.
+- **Global/default precedence (gmki91):** commenting out the per-account
+  executable assignment caused a fresh configuration-source check to resolve
+  `/usr/libexec/joetoo-kwind`; restoring the assignment resolved the
+  user-owned executable again. This was a non-disruptive **source-evaluation
+  check**, not an OpenRC start using the global executable: no packaged
+  `/usr/libexec/joetoo-kwind` was installed. A non-default administrator
+  assignment is covered by isolated tests, **not a native OpenRC run**.
+- **gmki91 / X11:** normal `rc-service -U ... restart` succeeded. Supervisor
+  PID `3811324` launched broker PID `3811325`; SIGKILL targeted only that
+  broker, and the unchanged supervisor respawned PID `3812432`.
+  Subsequent D-Bus introspection returned the six broker methods.
+  Konsole PIDs `10352`, `10514`, `276590`, `3051096` retained
+  their recorded parent/process group/session/start times and
+  `/proc/PID/cgroup=0::/3` across restart and crash recovery.
+  The independently monitored SSH shell on q552u01 retained PID `1088986`.
+- **q552u01 / Wayland:** local Konsole reached the graphical bus at
+  `unix:path=/tmp/dbus-*` and successfully queried KWin. The SSH login
+  lacked `DBUS_SESSION_BUS_ADDRESS` and could not perform that graphical
+  query; the native test was therefore run locally. After updating the POC,
+  an immediate D-Bus query briefly reported the name absent; a subsequent
+  query succeeded. A normal user-service restart succeeded and D-Bus
+  introspection returned the six methods. Supervisor PID `1268396`
+  respawned broker PID `1270096` after broker-only SIGKILL of PID
+  `1268397`; D-Bus introspection succeeded afterward. Konsole PIDs
+  `411201`, `526261`, `345272`, `5847` retained PID, parent, group,
+  session, start times, and `/proc/PID/cgroup=0::/1` across restart and
+  crash recovery. The remote SSH shell on nuthuvia retained PID `3990323`.
+
+The temporary global/admin templates are **native test inputs**, not evidence
+of ebuild installation. D-Bus name acquisition can lag behind OpenRC's
+`started` state; neither the duration nor a readiness contract has been
+established, and Step 1.2b must address session/resident initialization.
 
 ## Baseline and headless checks
 
@@ -120,23 +177,27 @@ distinct
 system-wide (see the project's later packaging gate, Step 1.9); it need not
 block acceptance of the already demonstrated **user-owned POC lifecycle**.
 
-## Remaining checks and handoff
+## Step 1.2a decision, deferred gates and handoff
 
-1. Confirm D-Bus introspection after the specific gmki91 supervised crash
-   recovery and after q552u01's final explicit OpenRC restart, preferably
-   with bounded readiness retries. If immediate queries fail but later ones
-   work, measure time-to-ready and decide whether to add a readiness check
-   when implementing Step 1.2b's resident/session initialization.
-2. If strict cgroup-survival evidence is required, compare exact recorded
-   Konsole/Bash/SSH `/proc/PID/cgroup` values before and after lifecycle
-   operations, not just PIDs and start times. Do not use group-wide signals.
-3. Keep packaged `/etc` configuration precedence testing separate from the
-   current POC and verify it under the actual Gentoo/OpenRC user-service
-   configuration loader before promoting the package layout.
-4. After the outstanding checks, record the Step 1.2a milestone decision
-   explicitly. Step 1.2b then addresses real KWin resident JavaScript
-   activation/reconnection and idempotent bus/session initialization; the
-   present broker **does not** load that resident JS.
+**Step 1.2a early OpenRC user-service POC lifecycle gate is complete** on
+gmki91/X11 and q552u01/Wayland, based on the maintainer-reported evidence
+above: restart, broker-only crash recovery, re-registration on the graphical
+session bus, and unchanged independent Konsole/SSH processes and cgroups.
+This is **not** acceptance of the eventual ebuild or the entire version 1
+joetoo-kwin integration.
+
+- **Step 1.2b:** establish a bounded readiness contract, activate/load the
+  resident KWin script into the correct graphical session, prevent duplicate
+  registration, and recover idempotently after broker/session restarts.
+  The current broker does **not** load resident JavaScript.
+- **Step 1.9 packaging:** test the final ebuild-installed executable and
+  system-managed user init script, and verify actual OpenRC precedence with
+  a non-default `/etc/user/conf.d` administrator override and optional
+  per-account override. No packaged broker currently exists at the global
+  default `/usr/libexec/joetoo-kwind` on the tested hosts.
+- **Source mode correction:** this follow-up restores executable source mode
+  `100755` for `user-init.d/joetoo-kwind`. PR #9 accidentally recorded it as
+  `100644`; the POC installer continued installing the copy as mode `0755`.
 
 All native test results above are **maintainer-reported command output**;
 this document edit itself does not perform host administration or retest the

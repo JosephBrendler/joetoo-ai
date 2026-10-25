@@ -1,9 +1,12 @@
 # joetoo-kwin Step 1.2a — OpenRC supervision candidate
 
-**Status:** isolated POC candidate; gmki91/X11 and q552u01/Wayland user-service startup have been reported by maintainer. Stop/restart safety remains unverified. Read
-`../ARCHITECTURE.md` and `../AGENTS.md` first. Existing Step 0 POCs and the
-merged Step 1 CLI remain unmodified. Historical POCs now live under
-`../archive/`; `../step1-candidate/` remains the merged Step 1 artifact.
+**Status:** Step 1.2a OpenRC user-service POC lifecycle accepted for closure
+after maintainer-reported native restart, crash-recovery, D-Bus and
+Konsole/SSH-survival tests on gmki91/X11 and q552u01/Wayland. This is not
+an ebuild release; see `NATIVE_VALIDATION.md` for evidence and deferred
+packaging checks. Read `../ARCHITECTURE.md` and `../AGENTS.md` first.
+Existing Step 0 POCs and the merged Step 1 CLI remain unmodified. Historical
+POCs remain under `../archive/`; `../step1-candidate/` is the Step 1 artifact.
 
 ## Scope and baseline
 
