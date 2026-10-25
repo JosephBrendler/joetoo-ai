@@ -87,6 +87,14 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.home = Path(self.tmp.name)
         self.env = {**os.environ, "HOME": str(self.home)}
         self.env.pop("XDG_CONFIG_HOME", None)
+        # Never query real OpenRC: a temporary HOME does not isolate rc-service.
+        # Default to an inactive service; only the running-service test overrides it.
+        self.bindir = self.home / "bin"
+        self.bindir.mkdir()
+        self.rc_service = self.bindir / "rc-service"
+        self.rc_service.write_text('#!/bin/sh\nexit 3\n')
+        self.rc_service.chmod(0o755)
+        self.env["PATH"] = str(self.bindir) + os.pathsep + self.env.get("PATH", "")
         self.service = self.home / ".config/rc/init.d/joetoo-kwind"
         self.daemon = self.home / ".local/libexec/joetoo-kwind"
         self.conf = self.home / ".config/rc/rc.conf"
@@ -138,12 +146,8 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertFalse(self.daemon.exists())
 
     def test_refuses_replacing_running_service(self):
-        bindir = self.home / 'bin'
-        bindir.mkdir()
-        runner = bindir / 'rc-service'
-        runner.write_text('#!/bin/sh\nexit 0\n')
-        runner.chmod(0o755)
-        self.env['PATH'] = str(bindir) + ':' + self.env.get('PATH', '')
+        # Invert the default fixture: pretend the service is running.
+        self.rc_service.write_text('#!/bin/sh\nexit 0\n')
         p = self.run_tool(INSTALL_TOOL, '--install')
         self.assertNotEqual(p.returncode, 0)
         self.assertIn('Stop the user service', p.stderr)
