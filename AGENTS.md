@@ -32,12 +32,14 @@ If sources conflict, identify the conflict rather than silently choosing whichev
 
 ## Required engineering behavior
 
-### Establish the task
+### Establish the task clearly
 
 - Determine whether the request is exploration, diagnosis, design review, code review, draft change, or documentation.
 - Identify the relevant repository and the exact files, functions, interfaces, or records implicated.
+- maintain clear boundaries on task activity and documentation; stay efficient
 - Separate requirements and established decisions from proposals and unresolved questions.
 - Do not turn exploratory discussion into unsolicited implementation.
+- Do not perform documentation tasks using language that might be interpreted as instruction unless explicitly requested
 
 ### Inspect before recommending
 
