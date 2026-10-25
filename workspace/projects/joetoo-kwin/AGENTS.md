@@ -16,9 +16,8 @@ AI policies.
 ## Inspect the current baseline and reuse established work
 
 - Fetch the current `joetoo-ai` accepted baseline and inspect relevant files
-  in `step1-candidate/` and the six preserved POC reference directories under
-  `archive/` **as relevant**, along with any subsequent maintainer feedback.
-  Do not treat an older POC as the authoritative latest implementation.
+  under `archive/` **as relevant**, along with any subsequent maintainer feedback.
+  Do not treat an older POC as the authoritative latest implementation, but rather as available resource or reference for related current or future capability development/integration.
 - Consult applicable installed skills under `.agents/skills/`, especially
   `script_header_joetoo`, `script_header_joetoo-CLI`,
   `script_header_joetoo_ssh`, and `pseudo-boolean_framework`. Discover the
