@@ -81,14 +81,17 @@ esac
 
 
 class TemplateTests(unittest.TestCase):
-    def test_packaged_global_and_user_bridge_contract(self):
+    def test_packaged_global_entry_point_and_user_override_contract(self):
         global_config = ROOT / "conf.d/joetoo-kwind"
-        bridge = ROOT / "user-conf.d/joetoo-kwind"
+        user_config = ROOT / "user-conf.d/joetoo-kwind"
+        service = ROOT / "user-init.d/joetoo-kwind"
         self.assertIn('JOETOO_KWIND_EXEC="/usr/libexec/joetoo-kwind"', global_config.read_text())
-        self.assertIn('[ -r /etc/conf.d/joetoo-kwind ]', bridge.read_text())
-        self.assertIn('. /etc/conf.d/joetoo-kwind', bridge.read_text())
+        self.assertIn('[ -r /etc/user/conf.d/joetoo-kwind ]', global_config.read_text())
+        self.assertIn('. /etc/user/conf.d/joetoo-kwind', global_config.read_text())
+        self.assertIn('. /etc/conf.d/joetoo-kwind', service.read_text())
+        self.assertNotIn('. /etc/conf.d/joetoo-kwind', user_config.read_text())
         subprocess.run(["sh", "-n", str(global_config)], check=True)
-        subprocess.run(["sh", "-n", str(bridge)], check=True)
+        subprocess.run(["sh", "-n", str(user_config)], check=True)
 
     def test_poc_override_wins_after_global_value_is_set(self):
         global_config = ROOT / "conf.d/joetoo-kwind"

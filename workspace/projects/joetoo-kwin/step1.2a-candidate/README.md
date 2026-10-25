@@ -19,8 +19,8 @@ Files and proposed installation destinations:
 
 - `libexec/joetoo-kwind` -> `/usr/libexec/joetoo-kwind` (foreground Python daemon)
 - `user-init.d/joetoo-kwind` -> `/etc/user/init.d/joetoo-kwind` (OpenRC **user** service)
-- `conf.d/joetoo-kwind` -> `/etc/conf.d/joetoo-kwind` (packaged global config)
-- `user-conf.d/joetoo-kwind` -> `/etc/user/conf.d/joetoo-kwind` (packaged user-service bridge)
+- `conf.d/joetoo-kwind` -> `/etc/conf.d/joetoo-kwind` (authoritative global entry point)
+- `user-conf.d/joetoo-kwind` -> `/etc/user/conf.d/joetoo-kwind` (system-managed user-service overrides)
 - `poc-user-conf.d/joetoo-kwind` -> `$XDG_CONFIG_HOME/rc/conf.d/joetoo-kwind` (POC override)
 - `tests/test_step1_2a.py` -> headless mocks and non-destructive service checks
 - `tools/joetoo-kwind-configure-openrc-user` -> opt-in literal OpenRC allowlist editor
@@ -43,36 +43,84 @@ private runtime state for the **supervisor**, not the application.
 
 ## Executable configuration hierarchy
 
-The packaged global setting is authoritative by default:
+The **eventual ebuild** will install one OpenRC user service, its Python broker,
+and two configuration files. The ordinary-user POC installer is only a
+non-deployment test tool, not an alternative packaging or configuration mode.
+
+OpenRC normally loads user-service `conf.d` files through `RC_PATH` **before**
+loading the service script. That native loading order alone cannot make
+`/etc/conf.d/joetoo-kwind` the authoritative first joetoo layer. Therefore,
+the user-service script explicitly sources that global file **before** its
+`command=` assignment. The global file then sources subsequent layers in
+this deliberate order (later assignments win):
+
+1. `/etc/conf.d/joetoo-kwind`: packaged global defaults, initially
+   `JOETOO_KWIND_EXEC="/usr/libexec/joetoo-kwind"`.
+2. `/etc/user/conf.d/joetoo-kwind`: optional **system-managed** overrides for
+   all users of this OpenRC user service. The ebuild's template contains no
+   active override; an administrator can set one, including a temporary
+   candidate executable path for controlled testing.
+3. `${XDG_CONFIG_HOME:-$HOME/.config}/rc/conf.d/joetoo-kwind`: optional
+   individual account overrides; the non-root POC helper installs
+   `JOETOO_KWIND_EXEC="${HOME}/.local/libexec/joetoo-kwind"` here.
+
+`rc-service -U joetoo-kwind start` runs under the invoking account; `-U`
+selects user-service mode, **not** a username. The service refuses startup
+when `HOME` is unset/relative or explicit `XDG_CONFIG_HOME` is relative,
+so there is no unintended `/.config` lookup. On the maintainer's hosts,
+`XDG_CONFIG_HOME` is unset and `$HOME/.config` is used; `XDG_CONFIG_DIRS`
+is not a substitute for it.
+
+`/etc/user/conf.d` is **not** a per-account directory. An override pointing
+at `/home/joe/.local/libexec` there would apply to *every* user running this
+service, not only joe. Keep account-specific POC paths in the third layer
+except when deliberately testing an administrator policy override.
+
+The service retains OpenRC's default `supervise-daemon` functions and the
+existing user-writable supervisor PID file under `$XDG_RUNTIME_DIR`.
+Its respawn settings are unchanged (`10/5/120`). No `need net` dependency is
+introduced: the broker needs a graphical session bus, not an OpenRC network
+service. The service script's executable selection remains:
 
 ```sh
-# /etc/conf.d/joetoo-kwind
-JOETOO_KWIND_EXEC="/usr/libexec/joetoo-kwind"
+command="${JOETOO_KWIND_EXEC:-/usr/libexec/joetoo-kwind}"
 ```
 
-For OpenRC's user service, `/etc/user/conf.d/joetoo-kwind` bridges that
-system setting by sourcing `/etc/conf.d/joetoo-kwind` when readable.
-An optional `$XDG_CONFIG_HOME/rc/conf.d/joetoo-kwind` then allows an
-ordinary user to override the executable. The POC installs the explicit value:
+When the global file has not been installed (standalone POC), OpenRC's native
+per-user configuration loading and that fallback still work. The global file has a joetoo pseudo-boolean reentrancy guard for migration
+from the previous (reverse-direction) `/etc/user/conf.d` bridge. The guard
+prevents **nested** source recursion only. It is unset after the load and
+must not be exported or persisted. OpenRC may independently source a
+configuration file again; keep these files free of one-time side effects. Since OpenRC
+itself also sources these files before
+the script, **configuration files should contain declarative assignments**;
+the explicit chain can source them again. Do not put one-time side effects
+in these configuration files.
 
-```sh
-JOETOO_KWIND_EXEC="${HOME}/.local/libexec/joetoo-kwind"
-```
+The POC helper continues to install **only** the three user-owned files and
+preserve `rc_env_allow` for the graphical D-Bus address. It does not install
+or modify anything under `/etc`. Eventual ebuild packaging of the service,
+broker, and two system configuration files remains maintainer-controlled.
+The new chain requires native validation before replacing the installed
+candidate, and does not retroactively change the recorded Step 1.2a results.
+See [NATIVE_VALIDATION.md](NATIVE_VALIDATION.md).
 
-This is an **assignment**, not a `${JOETOO_KWIND_EXEC:-...}` fallback:
-once the global configuration has set a path, a fallback would not override
-it. The service still falls back to the packaged path when no configuration
-sets `JOETOO_KWIND_EXEC`.
+### Planned multiwindow network preflight (not implemented in Step 1.2a)
 
-The non-root helper installs **only** the user-owned service, daemon, and
-override. It must not modify `/etc/conf.d`, `/etc/user/conf.d`,
-or system OpenRC configuration. `rc_env_allow` continues to preserve the
-actual Plasma D-Bus address, while the service configuration provides the
-executable path. The templates are candidates for later human packaging.
-The real OpenRC user-service loading order still needs native verification.
+The OpenRC broker should **not** use `depend() { need net; }` as a blanket
+condition: it needs a graphical D-Bus session, while routes, VPN, DNS, and
+SSH/VNC target availability vary independently. `need net` cannot establish
+that dozens of configured remote endpoints will be reachable.
 
-See [NATIVE_VALIDATION.md](NATIVE_VALIDATION.md) for the distinction between
-prior maintainer evidence and the additional tests required for this hierarchy.
+For the future `joetoo-kwin -o` launcher, propose a bounded **batch
+preflight** before opening many terminal/VNC windows, identifying common
+network/VPN prerequisites and reporting affected targets. Preserve the already
+tested ability to keep a placeholder terminal for an isolated unreachable
+SSH destination. The release policy for a failed shared prerequisite (abort
+all remote launches vs proceed partially with explicit permission) is **open**
+and must be agreed before implementation. Launches should be asynchronous
+and placement waits bounded; do not serialize long SSH connection timeouts.
+`-o` is currently reserved and performs no launches in Step 1's CLI.
 
 ## Headless checks (safe on a development machine)
 

@@ -7,6 +7,15 @@
 # OpenRC consumes configuration globals after sourcing; ShellCheck cannot see them.
 # shellcheck disable=SC2034
 
+# OpenRC preloads user conf.d before this script. Re-source the global
+# entry point to impose the joetoo-defined defaults -> administrator -> user
+# precedence before the command assignment. User mode does not switch UID.
+# Without a packaged global file, the standalone POC's OpenRC-loaded user
+# config and the command fallback remain available.
+if [ -r /etc/conf.d/joetoo-kwind ]; then
+    . /etc/conf.d/joetoo-kwind
+fi
+
 description="joetoo KWin session D-Bus broker (user service)"
 supervisor="supervise-daemon"
 command="${JOETOO_KWIND_EXEC:-/usr/libexec/joetoo-kwind}"
@@ -25,6 +34,18 @@ rc_cgroup_cleanup="NO"
 start_pre() {
     if [ "$(id -u)" -eq 0 ]; then
         eerror "joetoo-kwind must run as the graphical user, not root"
+        return 1
+    fi
+    # rc-service -U runs in the invoking user's environment, not as root.
+    # HOME must be nonempty and absolute before proceeding:
+    # without it, the XDG fallback could accidentally target /.config.
+    if [ -z "${HOME:-}" ] || [ "${HOME#/}" = "$HOME" ]; then
+        eerror "HOME must be set to an absolute user home directory"
+        return 1
+    fi
+    if [ -n "${XDG_CONFIG_HOME:-}" ] &&
+       [ "${XDG_CONFIG_HOME#/}" = "$XDG_CONFIG_HOME" ]; then
+        eerror "XDG_CONFIG_HOME must be absolute when set"
         return 1
     fi
     if [ -z "${XDG_RUNTIME_DIR:-}" ] || [ "${XDG_RUNTIME_DIR#/}" = "$XDG_RUNTIME_DIR" ] ||
