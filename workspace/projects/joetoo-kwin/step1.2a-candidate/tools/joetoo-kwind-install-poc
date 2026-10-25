@@ -1,7 +1,8 @@
 #!/bin/sh
 # Copyright 2025-2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Install both files in an ordinary user's home, never under system OpenRC.
+# Install the service, daemon and per-user config in an ordinary user's home.
+# Packaged system OpenRC templates are deliberately not installed here.
 set -eu
 
 usage() {
@@ -21,13 +22,16 @@ service_source=$root/user-init.d/joetoo-kwind
 daemon_source=$root/libexec/joetoo-kwind
 service_dest=$config_home/rc/init.d/joetoo-kwind
 daemon_dest=$HOME/.local/libexec/joetoo-kwind
+override_source=$root/poc-user-conf.d/joetoo-kwind
+override_dest=$config_home/rc/conf.d/joetoo-kwind
 config_helper=$root/tools/joetoo-kwind-configure-openrc-user
 
 printf 'OpenRC user service: %s\n' "$service_dest"
 printf 'Daemon executable:  %s\n' "$daemon_dest"
+printf 'OpenRC user override: %s\n' "$override_dest"
 printf 'OpenRC user config:  %s\n' "$config_home/rc/rc.conf"
 
-for dest in "$service_dest" "$daemon_dest"; do
+for dest in "$service_dest" "$daemon_dest" "$override_dest"; do
     if [ -L "$dest" ] || { [ -e "$dest" ] && [ ! -f "$dest" ]; }; then
         printf 'Refusing unexpected installation destination: %s\n' "$dest" >&2
         exit 1
@@ -36,8 +40,12 @@ done
 
 if [ "$action" = --check ]; then
     status=0
-    for mapping in "service" "daemon"; do
-        case $mapping in service) src=$service_source; dest=$service_dest ;; daemon) src=$daemon_source; dest=$daemon_dest ;; esac
+    for mapping in service daemon override; do
+        case $mapping in
+            service) src=$service_source; dest=$service_dest ;;
+            daemon) src=$daemon_source; dest=$daemon_dest ;;
+            override) src=$override_source; dest=$override_dest ;;
+        esac
         if [ -f "$dest" ] && cmp -s -- "$src" "$dest"; then
             printf 'Current: %s\n' "$dest"
         else
@@ -50,7 +58,7 @@ if [ "$action" = --check ]; then
 fi
 
 if [ "$action" = --install ]; then
-    for dest in "$service_dest" "$daemon_dest"; do
+    for dest in "$service_dest" "$daemon_dest" "$override_dest"; do
         if [ -e "$dest" ]; then
             printf 'Already installed: %s (use --check or --update)\n' "$dest" >&2
             exit 1
@@ -70,7 +78,7 @@ if [ "$action" = --update ]; then
     # Explicit update preserves the previous on-disk POC. No silent reset of a
     # known-working service/daemon installation.
     backup_suffix=".before-step1.2a-update.$(date +%Y%m%d-%H%M%S).$$"
-    for dest in "$service_dest" "$daemon_dest"; do
+    for dest in "$service_dest" "$daemon_dest" "$override_dest"; do
         if [ -f "$dest" ]; then
             cp -p -- "$dest" "$dest$backup_suffix" || exit 1
             printf 'Backup: %s\n' "$dest$backup_suffix"
@@ -80,8 +88,8 @@ fi
 # -D creates BOTH parent paths if missing, avoiding manual mkdir commands.
 install -D -m 0755 -- "$service_source" "$service_dest"
 install -D -m 0755 -- "$daemon_source" "$daemon_dest"
-printf 'Installed both Step 1.2a files. No service was started.\n'
+install -D -m 0644 -- "$override_source" "$override_dest"
+printf 'Installed all three Step 1.2a user-owned files. No service was started.\n'
 printf 'From a local Plasma Konsole, run:\n'
-printf '  export JOETOO_KWIND_EXEC="%s"\n' "$daemon_dest"
 printf '  rc-service -U joetoo-kwind start\n'
 printf '  rc-service -U joetoo-kwind status\n'

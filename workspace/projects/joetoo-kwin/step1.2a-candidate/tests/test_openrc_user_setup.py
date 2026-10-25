@@ -79,6 +79,29 @@ esac
         self.assertRegex(assignment[0], r'^rc_env_allow="[A-Z_ ]+"$')
 
 
+
+class TemplateTests(unittest.TestCase):
+    def test_packaged_global_and_user_bridge_contract(self):
+        global_config = ROOT / "conf.d/joetoo-kwind"
+        bridge = ROOT / "user-conf.d/joetoo-kwind"
+        self.assertIn('JOETOO_KWIND_EXEC="/usr/libexec/joetoo-kwind"', global_config.read_text())
+        self.assertIn('[ -r /etc/conf.d/joetoo-kwind ]', bridge.read_text())
+        self.assertIn('. /etc/conf.d/joetoo-kwind', bridge.read_text())
+        subprocess.run(["sh", "-n", str(global_config)], check=True)
+        subprocess.run(["sh", "-n", str(bridge)], check=True)
+
+    def test_poc_override_wins_after_global_value_is_set(self):
+        global_config = ROOT / "conf.d/joetoo-kwind"
+        override = ROOT / "poc-user-conf.d/joetoo-kwind"
+        with tempfile.TemporaryDirectory() as home:
+            env = {**os.environ, "HOME": home}
+            script = '. "$1"; . "$2"; printf "%s\\n" "$JOETOO_KWIND_EXEC"'
+            proc = subprocess.run(
+                ["sh", "-c", script, "test", str(global_config), str(override)],
+                env=env, capture_output=True, text=True, check=True)
+            self.assertEqual(proc.stdout.strip(), home + "/.local/libexec/joetoo-kwind")
+        self.assertNotIn('JOETOO_KWIND_EXEC:-', override.read_text())
+
 @unittest.skipIf(os.geteuid() == 0, "native file tests require ordinary user, not root")
 class InstallerIntegrationTests(unittest.TestCase):
     def setUp(self):
@@ -97,6 +120,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.env["PATH"] = str(self.bindir) + os.pathsep + self.env.get("PATH", "")
         self.service = self.home / ".config/rc/init.d/joetoo-kwind"
         self.daemon = self.home / ".local/libexec/joetoo-kwind"
+        self.override = self.home / ".config/rc/conf.d/joetoo-kwind"
         self.conf = self.home / ".config/rc/rc.conf"
 
     def run_tool(self, tool, arg):
@@ -107,10 +131,42 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertEqual(self.service.read_bytes(), (ROOT / 'user-init.d/joetoo-kwind').read_bytes())
         self.assertEqual(self.daemon.read_bytes(), (ROOT / 'libexec/joetoo-kwind').read_bytes())
+        self.assertEqual(self.override.read_bytes(), (ROOT / 'poc-user-conf.d/joetoo-kwind').read_bytes())
         self.assertEqual(self.conf.read_text(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"\n')
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
         self.assertEqual(self.run_tool(CONFIG_TOOL, "--check").returncode, 0)
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--install").returncode, 1)
+
+
+    def test_override_missing_causes_check_failure(self):
+        p = self.run_tool(INSTALL_TOOL, "--install")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.override.unlink()
+        p = self.run_tool(INSTALL_TOOL, "--check")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("Missing or outdated", p.stdout)
+
+    def test_update_backs_up_existing_user_override(self):
+        p = self.run_tool(INSTALL_TOOL, "--install")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.override.write_text("CUSTOM=previous\\n")
+        p = self.run_tool(INSTALL_TOOL, "--update")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        backups = list(self.override.parent.glob("joetoo-kwind.before-step1.2a-update.*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(), "CUSTOM=previous\\n")
+        self.assertEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
+
+    def test_rejects_symlink_user_override(self):
+        self.override.parent.mkdir(parents=True)
+        target = self.home / "sentinel"
+        target.write_text("preserve\\n")
+        self.override.symlink_to(target)
+        p = self.run_tool(INSTALL_TOOL, "--install")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertFalse(self.service.exists())
+        self.assertFalse(self.daemon.exists())
+        self.assertEqual(target.read_text(), "preserve\\n")
 
     def test_preserves_existing_rc_conf_settings_and_repair_upgrade(self):
         self.conf.parent.mkdir(parents=True)
@@ -144,6 +200,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertFalse(self.conf.exists())
         self.assertFalse(self.service.exists())
         self.assertFalse(self.daemon.exists())
+        self.assertFalse(self.override.exists())
 
     def test_refuses_replacing_running_service(self):
         # Invert the default fixture: pretend the service is running.
@@ -163,6 +220,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertTrue((config_home / 'rc/init.d/joetoo-kwind').is_file())
         self.assertTrue((config_home / 'rc/rc.conf').is_file())
         self.assertTrue(self.daemon.is_file())
+        self.assertTrue((config_home / 'rc/conf.d/joetoo-kwind').is_file())
 
 
 if __name__ == '__main__':

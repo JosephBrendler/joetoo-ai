@@ -1,7 +1,7 @@
 # joetoo-kwin — Step 1 candidate (review, not integrated)
 
 Baseline: JosephBrendler/joetoo-ai `main` commit `09611c4`. Proposed task
-branch: `task/joetoo-kwin-step1-cli-plan`. Keep all six POC directories intact.
+branch: `task/joetoo-kwin-step1-cli-plan`. Keep all six historical POC directories intact under `../archive/` (unchanged contents).
 
 ## Scope
 

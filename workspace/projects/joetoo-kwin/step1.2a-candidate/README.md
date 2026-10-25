@@ -2,13 +2,14 @@
 
 **Status:** isolated POC candidate; gmki91/X11 and q552u01/Wayland user-service startup have been reported by maintainer. Stop/restart safety remains unverified. Read
 `../ARCHITECTURE.md` and `../AGENTS.md` first. Existing Step 0 POCs and the
-merged Step 1 CLI remain unmodified.
+merged Step 1 CLI remain unmodified. Historical POCs now live under
+`../archive/`; `../step1-candidate/` remains the merged Step 1 artifact.
 
 ## Scope and baseline
 
 This tests the early lifecycle gate for `joetoo-kwind`, **not** the later registry
 or window-launch milestones. The new Python executable derives from
-`joetoo-kwin-launch-poc/joetoo-kwin-broker.py` and deliberately preserves
+`../archive/joetoo-kwin-launch-poc/joetoo-kwin-broker.py` and deliberately preserves
 `org.joetoo.KWinBridge`, `/org/joetoo/KWinBridge`, and the six existing methods:
 `Submit`, `Take`, `SubmitLaunch`, `TakeLaunch`, `Complete`, and `Status`.
 It remains single-flight and does **not** launch Konsole, spawn SSH, register
@@ -18,9 +19,12 @@ Files and proposed installation destinations:
 
 - `libexec/joetoo-kwind` -> `/usr/libexec/joetoo-kwind` (foreground Python daemon)
 - `user-init.d/joetoo-kwind` -> `/etc/user/init.d/joetoo-kwind` (OpenRC **user** service)
+- `conf.d/joetoo-kwind` -> `/etc/conf.d/joetoo-kwind` (packaged global config)
+- `user-conf.d/joetoo-kwind` -> `/etc/user/conf.d/joetoo-kwind` (packaged user-service bridge)
+- `poc-user-conf.d/joetoo-kwind` -> `$XDG_CONFIG_HOME/rc/conf.d/joetoo-kwind` (POC override)
 - `tests/test_step1_2a.py` -> headless mocks and non-destructive service checks
 - `tools/joetoo-kwind-configure-openrc-user` -> opt-in literal OpenRC allowlist editor
-- `tools/joetoo-kwind-install-poc` -> installs **both** service and daemon, creates parent directories
+- `tools/joetoo-kwind-install-poc` -> installs **three user-owned files**: service, daemon, override; creates parent directories
 - `tests/test_openrc_user_setup.py` -> configuration and complete-install regression checks
 
 **No** system-level `/etc/init.d/joetoo-kwind` service and **no** root user mode.
@@ -36,6 +40,39 @@ process, and throttled respawn (10/5/120, patterned after joetoo DDNS).
 `rc_cgroup_cleanup=NO` is an intentional protective override; the daemon does
 not launch applications or execute process-group termination. `pidfile` is
 private runtime state for the **supervisor**, not the application.
+
+## Executable configuration hierarchy
+
+The packaged global setting is authoritative by default:
+
+```sh
+# /etc/conf.d/joetoo-kwind
+JOETOO_KWIND_EXEC="/usr/libexec/joetoo-kwind"
+```
+
+For OpenRC's user service, `/etc/user/conf.d/joetoo-kwind` bridges that
+system setting by sourcing `/etc/conf.d/joetoo-kwind` when readable.
+An optional `$XDG_CONFIG_HOME/rc/conf.d/joetoo-kwind` then allows an
+ordinary user to override the executable. The POC installs the explicit value:
+
+```sh
+JOETOO_KWIND_EXEC="${HOME}/.local/libexec/joetoo-kwind"
+```
+
+This is an **assignment**, not a `${JOETOO_KWIND_EXEC:-...}` fallback:
+once the global configuration has set a path, a fallback would not override
+it. The service still falls back to the packaged path when no configuration
+sets `JOETOO_KWIND_EXEC`.
+
+The non-root helper installs **only** the user-owned service, daemon, and
+override. It must not modify `/etc/conf.d`, `/etc/user/conf.d`,
+or system OpenRC configuration. `rc_env_allow` continues to preserve the
+actual Plasma D-Bus address, while the service configuration provides the
+executable path. The templates are candidates for later human packaging.
+The real OpenRC user-service loading order still needs native verification.
+
+See [NATIVE_VALIDATION.md](NATIVE_VALIDATION.md) for the distinction between
+prior maintainer evidence and the additional tests required for this hierarchy.
 
 ## Headless checks (safe on a development machine)
 
@@ -86,8 +123,9 @@ value `tty` can be correct for a Plasma session started from a TTY.
 
 From this `step1.2a-candidate` directory on the target host, first run the
 headless checks above. The installer uses `install -D` and creates the missing
-`~/.config/rc/init.d` and `~/.local/libexec` directories **without** any `mkdir`
-commands from the user. It also checks/applies the OpenRC allowlist with the
+`~/.config/rc/init.d`, `~/.config/rc/conf.d`, and `~/.local/libexec`
+directories **without** any `mkdir` commands from the user. It also
+checks/applies the OpenRC allowlist with the
 fixed helper. Nothing starts automatically.
 
 ### Fresh test installation
@@ -98,7 +136,7 @@ tools/joetoo-kwind-install-poc --install
 ```
 
 The first command reports what is missing (and exits nonzero if setup is
-incomplete). The second installs both files and updates the user rc.conf.
+incomplete). The second installs the service, daemon and per-user override, and updates the user rc.conf.
 `--install` refuses to overwrite an existing destination.
 
 ### Updating the POC already installed on gmki91 or q552u01
@@ -112,14 +150,14 @@ tools/joetoo-kwind-install-poc --check
 ```
 
 `--update` refuses to proceed if OpenRC reports the service as running. It
-preserves installed service/daemon copies with dated, PID-suffixed backups
+preserves installed service/daemon/override copies with dated, PID-suffixed backups
 before replacing them. It updates the user rc.conf only through the literal
 allowlist editor. It never terminates Konsole, Bash or SSH sessions.
 
 ### Start and verify on that host's own graphical session
 
 ```sh
-export JOETOO_KWIND_EXEC="$HOME/.local/libexec/joetoo-kwind"
+cat "${XDG_CONFIG_HOME:-$HOME/.config}/rc/conf.d/joetoo-kwind"
 printf 'Graphical bus: %s\n' "$DBUS_SESSION_BUS_ADDRESS"
 qdbus6 org.kde.KWin /KWin org.kde.KWin.currentDesktop
 rc-service -U joetoo-kwind start
