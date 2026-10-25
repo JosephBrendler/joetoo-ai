@@ -1,78 +1,164 @@
 #!/usr/bin/env python3
 # Copyright 2025-2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Non-destructive tests of the opt-in OpenRC user configuration helper."""
+"""Step 1.2a OpenRC user-config and complete local-install regression tests.
+
+Subprocess integration runs must execute as a non-root user in a disposable HOME.
+No real OpenRC service is started, stopped, configured system-wide, or reloaded.
+"""
+
+import importlib.machinery
+import importlib.util
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / 'tools' / 'joetoo-kwind-configure-openrc-user'
+CONFIG_TOOL = ROOT / "tools" / "joetoo-kwind-configure-openrc-user"
+INSTALL_TOOL = ROOT / "tools" / "joetoo-kwind-install-poc"
 
 
-class UserOpenRCConfigTests(unittest.TestCase):
+def load_config():
+    loader = importlib.machinery.SourceFileLoader("joetoo_user_rc_config", str(CONFIG_TOOL))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+class ConfigurationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.config = load_config()
+
+    def test_literal_openrc_assignment_from_empty(self):
+        updated, names = self.config.parse_and_update("")
+        self.assertEqual(updated, 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"\n')
+        self.assertEqual(names, ["DBUS_SESSION_BUS_ADDRESS", "JOETOO_KWIND_EXEC"])
+        self.assertEqual(self.config.parse_and_update(updated)[0], updated)
+        self.assertNotIn("case ", updated)
+
+    def test_preserve_existing_literal_allowlist_and_unrelated_settings(self):
+        original = 'rc_some_setting="yes"\nrc_env_allow="FOO DBUS_SESSION_BUS_ADDRESS"\n'
+        updated, names = self.config.parse_and_update(original)
+        self.assertEqual(updated, 'rc_some_setting="yes"\nrc_env_allow="FOO DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"\n')
+        self.assertEqual(names, ["FOO", "DBUS_SESSION_BUS_ADDRESS", "JOETOO_KWIND_EXEC"])
+        self.assertEqual(self.config.parse_and_update(updated)[0], updated)
+
+    def test_migrate_exact_broken_legacy_case_block(self):
+        original = '''# BEGIN joetoo-kwind Step 1.2a environment
+# Extend, never replace, other services' rc_env_allow entries.
+case " ${rc_env_allow:-} " in
+    *" DBUS_SESSION_BUS_ADDRESS "*) ;;
+    *) rc_env_allow="${rc_env_allow:+${rc_env_allow} }DBUS_SESSION_BUS_ADDRESS" ;;
+esac
+case " ${rc_env_allow:-} " in
+    *" JOETOO_KWIND_EXEC "*) ;;
+    *) rc_env_allow="${rc_env_allow:+${rc_env_allow} }JOETOO_KWIND_EXEC" ;;
+esac
+# END joetoo-kwind Step 1.2a environment
+'''
+        updated, _ = self.config.parse_and_update(original)
+        self.assertEqual(updated.strip(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"')
+
+    def test_reject_unknown_or_partial_managed_block(self):
+        with self.assertRaises(self.config.ConfigurationError):
+            self.config.parse_and_update("# BEGIN joetoo-kwind Step 1.2a environment\n")
+        with self.assertRaises(self.config.ConfigurationError):
+            self.config.parse_and_update('rc_env_allow="${OTHER} DBUS_SESSION_BUS_ADDRESS"\n')
+        with self.assertRaises(self.config.ConfigurationError):
+            self.config.parse_and_update('rc_env_allow="FOO"\nrc_env_allow="BAR"\n')
+
+    def test_literal_assignment_not_shell_case_execution(self):
+        literal, _ = self.config.parse_and_update('rc_env_allow="FOO"\n')
+        assignment = [s for s in literal.splitlines() if s.startswith("rc_env_allow=")]
+        self.assertEqual(len(assignment), 1)
+        self.assertRegex(assignment[0], r'^rc_env_allow="[A-Z_ ]+"$')
+
+
+@unittest.skipIf(os.geteuid() == 0, "native file tests require ordinary user, not root")
+class InstallerIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        self.conf = self.root / 'rc' / 'rc.conf'
-        self.env = dict(os.environ, XDG_CONFIG_HOME=str(self.root), HOME=str(self.root))
-        # This test suite runs without OpenRC or privilege escalation. Test id mock
-        # models the non-root invocation, while ownership checks use the actual UID.
-        self.bindir = self.root / 'bin'
-        self.bindir.mkdir()
-        (self.bindir / 'id').write_text('#!/bin/sh\nprintf "%s\\n" "$JOETOO_TEST_UID"\n')
-        (self.bindir / 'id').chmod(0o755)
-        self.env['JOETOO_TEST_UID'] = str(os.getuid() or 1000)
-        self.env['PATH'] = f'{self.bindir}:{os.environ.get("PATH", "")}'
+        self.home = Path(self.tmp.name)
+        self.env = {**os.environ, "HOME": str(self.home)}
+        self.env.pop("XDG_CONFIG_HOME", None)
+        self.service = self.home / ".config/rc/init.d/joetoo-kwind"
+        self.daemon = self.home / ".local/libexec/joetoo-kwind"
+        self.conf = self.home / ".config/rc/rc.conf"
 
-    def run_script(self, action):
-        return subprocess.run([str(SCRIPT), action], env=self.env,
-                              text=True, capture_output=True)
+    def run_tool(self, tool, arg):
+        return subprocess.run([str(tool), arg], env=self.env, capture_output=True, text=True)
 
-    def effective_allowlist(self):
-        p = subprocess.run(['sh', '-c', '. "$1"; printf "%s\\n" "$rc_env_allow"',
-                            'sh', str(self.conf)], text=True, capture_output=True)
-        self.assertEqual(p.returncode, 0, p.stderr)
-        return p.stdout.strip().split()
+    def test_full_install_makes_both_directories_and_literal_rc_conf(self):
+        p = self.run_tool(INSTALL_TOOL, "--install")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual(self.service.read_bytes(), (ROOT / 'user-init.d/joetoo-kwind').read_bytes())
+        self.assertEqual(self.daemon.read_bytes(), (ROOT / 'libexec/joetoo-kwind').read_bytes())
+        self.assertEqual(self.conf.read_text(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"\n')
+        self.assertEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
+        self.assertEqual(self.run_tool(CONFIG_TOOL, "--check").returncode, 0)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, "--install").returncode, 1)
 
-    def test_check_is_read_only_and_apply_is_idempotent(self):
-        self.assertEqual(self.run_script('--check').returncode, 1)
-        self.assertFalse(self.conf.exists())
-        self.assertEqual(self.run_script('--apply').returncode, 0)
-        first = self.conf.read_bytes()
-        self.assertEqual(self.run_script('--apply').returncode, 0)
-        self.assertEqual(self.conf.read_bytes(), first)
-        self.assertEqual(self.run_script('--check').returncode, 0)
-        self.assertEqual(self.effective_allowlist(), ['DBUS_SESSION_BUS_ADDRESS', 'JOETOO_KWIND_EXEC'])
-
-    def test_preserves_other_entries_and_existing_allowed_names(self):
+    def test_preserves_existing_rc_conf_settings_and_repair_upgrade(self):
         self.conf.parent.mkdir(parents=True)
-        self.conf.write_text('rc_env_allow="FOO DBUS_SESSION_BUS_ADDRESS"\nother_setting="safe"\n')
-        self.assertEqual(self.run_script('--apply').returncode, 0)
-        self.assertIn('other_setting="safe"', self.conf.read_text())
-        self.assertEqual(self.effective_allowlist(), ['FOO', 'DBUS_SESSION_BUS_ADDRESS', 'JOETOO_KWIND_EXEC'])
+        self.conf.write_text('other="yes"\nrc_env_allow="EXISTING"\n')
+        p = self.run_tool(INSTALL_TOOL, "--install")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual(self.conf.read_text(),
+                         'other="yes"\nrc_env_allow="EXISTING DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"\n')
+        self.service.write_text('OLD\n')
+        self.assertNotEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
+        p = self.run_tool(INSTALL_TOOL, "--update")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
+        backups = list(self.service.parent.glob('joetoo-kwind.before-step1.2a-update.*'))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(), 'OLD\n')
 
-    def test_rejects_symlink_without_mutating_target(self):
-        target = self.root / 'real.conf'
-        target.write_text('rc_env_allow="FOO"\n')
+    def test_refuse_symlink_configuration_without_installing(self):
         self.conf.parent.mkdir(parents=True)
+        target = self.home / 'elsewhere'
+        target.write_text('SAFE\n')
         self.conf.symlink_to(target)
-        self.assertNotEqual(self.run_script('--apply').returncode, 0)
-        self.assertEqual(target.read_text(), 'rc_env_allow="FOO"\n')
+        p = self.run_tool(INSTALL_TOOL, "--install")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertFalse(self.service.exists())
+        self.assertFalse(self.daemon.exists())
+        self.assertEqual(target.read_text(), 'SAFE\n')
 
-    def test_rejects_partial_managed_block(self):
-        self.conf.parent.mkdir(parents=True)
-        self.conf.write_text('# BEGIN joetoo-kwind Step 1.2a environment\n')
-        self.assertNotEqual(self.run_script('--apply').returncode, 0)
-        self.assertEqual(self.conf.read_text(), '# BEGIN joetoo-kwind Step 1.2a environment\n')
-
-    def test_refuses_root(self):
-        self.env['JOETOO_TEST_UID'] = '0'
-        self.assertNotEqual(self.run_script('--apply').returncode, 0)
+    def test_check_is_non_mutating(self):
+        self.assertNotEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
         self.assertFalse(self.conf.exists())
+        self.assertFalse(self.service.exists())
+        self.assertFalse(self.daemon.exists())
+
+    def test_refuses_replacing_running_service(self):
+        bindir = self.home / 'bin'
+        bindir.mkdir()
+        runner = bindir / 'rc-service'
+        runner.write_text('#!/bin/sh\nexit 0\n')
+        runner.chmod(0o755)
+        self.env['PATH'] = str(bindir) + ':' + self.env.get('PATH', '')
+        p = self.run_tool(INSTALL_TOOL, '--install')
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('Stop the user service', p.stderr)
+        self.assertFalse(self.conf.exists())
+        self.assertFalse(self.service.exists())
+        self.assertFalse(self.daemon.exists())
+
+    def test_xdg_config_home_override(self):
+        config_home = self.home / 'custom-xdg'
+        self.env['XDG_CONFIG_HOME'] = str(config_home)
+        p = self.run_tool(INSTALL_TOOL, '--install')
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertTrue((config_home / 'rc/init.d/joetoo-kwind').is_file())
+        self.assertTrue((config_home / 'rc/rc.conf').is_file())
+        self.assertTrue(self.daemon.is_file())
 
 
 if __name__ == '__main__':

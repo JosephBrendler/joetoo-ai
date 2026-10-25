@@ -1,0 +1,87 @@
+#!/bin/sh
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Install both files in an ordinary user's home, never under system OpenRC.
+set -eu
+
+usage() {
+    printf 'Usage: %s --check | --install | --update\n' "${0##*/}" >&2
+    exit 2
+}
+[ "$#" -eq 1 ] || usage
+case $1 in --check|--install|--update) action=$1 ;; *) usage ;; esac
+
+[ "$(id -u)" -ne 0 ] || { echo 'Do not run as root' >&2; exit 1; }
+config_home=${XDG_CONFIG_HOME:-"$HOME/.config"}
+case $config_home in /*) ;; *) echo 'XDG_CONFIG_HOME must be absolute' >&2; exit 1 ;; esac
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+root=$(CDPATH= cd -- "$script_dir/.." && pwd -P)
+service_source=$root/user-init.d/joetoo-kwind
+daemon_source=$root/libexec/joetoo-kwind
+service_dest=$config_home/rc/init.d/joetoo-kwind
+daemon_dest=$HOME/.local/libexec/joetoo-kwind
+config_helper=$root/tools/joetoo-kwind-configure-openrc-user
+
+printf 'OpenRC user service: %s\n' "$service_dest"
+printf 'Daemon executable:  %s\n' "$daemon_dest"
+printf 'OpenRC user config:  %s\n' "$config_home/rc/rc.conf"
+
+for dest in "$service_dest" "$daemon_dest"; do
+    if [ -L "$dest" ] || { [ -e "$dest" ] && [ ! -f "$dest" ]; }; then
+        printf 'Refusing unexpected installation destination: %s\n' "$dest" >&2
+        exit 1
+    fi
+done
+
+if [ "$action" = --check ]; then
+    status=0
+    for mapping in "service" "daemon"; do
+        case $mapping in service) src=$service_source; dest=$service_dest ;; daemon) src=$daemon_source; dest=$daemon_dest ;; esac
+        if [ -f "$dest" ] && cmp -s -- "$src" "$dest"; then
+            printf 'Current: %s\n' "$dest"
+        else
+            printf 'Missing or outdated: %s\n' "$dest"
+            status=1
+        fi
+    done
+    "$config_helper" --check || status=1
+    exit "$status"
+fi
+
+if [ "$action" = --install ]; then
+    for dest in "$service_dest" "$daemon_dest"; do
+        if [ -e "$dest" ]; then
+            printf 'Already installed: %s (use --check or --update)\n' "$dest" >&2
+            exit 1
+        fi
+    done
+fi
+
+# An explicit update cannot overwrite a service that OpenRC reports running.
+# No process or application is stopped by this installer.
+if command -v rc-service >/dev/null 2>&1 && rc-service -U joetoo-kwind status >/dev/null 2>&1; then
+    printf 'Stop the user service manually before installing/updating.\n' >&2
+    exit 1
+fi
+
+"$config_helper" --apply || exit 1
+if [ "$action" = --update ]; then
+    # Explicit update preserves the previous on-disk POC. No silent reset of a
+    # known-working service/daemon installation.
+    backup_suffix=".before-step1.2a-update.$(date +%Y%m%d-%H%M%S).$$"
+    for dest in "$service_dest" "$daemon_dest"; do
+        if [ -f "$dest" ]; then
+            cp -p -- "$dest" "$dest$backup_suffix" || exit 1
+            printf 'Backup: %s\n' "$dest$backup_suffix"
+        fi
+    done
+fi
+# -D creates BOTH parent paths if missing, avoiding manual mkdir commands.
+install -D -m 0755 -- "$service_source" "$service_dest"
+install -D -m 0755 -- "$daemon_source" "$daemon_dest"
+printf 'Installed both Step 1.2a files. No service was started.\n'
+printf 'From a local Plasma Konsole, run:\n'
+printf '  export JOETOO_KWIND_EXEC="%s"\n' "$daemon_dest"
+printf '  rc-service -U joetoo-kwind start\n'
+printf '  rc-service -U joetoo-kwind status\n'
