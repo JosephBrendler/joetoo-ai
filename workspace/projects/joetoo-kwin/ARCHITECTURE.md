@@ -1,6 +1,6 @@
 # joetoo-kwin — architecture and version 1 development contract
 
-Status: **Step 1.1 candidate for maintainer review** (not an implemented release).
+Status: Step 1.2a OpenRC user-service lifecycle validated on X11 and Wayland. Step 1.2b (resident KWin JavaScript activation and reconnection) is the current development milestone. This document remains the project design record; the complete application and Gentoo package are not yet released.
 
 This is the project-specific design record for the authorized collaboration project
 `joetoo-ai/workspace/projects/joetoo-kwin/`. It distinguishes **accepted
