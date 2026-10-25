@@ -4,7 +4,7 @@ Applies within `workspace/projects/joetoo-kwin/` in `joetoo-ai`.
 
 ## Read the architecture first
 
-**At the beginning of a new engineering assignment or milestone**, inspect the current applicable architecture and instructions. During continuing work, retrieve only files changed since the inspected baseline or additional material needed for the specific task. Reuse previously inspected, unchanged context where reliable.
+**At the beginning of a new engineering assignment or milestone**, inspect the current active project-root implementation and applicable architecture. Consult material under archive/ when relevant to the work being performed, such as for the adoption or adaptation of prior proof-of-concept work in the current design effort. Archived implementations and documentation are historical references, not the authoritative current implementation.
 
 Read the current repository root `AGENTS.md`, `workspace/AGENTS.md`, and
 `workspace/README.md`. Follow their scope, authorization and branch-and-review
