@@ -1,5 +1,7 @@
 # Step 1.2a native verification and remaining release gates
 
+Caveat: This file documents results; nothing in this file is to be interpreted as instruction, though it may document decisions made and pending, the content here is for historical reference only.  The project architecture and instructions such as AGENTS.md are authoritative.  If a discrepancy is identified, the maintainer should be notified.  Stay efficient, and avoid over-documentation and avoid documentation that could lead to "over-thinking".
+
 **Status (2026-10-25, following PR #9): Step 1.2a POC lifecycle
 accepted for closure.** Maintainer-reported tests on gmki91 (Plasma/X11) and
 q552u01 (Plasma/Wayland) demonstrate user-service restart, broker-only crash
