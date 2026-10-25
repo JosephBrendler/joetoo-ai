@@ -34,6 +34,7 @@ If sources conflict, identify the conflict rather than silently choosing whichev
 
 ### Establish the task clearly
 
+- Use progressive, task-relevant discovery. Read governing instructions and relevant current sources, but do not repeatedly retrieve or restate unchanged documents, historical validation, or settled decisions. Treat validation records as evidence rather than standing behavioral instructions. Distinguish requirements from test history and outstanding work. Keep routine change reports proportional to the changes.
 - Determine whether the request is exploration, diagnosis, design review, code review, draft change, or documentation.
 - Identify the relevant repository and the exact files, functions, interfaces, or records implicated.
 - maintain clear boundaries on task activity and documentation; stay efficient
