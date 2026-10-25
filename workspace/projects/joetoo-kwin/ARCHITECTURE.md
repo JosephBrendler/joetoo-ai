@@ -297,6 +297,11 @@ maintainer alone merges and integrates protected repositories.
 | **1.8** | Durable `.conf` snapshot, `-S` and `-r` | Clean-reboot launch with new UUID/PIDs, including SSH placeholders |
 | **1.9** | `eselect`, packaging and full regression | Maintainer-driven joetoo/joetoo-upstream integration; version 1 lifecycle gate |
 
+The six historical POC directories are preserved unchanged under `archive/`;
+`step1-candidate/` stays in the root as the merged Step 1 reference, while
+`step1.2a-candidate/` is the active work. Archived POCs remain regression
+references and must not be confused with the current implementation.
+
 Keep the POC's known-good X11/Wayland behavior as regression tests at each
 relevant gate. OpenRC and correlation are early critical-path risks, not optional
 post-release polishing.
@@ -330,10 +335,10 @@ At drafting time, the accessible `joetoo-ai/main` baseline was
 
 - `workspace/projects/joetoo-kwin/step1-candidate/joetoo-kwin`,
   `joetoo-kwin-plan-functions`, `desktop_sessions.conf`, and `README.md`;
-- `workspace/projects/joetoo-kwin/joetoo-kwin-launch-poc/joetoo-kwin-broker.py`,
+- `workspace/projects/joetoo-kwin/archive/joetoo-kwin-launch-poc/joetoo-kwin-broker.py`,
   `joetoo-kwin-resident.js`, and `README.md`;
-- `workspace/projects/joetoo-kwin/joetoo-kwin-ssh-rcfile-poc/README.md`;
-- `workspace/projects/joetoo-kwin/joetoo-kwin-plan-poc/README.md`;
+- `workspace/projects/joetoo-kwin/archive/joetoo-kwin-ssh-rcfile-poc/README.md`;
+- `workspace/projects/joetoo-kwin/archive/joetoo-kwin-plan-poc/README.md`;
 - root `AGENTS.md`, `workspace/AGENTS.md`, `workspace/README.md`, and the
   relevant `script_header_joetoo`/CLI/SSH/pseudo-boolean collaboration skills.
 

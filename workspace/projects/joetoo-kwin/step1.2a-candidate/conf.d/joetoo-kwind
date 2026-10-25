@@ -1,0 +1,6 @@
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Packaged global joetoo-kwind config -> /etc/conf.d/joetoo-kwind.
+# Do not install this template from the ordinary-user POC installer.
+JOETOO_KWIND_EXEC="/usr/libexec/joetoo-kwind"
