@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Opt-in, literal OpenRC user rc_env_allow configuration for Step 1.2a.
+
+OpenRC reads rc.conf assignments as configuration data. It must not be fed a
+shell case statement in place of rc_env_allow (the previous POC's error).
+"""
+
+import argparse
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+import tempfile
+
+REQUIRED = ("DBUS_SESSION_BUS_ADDRESS", "JOETOO_KWIND_EXEC")
+BEGIN = "# BEGIN joetoo-kwind Step 1.2a environment"
+END = "# END joetoo-kwind Step 1.2a environment"
+LEGACY_BLOCK = """# BEGIN joetoo-kwind Step 1.2a environment
+# Extend, never replace, other services' rc_env_allow entries.
+case " ${rc_env_allow:-} " in
+    *" DBUS_SESSION_BUS_ADDRESS "*) ;;
+    *) rc_env_allow="${rc_env_allow:+${rc_env_allow} }DBUS_SESSION_BUS_ADDRESS" ;;
+esac
+case " ${rc_env_allow:-} " in
+    *" JOETOO_KWIND_EXEC "*) ;;
+    *) rc_env_allow="${rc_env_allow:+${rc_env_allow} }JOETOO_KWIND_EXEC" ;;
+esac
+# END joetoo-kwind Step 1.2a environment
+"""
+# Only accept literal values. Refuse to guess how arbitrary shell expressions
+# would be evaluated by the OpenRC rc.conf reader.
+SETTING = re.compile(r"^\s*rc_env_allow\s*=\s*([\"'])([^\"']*)\1\s*$")
+ASSIGNMENT = re.compile(r"^\s*rc_env_allow\s*=")
+TOKEN = re.compile(r"[A-Za-z_][A-Za-z_0-9]*\Z")
+
+
+class ConfigurationError(Exception):
+    pass
+
+
+def config_path():
+    home = os.environ.get("HOME")
+    if not home:
+        raise ConfigurationError("HOME is unset")
+    config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
+    if not os.path.isabs(config_home):
+        raise ConfigurationError("XDG_CONFIG_HOME must be absolute")
+    return Path(config_home) / "rc" / "rc.conf"
+
+
+def parse_and_update(text):
+    lines = text.splitlines(keepends=True)
+    starts = [i for i, line in enumerate(lines) if line.rstrip("\r\n") == BEGIN]
+    ends = [i for i, line in enumerate(lines) if line.rstrip("\r\n") == END]
+    if starts or ends:
+        if len(starts) != 1 or len(ends) != 1 or starts[0] >= ends[0]:
+            raise ConfigurationError("incomplete or duplicate legacy joetoo-kwind block")
+        block = "".join(lines[starts[0]:ends[0] + 1])
+        if block != LEGACY_BLOCK:
+            raise ConfigurationError("modified legacy block; edit manually")
+        del lines[starts[0]:ends[0] + 1]
+        # The broken helper used shell case statements; remove only its bounded
+        # block and retain all other rc.conf content.
+    indices = [i for i, line in enumerate(lines) if ASSIGNMENT.match(line)]
+    if len(indices) > 1:
+        raise ConfigurationError("multiple rc_env_allow assignments; edit manually")
+    names = []
+    if indices:
+        i = indices[0]
+        m = SETTING.fullmatch(lines[i].strip())
+        if not m:
+            raise ConfigurationError("nonliteral rc_env_allow assignment; edit manually")
+        names = m.group(2).split()
+        if not all(TOKEN.fullmatch(t) for t in names):
+            raise ConfigurationError("nonliteral rc_env_allow entry; edit manually")
+    for token in REQUIRED:
+        if token not in names:
+            names.append(token)
+    assignment = 'rc_env_allow="' + " ".join(names) + '"\n'
+    if indices:
+        lines[indices[0]] = assignment
+    else:
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+        lines.append(assignment)
+    return "".join(lines), names
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--check", action="store_true", help="read-only configuration check")
+    mode.add_argument("--apply", action="store_true", help="create/update the user rc.conf")
+    args = parser.parse_args()
+    try:
+        if os.geteuid() == 0:
+            raise ConfigurationError("run as the ordinary graphical user, not root")
+        path = config_path()
+        if path.is_symlink():
+            raise ConfigurationError(f"refusing symlink: {path}")
+        if path.exists():
+            info = path.stat()
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid():
+                raise ConfigurationError(f"refusing non-regular/non-owned configuration: {path}")
+            original = path.read_text(encoding="utf-8")
+            permissions = stat.S_IMODE(info.st_mode)
+        else:
+            original, permissions = "", 0o600
+        revised, names = parse_and_update(original)
+        if args.check:
+            if revised != original:
+                print(f"OpenRC allowlist needs updating: {path}")
+                print("Run: tools/joetoo-kwind-configure-openrc-user --apply")
+                return 1
+            print(f"OpenRC allowlist correct: {path}")
+            return 0
+        if revised == original:
+            print(f"OpenRC allowlist already correct: {path}")
+            return 0
+        # Create only after validating the content; never touch system OpenRC.
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(prefix=".rc.conf.joetoo-", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(revised)
+                f.flush()
+                os.fsync(f.fileno())
+            os.chmod(temp_name, permissions)
+            os.replace(temp_name, path)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
+        print(f"Configured {path}")
+        print('Literal OpenRC assignment: rc_env_allow="' + " ".join(names) + '"')
+        return 0
+    except (ConfigurationError, OSError, UnicodeError) as exc:
+        print(f"OpenRC configuration unchanged: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,6 @@
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# POC-only user override -> ${XDG_CONFIG_HOME:-$HOME/.config}/rc/conf.d/joetoo-kwind.
+# The user-owned daemon executable takes precedence over the packaged value.
+JOETOO_KWIND_EXEC="${HOME}/.local/libexec/joetoo-kwind"

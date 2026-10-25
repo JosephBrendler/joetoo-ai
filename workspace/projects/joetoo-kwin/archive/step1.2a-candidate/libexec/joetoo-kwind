@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Step 1.2a: foreground, non-root session-bus broker for OpenRC supervision.
+
+Preserves the Step 0 launch/move D-Bus contract. No application spawning,
+window ownership registry, KWin JS activation, or persistence is implemented.
+"""
+
+import json
+import os
+import signal
+import stat
+import sys
+import time
+import uuid
+
+import dbus
+import dbus.service
+from dbus.mainloop.glib import DBusGMainLoop
+from gi.repository import GLib
+
+BUS = "org.joetoo.KWinBridge"
+PATH = "/org/joetoo/KWinBridge"
+IFACE = BUS
+
+
+def matches_class(expected, resource_class, desktop_file):
+    """Accept either the advertised class or the final component of an app ID."""
+    target = str(expected).strip().casefold()
+    if not target:
+        return False
+    for actual in (resource_class, desktop_file):
+        actual = str(actual).strip().casefold()
+        if actual == target or actual.endswith("." + target):
+            return True
+    return False
+
+
+def validate_session_environment():
+    """Reject root/wrong runtime-dir; never silently autolaunch a new D-Bus bus."""
+    if os.geteuid() == 0:
+        raise RuntimeError("joetoo-kwind must not run as root")
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not runtime or not os.path.isabs(runtime):
+        raise RuntimeError("XDG_RUNTIME_DIR must be an absolute path")
+    try:
+        info = os.stat(runtime)
+    except OSError as exc:
+        raise RuntimeError("XDG_RUNTIME_DIR is unavailable") from exc
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
+        raise RuntimeError("XDG_RUNTIME_DIR must be a user-owned directory")
+    if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+        socket_path = os.path.join(runtime, "bus")
+        try:
+            is_socket = stat.S_ISSOCK(os.stat(socket_path).st_mode)
+        except OSError:
+            is_socket = False
+        if not is_socket:
+            raise RuntimeError("No user session bus address or runtime bus socket")
+        os.environ["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=" + socket_path
+
+
+class Broker(dbus.service.Object):
+    def __init__(self, bus_name):
+        super().__init__(bus_name, PATH)
+        self.request = None
+
+    def _submit(self, kind, desktop, x, y, width, height, app_class=""):
+        # Single-flight only, matching the already tested proof of concept.
+        if (self.request is not None
+                and self.request["state"] in ("PENDING", "RUNNING")
+                and time.monotonic() - self.request["created"] < 20):
+            raise dbus.DBusException("Previous request has not completed",
+                                     name=IFACE + ".Busy")
+
+        if not (1 <= desktop <= 256 and
+                -32768 <= x <= 32768 and -32768 <= y <= 32768 and
+                1 <= width <= 32768 and 1 <= height <= 32768):
+            raise dbus.DBusException("Desktop, position, or size out of range",
+                                     name=IFACE + ".BadArguments")
+
+        if kind == "launch" and not (0 < len(app_class) <= 128):
+            raise dbus.DBusException("Expected application class is required",
+                                     name=IFACE + ".BadArguments")
+
+        self.request = {
+            "id": uuid.uuid4().hex,
+            "kind": kind,
+            "desktop": int(desktop),
+            "x": int(x), "y": int(y),
+            "width": int(width), "height": int(height),
+            "app_class": str(app_class),
+            "state": "PENDING", "detail": "",
+            "created": time.monotonic(),
+        }
+        return self.request["id"]
+
+    def _take(self, kind):
+        r = self.request
+        if r is None or r["state"] != "PENDING" or r["kind"] != kind:
+            return ""
+        r["state"] = "RUNNING"
+        return json.dumps({k: r[k] for k in
+                           ("id", "desktop", "x", "y", "width", "height")})
+
+    @dbus.service.method(IFACE, in_signature="iiiii", out_signature="s")
+    def Submit(self, desktop, x, y, width, height):
+        return self._submit("move", desktop, x, y, width, height)
+
+    @dbus.service.method(IFACE, in_signature="", out_signature="s")
+    def Take(self):
+        return self._take("move")
+
+    @dbus.service.method(IFACE, in_signature="siiiii", out_signature="s")
+    def SubmitLaunch(self, app_class, desktop, x, y, width, height):
+        return self._submit("launch", desktop, x, y, width, height, app_class)
+
+    @dbus.service.method(IFACE, in_signature="ss", out_signature="s")
+    def TakeLaunch(self, resource_class, desktop_file):
+        r = self.request
+        if (r is None or r["state"] != "PENDING" or r["kind"] != "launch"
+                or not matches_class(r["app_class"], resource_class, desktop_file)):
+            return ""
+        return self._take("launch")
+
+    @dbus.service.method(IFACE, in_signature="sss", out_signature="")
+    def Complete(self, request_id, result, detail):
+        r = self.request
+        if r is None or r["id"] != request_id or r["state"] != "RUNNING":
+            raise dbus.DBusException("Unknown or inactive request",
+                                     name=IFACE + ".InvalidRequest")
+        if result not in ("OK", "ERROR"):
+            raise dbus.DBusException("Invalid completion result",
+                                     name=IFACE + ".BadArguments")
+        r["state"] = str(result)
+        r["detail"] = str(detail)[:1024]
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
+    def Status(self, request_id):
+        r = self.request
+        if r is None or r["id"] != request_id:
+            return "UNKNOWN"
+        return r["state"] + (" " + r["detail"] if r["detail"] else "")
+
+
+def main():
+    try:
+        validate_session_environment()
+        DBusGMainLoop(set_as_default=True)
+        bus = dbus.SessionBus()
+        name = dbus.service.BusName(BUS, bus=bus, do_not_queue=True)
+        broker = Broker(name)  # noqa: F841 - hold D-Bus object for lifetime
+        loop = GLib.MainLoop()
+
+        def graceful_shutdown():
+            loop.quit()
+            return GLib.SOURCE_REMOVE
+
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM,
+                             graceful_shutdown)
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT,
+                             graceful_shutdown)
+        print(f"Ready on session bus: {BUS} {PATH}", flush=True)
+        loop.run()
+        return 0
+    except (RuntimeError, dbus.DBusException) as exc:
+        print(f"joetoo-kwind: {exc}", file=sys.stderr, flush=True)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
