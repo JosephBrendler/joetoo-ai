@@ -1,6 +1,6 @@
 ---
 name: pseudo-boolean-framework
-description: Apply and review joetoo's pseudo-boolean convention in shell scripts that use script_header_joetoo. This may be used when drafting, modifying, reviewing, or debugging joetoo shell scripts involving flag assignments, truth tests, state transitions, or related output. Do not impose it on unrelated shell projects.
+description: Apply and review joetoo's pseudo-boolean convention in shell scripts that use script_header_joetoo or make a global assignment of TRUE=0; FALSE="". This may be used when drafting, modifying, reviewing, or debugging joetoo shell scripts involving flag assignments, truth tests, state transitions, or related output. Do not impose it on unrelated shell projects.
 ---
 
 # Joetoo pseudo-boolean framework
