@@ -1,0 +1,9 @@
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Packaged OpenRC user-service overrides -> /etc/user/conf.d/joetoo-kwind.
+# The global /etc/conf.d/joetoo-kwind file sources this after its defaults.
+# This root-managed file applies to all users, not just a specific account.
+# No override is needed for the standard packaged executable.
+# For a controlled development test, an administrator could set, e.g.:
+# JOETOO_KWIND_EXEC="/home/joe/.local/libexec/joetoo-kwind"
