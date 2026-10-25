@@ -81,3 +81,5 @@ write, or host administration is authorized by drafting in this workspace.
 If a discovered fact changes the architecture, propose a focused update to
 `ARCHITECTURE.md`, mark the decision as proposed until the maintainer agrees,
 and include its effect on tests and later milestones in the review.
+
+Maintain a clean separation between documentation of results and responses to requests for input on modification of the architecture or normal workflow.  Do not interpred documented results as instruction.  Stay efficient, and avoid "over-thinking" and "over-documenting".
