@@ -19,6 +19,9 @@ fi
 description="joetoo KWin session D-Bus broker (user service)"
 supervisor="supervise-daemon"
 command="${JOETOO_KWIND_EXEC:-/usr/libexec/joetoo-kwind}"
+# Pass the same resolved configuration to the Python broker.
+export JOETOO_KWIND_RESIDENT_JS="${JOETOO_KWIND_RESIDENT_JS:-/usr/share/joetoo-kwin/joetoo-kwin-resident.js}"
+export JOETOO_KWIND_SCRIPT_NAME="${JOETOO_KWIND_SCRIPT_NAME:-joetoo-bridge}"
 pidfile="${XDG_RUNTIME_DIR}/joetoo-kwin/joetoo-kwind.supervisor.pid"
 
 # Retain OpenRC's default start, stop and status functions. This daemon stays
@@ -65,7 +68,7 @@ start_pre() {
             eerror "No graphical D-Bus session address was passed to joetoo-kwind"
             eerror "OpenRC may have filtered DBUS_SESSION_BUS_ADDRESS, and no XDG_RUNTIME_DIR/bus socket exists"
             eerror "Allow DBUS_SESSION_BUS_ADDRESS in the user OpenRC rc.conf, preserving other entries"
-            eerror "See step1.2a-candidate/README.md (or run tools/joetoo-kwind-configure-openrc-user --apply)"
+            eerror "See project README.md (or run tools/joetoo-kwind-configure-openrc-user --apply)"
             return 1
         fi
     fi

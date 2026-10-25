@@ -24,6 +24,8 @@ if [ ! "${_JOETOO_KWIND_CONFIG_LOADING:-${FALSE}}" ]; then
 
     # The ebuild-installed executable, unless overridden below.
     JOETOO_KWIND_EXEC="/usr/libexec/joetoo-kwind"
+    JOETOO_KWIND_RESIDENT_JS="/usr/share/joetoo-kwin/joetoo-kwin-resident.js"
+    JOETOO_KWIND_SCRIPT_NAME="joetoo-bridge"
 
     # Root-managed policy for all users of this user service.
     if [ -r /etc/user/conf.d/joetoo-kwind ]; then

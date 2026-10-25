@@ -12,10 +12,12 @@ lifecycle was validated on gmki91/X11 and q552u01/Wayland.
 - `conf.d/joetoo-kwind` — global executable default
 - `user-conf.d/joetoo-kwind` — optional administrator override template
 - `poc-user-conf.d/joetoo-kwind` — per-user POC executable override
+- `joetoo-kwin-resident.js` — KWin window placement handlers
+- `joetoo-kwin` — Bash move and single-window launch client
 - `tools/` — POC installation and OpenRC user environment configuration
 - `tests/` — Step 1.2a regression tests
 
-The promoted broker does not yet activate resident KWin JavaScript.
+The Step 1.2b broker coordinates resident KWin JavaScript initialization.
 The Step 1 CLI and its coupled `joetoo-kwin-plan-functions` remain together
 under `archive/step1-candidate/` until launcher integration.
 `archive/step1.2a-candidate/NATIVE_VALIDATION.md` records the completed
@@ -27,7 +29,7 @@ These are development sources, not the final installed Gentoo package.
 ## Step 1.2b stage 1: manual resident integration
 
 The resident script `joetoo-kwin-resident.js` is the unchanged launch POC.
-Automatic loading and recovery are not implemented at this stage.
+Stage 2 adds startup and KWin D-Bus owner-change initialization.
 The active Bash client exercises the existing broker's move and single-window
 launch APIs. The historical Step 1 `-c` planner remains archived;
 `-o` is not yet integrated.
@@ -56,6 +58,44 @@ qdbus6 org.kde.KWin "/Scripting/Script${script_id}" org.kde.kwin.Script.run
 
 `test-launch` uses the existing `SubmitLaunch`, `TakeLaunch`, `Complete`
 and `Status` D-Bus methods. It is intentionally single-flight and is not
-the eventual multiwindow `-o` launcher. The POC installer does not install
-this CLI or JS script; run them from the checkout. Test on gmki91/X11 and
-q552u01/Wayland. Broker/OpenRC behavior remains unchanged.
+the eventual multiwindow `-o` launcher. The POC installer now installs the CLI and resident JS alongside the
+broker and OpenRC user service. Stage 1 manual loading remains available
+for diagnosis; the broker no longer requires it during ordinary startup.
+
+## Step 1.2b stage 2: installed resident and broker coordination
+
+The source files remain in this project tree. The eventual package paths
+are `/usr/libexec/joetoo-kwind`, `/usr/bin/joetoo-kwin` and
+`/usr/share/joetoo-kwin/joetoo-kwin-resident.js`. The user POC installer
+replicates their runtime layout beneath `~/.local/` and places the user
+service and override under the user's XDG configuration directory.
+
+Configuration precedence is unchanged: `/etc/conf.d/joetoo-kwind`, then
+`/etc/user/conf.d/joetoo-kwind`, then the optional account override in
+`~/.config/rc/conf.d/joetoo-kwind` (or `$XDG_CONFIG_HOME/rc/conf.d/`).
+The new settings are `JOETOO_KWIND_RESIDENT_JS` and
+`JOETOO_KWIND_SCRIPT_NAME`; OpenRC exports their resolved values to Python.
+
+From a local Plasma Konsole on each host, for an existing Stage 1 POC:
+
+```bash
+# Existing broker can be stopped without terminating the Konsole/SSH windows.
+rc-service -U joetoo-kwind stop
+# Remove only the previously loaded test resident before verifying new startup.
+qdbus6 org.kde.KWin /Scripting     org.kde.kwin.Scripting.unloadScript joetoo-bridge 2>/dev/null || :
+
+./tools/joetoo-kwind-install-poc --update
+./tools/joetoo-kwind-install-poc --check
+rc-service -U joetoo-kwind start
+
+# Validate placement through the installed CLI, without calling loadScript/run.
+~/.local/bin/joetoo-kwin -m 3 100 80 850 700
+~/.local/bin/joetoo-kwin test-launch konsole 3 100 80 850 700 -- konsole --separate
+```
+
+The broker checks `isScriptLoaded` before loading and runs newly loaded
+scripts. If KWin is not ready, it retries at five-second intervals; a
+change to KWin's D-Bus owner also triggers initialization. A broker restart
+reuses an already-loaded resident. KWin's `isScriptLoaded` indicates presence,
+not proven execution: manually loaded-but-not-run scripts may still require
+manual unloading. These checks do not test the final ebuild installation.
