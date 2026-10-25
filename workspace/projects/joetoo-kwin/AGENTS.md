@@ -4,12 +4,7 @@ Applies within `workspace/projects/joetoo-kwin/` in `joetoo-ai`.
 
 ## Read the architecture first
 
-**Before design, candidate edits, tests, review, or PR preparation**, read
-[`ARCHITECTURE.md`](ARCHITECTURE.md) and identify the current milestone
-and acceptance gate. Treat it as the **project's accepted design record**,
-not proof that planned features are implemented. Preserve the document's
-explicit distinctions among accepted requirements, tested POC behavior,
-proposed mechanisms, and unresolved verification tasks.
+**At the beginning of a new engineering assignment or milestone**, inspect the current applicable architecture and instructions. During continuing work, retrieve only files changed since the inspected baseline or additional material needed for the specific task. Reuse previously inspected, unchanged context where reliable.
 
 Read the current repository root `AGENTS.md`, `workspace/AGENTS.md`, and
 `workspace/README.md`. Follow their scope, authorization and branch-and-review
