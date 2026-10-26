@@ -11,9 +11,18 @@ PN=${0##*/}
 if [ -f /etc/joetoolkit/BUILD ]; then . /etc/joetoolkit/BUILD; else BUILD="0.0.1"; fi
 [ -z "$verbosity" ] && verbosity="${notice}"
 
+#-----[ variables ]-------------------------------------------------------------------------------------
+
+# kwin bus/svc, obj/path, inteface identifiers (together = address) for the bridge --
+# servicename (represents app connection to a bus) is analagous to network hostname. form: dot-separated
 bus=org.joetoo.KWinBridge
+# object path (identify and group objects many:1 in rel to services) is analagous to URL. form: slash-separated
 path=/org/joetoo/KWinBridge
+# interface (set of callable methods) is analagous to plugin identifier. form: dot-separated
 iface=org.joetoo.KWinBridge
+# note: methods for the joetoo.KWinBridge service are implemented in the joetoo-kwin-resident.js kwin javascript
+
+#-----[ functions ]-------------------------------------------------------------------------------------
 
 usage() {
     j_msg "-${notice}" -p "Usage: ${PN} -m DESKTOP X Y WIDTH HEIGHT"
@@ -38,7 +47,16 @@ validate_geometry() {
         fi
     done
     for _vg_positive in "$1" "$4" "$5"; do
-        if [[ ! $_vg_positive =~ ^0*[1-9][0-9]*$ ]]; then
+        # these arguments represent desktop number, window width, and height
+        # each must be a valid decimal integer greater than zero
+        #
+        # isint rejects non-integer strings, but accepts negative integers
+        # the second test ensures the number is strictly positive
+        #
+        # the || operator evaluates the second condition only if isint succeeds
+        # negating the numeric comparison also rejects comparison errors,
+        # including integers too large for the shell's numeric test
+        if ! isint "$_vg_positive" || ! [ "$_vg_positive" -gt 0 ] ; then
             j_msg "-${err}" -p "${PN}: desktop, width and height must be positive"
             return 2
         fi
@@ -48,15 +66,19 @@ validate_geometry() {
 
 wait_for_request() {
     local _wr_request=$1 _wr_label=$2 _wr_attempt _wr_status
-    local _wr_limit=50
+    # wait up to 5 sec, in 100ms increments
+    local _wr_limit="50" _wr_increment="0.1"
+    # extend wait to 15 sec if for launch
     [ "$_wr_label" = launch ] && _wr_limit=150
     for ((_wr_attempt=0; _wr_attempt<_wr_limit; _wr_attempt++)); do
+         # kwin bus/svc, obj/path, inteface identifiers.method (together = address)
+         # (call Status method with requested action as arg)
         _wr_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$_wr_request") || return 1
         case $_wr_status in
             OK*) j_msg "-${notice}" -p "$_wr_status"; return 0 ;;
             ERROR*|UNKNOWN*) j_msg "-${err}" -p "$_wr_status"; return 1 ;;
         esac
-        sleep 0.1
+        sleep "$_wr_increment"
     done
     j_msg "-${err}" -p "${PN}: ${_wr_label} timed out (request [${_wr_request}])"
     return 1
@@ -65,7 +87,12 @@ wait_for_request() {
 move_active_window() {
     local _ma_request
     validate_geometry "$@" || return $?
+     # kwin bus/svc, obj/path, inteface identifiers.method (together = address)
+     # (call Submit method, with all args args)
     _ma_request=$(qdbus6 "$bus" "$path" "$iface.Submit" "$@") || return 1
+    # call Component.invokeShortcut with arg joetoo_bridge_move
+    # (call the moveFromBroker function in joetoo-kwin-resident.js,
+    #  which is registerd as "joetoo_bridge_move")
     qdbus6 org.kde.kglobalaccel /component/kwin \
         org.kde.kglobalaccel.Component.invokeShortcut \
         joetoo_bridge_move >/dev/null || return 1
@@ -75,7 +102,7 @@ move_active_window() {
 launch_one_window() {
     local _lw_class=$1 _lw_request _lw_child
     shift
-    # Arguments: five geometry values, --, executable and its arguments.
+    # arguments: five geometry values, --, executable and its arguments.
     if (( $# < 7 )) || [[ ${6:-} != -- || -z ${7:-} ]]; then
         bad_args 'test-launch requires CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]'
         return 2
@@ -92,8 +119,7 @@ launch_one_window() {
         return 1
     fi
     # The request must be armed before the program creates its window.
-    _lw_request=$(qdbus6 "$bus" "$path" "$iface.SubmitLaunch" \
-        "$_lw_class" "${_lw_geometry[@]}") || return 1
+    _lw_request=$(qdbus6 "$bus" "$path" "$iface.SubmitLaunch" "$_lw_class" "${_lw_geometry[@]}") || return 1
     j_msg "-${notice}" -p "Armed class [${_lw_class}], request [${_lw_request}]"
     "$@" &
     _lw_child=$!
@@ -102,7 +128,12 @@ launch_one_window() {
     wait_for_request "$_lw_request" launch
 }
 
+#-----[ main script ]----------------------------------------------------------------------------------
+
+# run as regular user, not root
 checknotroot
+
+# parse cmdline - this block and usage above must grow as options are implemented
 case ${1:-} in
     -m|move)
         shift
@@ -113,6 +144,41 @@ case ${1:-} in
         if (( $# < 8 )); then bad_args 'test-launch requires a class, geometry and program'; exit 2; fi
         launch_one_window "$@" ;;
     -h|--help) usage ;;
-    -c|-o) j_msg "-${err}" -p "${PN}: ${1} not yet integrated; see archived Step 1 prototype"; exit 2 ;;
+    -o) action="open";   # open multiple windows
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
+    -L) action="launch";   # launch (open) one window [maybe with mode (e.g. ssh_wrapper) and target]
+                           # note: this may be a separate executable (see test-launch prototype)
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
+    -x) action="exit/close";   # close all managed windows
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
+    -d) action="destroy";   # close one window - eventually: -d MANAGED_ID
+                            # close only the specified positively identified,
+                            # registered managed window; never an unrelated window
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
+    -c) action="check";   # validate configuration
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
+    -s) action="status";   # status of broker
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
+    -S) action="save";   # save current managed window configuration
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
+    -l) action="list";   # list managed windows
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
+    -i) action="info";   # info on one window
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
+    -v) action="increase verbisity";
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
+    -q) action="decrease verbisity";
+        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+        exit 2 ;;
     *) bad_args 'unrecognized operation'; exit 2 ;;
 esac
