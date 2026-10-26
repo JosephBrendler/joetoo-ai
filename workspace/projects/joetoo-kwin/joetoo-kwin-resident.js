@@ -163,3 +163,155 @@ workspace.windowAdded.connect(function(win) {
 // specifies no default key combination. KWin calls moveFromBroker when this
 // action is invoked. There is no polling loop inside the resident script.
 registerShortcut("joetoo_bridge_move", "Joetoo brokered move", "", moveFromBroker);
+
+// ------------------- Step 1.3a: observation, NOT ownership ------------------
+// KWin knows which window exists, its application hints, desktop and geometry.
+// It does NOT know whether a Konsole runs ssh_wrapper, distccmon-tui, etc.
+// Those application-level launch recipes belong to a later milestone.
+//
+// Store plain snapshots keyed by KWin UUID. Unlike request IDs from the
+// Python broker, internalId belongs to the WINDOW and lasts only as long as
+// that KWin window does. No managed_id or permission to close is created.
+const observedWindows = new Map();
+const observationSignals = new Map();
+
+// A Qt QUuid is exposed to the scripting engine as a UUID-like value. Its
+// JavaScript string representation is normalized by the Python broker.
+// If a particular KWin backend does not convert it to a usable string,
+// ignore the observation rather than invent an identity from title or PID.
+function windowUUID(win) {
+    if (!win || win.internalId === undefined || win.internalId === null) return "";
+    const identifier = String(win.internalId);
+    if (!identifier || identifier === "[object Object]") return "";
+    return identifier;
+}
+
+// Copy currently available information out of the KWin object into plain
+// JavaScript values. Never send the window object itself over D-Bus.
+// Caption/class/PID are *hints* about the application, NOT proof of what
+// shell command, SSH host, VNC connection or browser page it represents.
+function captureWindow(win) {
+    const id = windowUUID(win);
+    if (!id || !win.normalWindow) return null;
+
+    const g = win.frameGeometry;
+    // `onAllDesktops` is explicit because an empty desktops array alone is
+    // not an ordinary desktop number. KWin desktop numbers start at 1.
+    const desktops = [];
+    const assigned = win.desktops || [];
+    for (let i = 0; i < assigned.length; i++) {
+        desktops.push(Number(assigned[i].x11DesktopNumber));
+    }
+    return {
+        uuid: id,
+        pid: Number(win.pid) || 0,
+        resource_class: String(win.resourceClass || ""),
+        resource_name: String(win.resourceName || ""),
+        desktop_file: String(win.desktopFileName || ""),
+        caption: String(win.caption || "").slice(0, 200),
+        on_all_desktops: Boolean(win.onAllDesktops),
+        desktops: desktops,
+        geometry: {x: Number(g.x), y: Number(g.y),
+                   width: Number(g.width), height: Number(g.height)}
+    };
+}
+
+// This method calls a diagnostic-only Python D-Bus method. It never calls
+// SubmitLaunch, registers a managed window, or invokes a close operation.
+function sendObservation(event, snapshot) {
+    if (!snapshot) return;
+    callDBus(BRIDGE, PATH, BRIDGE, "ObserveWindow",
+             JSON.stringify({event: event, window: snapshot}));
+}
+
+// Refresh an already known snapshot; suppress an unchanged 'changed' event.
+// A freshly observed window is always reported as added/existing.
+function observeWindow(event, win) {
+    const snapshot = captureWindow(win);
+    if (!snapshot) return;
+    const before = observedWindows.get(snapshot.uuid);
+    observedWindows.set(snapshot.uuid, snapshot);
+    if (event !== "changed" || !before ||
+            JSON.stringify(before) !== JSON.stringify(snapshot)) {
+        sendObservation(event, snapshot);
+    }
+    return snapshot.uuid;
+}
+
+// Remember the specific signal callbacks we registered for each window.
+// Removing them during windowRemoved avoids retaining references to closed
+// KWin window objects. Callback captures its own `win` reference, NOT whichever
+// window happens to be active later.
+function followWindow(win) {
+    const id = windowUUID(win);
+    if (!id || !win.normalWindow || observationSignals.has(id)) return;
+    const changed = function() { observeWindow("changed", win); };
+    // These signals notify us about user-driven movement, resizing, desktop
+    // changes, app identity hints and captions even without joetoo actions.
+    win.frameGeometryChanged.connect(changed);
+    win.desktopsChanged.connect(changed);
+    win.captionChanged.connect(changed);
+    win.desktopFileNameChanged.connect(changed);
+    win.windowClassChanged.connect(changed);
+    observationSignals.set(id, {win: win, changed: changed});
+}
+
+// A removed KWin object may already be invalid: send the *last captured*
+// metadata instead of reading its disappearing geometry or caption again.
+function forgetWindow(win) {
+    // KWin normally keeps internalId readable here, but find the stored
+    // identity by the same window-object reference if deletion hid its ID.
+    let id = windowUUID(win);
+    if (!id || !observedWindows.has(id)) {
+        for (const [candidate, hooks] of observationSignals) {
+            if (hooks.win === win) { id = candidate; break; }
+        }
+    }
+    const prior = id ? observedWindows.get(id) : null;
+    if (!prior) return;
+    sendObservation("removed", prior);
+    observedWindows.delete(id);
+    const hooks = observationSignals.get(id);
+    if (hooks) {
+        // The Qt object may already be in deletion; disconnect when possible
+        // but always release our JavaScript references in the local map.
+        try {
+            hooks.win.frameGeometryChanged.disconnect(hooks.changed);
+            hooks.win.desktopsChanged.disconnect(hooks.changed);
+            hooks.win.captionChanged.disconnect(hooks.changed);
+            hooks.win.desktopFileNameChanged.disconnect(hooks.changed);
+            hooks.win.windowClassChanged.disconnect(hooks.changed);
+        } catch (err) {
+            console.warn("joetoo: window signal cleanup: " + err);
+        }
+        observationSignals.delete(id);
+    }
+}
+
+// On script startup (or explicit refresh), enumerate windows that already
+// existed before `windowAdded` handlers were installed. A refresh also
+// repopulates the Python cache after an OpenRC broker restart that reuses
+// the running KWin resident script.
+function reportExistingWindows() {
+    const windows = workspace.stackingOrder;
+    for (const win of windows) {
+        observeWindow("existing", win);
+        followWindow(win);
+    }
+}
+
+// Install event handlers BEFORE enumerating, so windows created during script
+// initialization are not silently omitted. Added/removed are KWin events;
+// they are not requests to launch or terminate applications.
+workspace.windowAdded.connect(function(win) {
+    observeWindow("added", win);
+    followWindow(win);
+});
+workspace.windowRemoved.connect(forgetWindow);
+
+// The existing Bash CLI can invoke this named KWin action using kglobalaccel
+// to refresh diagnostics (e.g. after the broker restarts). No default hotkey.
+registerShortcut("joetoo_bridge_observe", "Joetoo refresh window observations",
+                 "", reportExistingWindows);
+reportExistingWindows();
+// ---------------- End Step 1.3a observational extension ---------------------

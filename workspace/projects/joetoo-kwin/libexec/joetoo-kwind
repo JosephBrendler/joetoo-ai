@@ -97,6 +97,11 @@ class Broker(dbus.service.Object):
         # None means that no move/launch request has been submitted yet.
         super().__init__(bus_name, PATH)
         self.request = None
+        # Transient diagnostic observations are NOT a managed-window registry.
+        # No observed window becomes eligible for -d or -x; these records are
+        # session-local and deliberately disappear when this broker restarts.
+        self.observed_windows = {}
+        self.observation_events = []
 
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
         # Shared implementation for Submit (move) and SubmitLaunch (launch).
@@ -205,6 +210,60 @@ class Broker(dbus.service.Object):
         if r is None or r["id"] != request_id:
             return "UNKNOWN"
         return r["state"] + (" " + r["detail"] if r["detail"] else "")
+
+
+    # Step 1.3a: KWin's resident reports facts, not ownership decisions.
+    # One JSON string avoids altering the six established move/launch methods.
+    # The new signature 's' means one string arrives on the session bus;
+    # out_signature='' means there is no reply value. The sender is not yet
+    # authenticated as KWin, so observations must NEVER authorize closes.
+    @dbus.service.method(IFACE, in_signature="s", out_signature="")
+    def ObserveWindow(self, payload):
+        # Keep diagnostic messages bounded, including client-supplied titles.
+        if len(payload) > 4096:
+            raise dbus.DBusException("Observation too large", name=IFACE + ".BadArguments")
+        try:
+            message = json.loads(payload)
+            event = message["event"]
+            details = message["window"]
+            identifier = str(uuid.UUID(details["uuid"]))
+            geometry = details["geometry"]
+            # UUID and shape validation prevents arbitrary dictionaries being
+            # mistaken for KWin observations. This is NOT source attestation.
+            if (event not in ("existing", "added", "changed", "removed")
+                    or not isinstance(details["pid"], int)
+                    or not isinstance(details["desktops"], list)
+                    or not isinstance(details["on_all_desktops"], bool)
+                    or not all(isinstance(details[field], str) for field in
+                               ("resource_class", "resource_name", "desktop_file", "caption"))
+                    or not all(isinstance(geometry[field], (int, float)) and
+                               not isinstance(geometry[field], bool) for field in
+                               ("x", "y", "width", "height"))):
+                raise ValueError("invalid observation fields")
+        except (TypeError, ValueError, KeyError, AttributeError) as exc:
+            raise dbus.DBusException("Malformed window observation",
+                                     name=IFACE + ".BadArguments") from exc
+
+        # Normalize Python's UUID representation (without braces, lowercase)
+        # so all observations for a KWin window use one dictionary key.
+        details["uuid"] = identifier
+        if event == "removed":
+            # Preserve the last known snapshot in history for inspection, but
+            # do not claim that a removed window is still present.
+            self.observed_windows.pop(identifier, None)
+        else:
+            self.observed_windows[identifier] = details
+
+        self.observation_events.append({"event": event, "window": details})
+        # Only retain the most recent events; moving windows can be chatty.
+        del self.observation_events[:-128]
+
+    # Read-only diagnostic query. Output is JSON, not a public management
+    # registry: class, caption and PID are observational hints only.
+    @dbus.service.method(IFACE, in_signature="", out_signature="s")
+    def ListObserved(self):
+        return json.dumps({"windows": list(self.observed_windows.values()),
+                           "events": self.observation_events}, sort_keys=True)
 
 
 # Unlike BUS/PATH/IFACE above, these identifiers address KWin's *own*
