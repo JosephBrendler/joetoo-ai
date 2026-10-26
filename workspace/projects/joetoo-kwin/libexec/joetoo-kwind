@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Non-root OpenRC-supervised KWin session-bus broker.
 
-Preserves the Step 0 move/launch contract, and initializes KWin resident JS.
-Application process supervision and window persistence are not implemented.
+Preserves the move/launch contract, and initializes KWin resident JS;
+application process supervision and window persistence are not yet implemented.
 """
 
 import json

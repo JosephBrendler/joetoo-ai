@@ -22,18 +22,18 @@ FALSE=""
 if [ ! "${_JOETOO_KWIND_CONFIG_LOADING:-${FALSE}}" ]; then
     _JOETOO_KWIND_CONFIG_LOADING=$TRUE
 
-    # The ebuild-installed executable, unless overridden below.
+    # ebuild-installed executables, unless overridden below.
     JOETOO_KWIND_EXEC="/usr/libexec/joetoo-kwind"
     JOETOO_KWIND_RESIDENT_JS="/usr/share/joetoo-kwin/joetoo-kwin-resident.js"
     JOETOO_KWIND_SCRIPT_NAME="joetoo-bridge"
 
-    # Root-managed policy for all users of this user service.
+    # root-managed policy for all users of this user service.
     if [ -r /etc/user/conf.d/joetoo-kwind ]; then
         . /etc/user/conf.d/joetoo-kwind
     fi
 
-    # Optional account-specific override. XDG_CONFIG_HOME, if set, must be
-    # absolute; otherwise HOME must be absolute. Never construct /.config.
+    # optional account-specific override. XDG_CONFIG_HOME, if set, must be
+    # absolute; otherwise HOME must exist and be absolute. Never construct /.config
     _joetoo_kwind_conf_home=""
     if [ -n "${XDG_CONFIG_HOME:-}" ]; then
         case $XDG_CONFIG_HOME in
