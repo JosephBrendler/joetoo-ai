@@ -101,7 +101,15 @@ class Broker(dbus.service.Object):
         # No observed window becomes eligible for -d or -x; these records are
         # session-local and deliberately disappear when this broker restarts.
         self.observed_windows = {}
+        # Lifecycle history is bounded independently of geometry traffic.
+        # These events describe observation only, never managed ownership.
         self.observation_events = []
+        # Each living UUID needs at most one coalesced change summary.
+        # This is NOT a second managed-window registry.
+        self.observation_changes = {}
+        # Sequence numbers identify retained events only during THIS broker
+        # lifetime. They do not survive restart or identify a KWin session.
+        self.observation_sequence = 0
 
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
         # Shared implementation for Submit (move) and SubmitLaunch (launch).
@@ -247,23 +255,58 @@ class Broker(dbus.service.Object):
         # Normalize Python's UUID representation (without braces, lowercase)
         # so all observations for a KWin window use one dictionary key.
         details["uuid"] = identifier
+        if event == "existing" and identifier in self.observed_windows:
+            # A manual refresh republishes every live window. Update current
+            # state, but do NOT fabricate another window-creation event.
+            self.observed_windows[identifier] = details
+            return
+
+        # Only allocate an ID for a retained lifecycle record or change
+        # summary. A sequence is unique within one broker process, but is
+        # deliberately not a durable or globally unique event identity.
+        self.observation_sequence += 1
+        record = {"event_id": self.observation_sequence,
+                  "event": event, "window_uuid": identifier,
+                  "window": details}
+
+        if event == "changed":
+            # Keep one most-recent update per live window. The counter shows
+            # how many incoming change reports that entry summarizes. It
+            # covers geometry, desktops, captions and other observed fields.
+            before = self.observation_changes.get(identifier)
+            record["change_count"] = (before["change_count"] + 1
+                                      if before else 1)
+            self.observation_changes[identifier] = record
+            self.observed_windows[identifier] = details
+            return
+
         if event == "removed":
-            # Preserve the last known snapshot in history for inspection, but
-            # do not claim that a removed window is still present.
+            # Drop the live state and coalesced changes. The removal event
+            # retains KWin's last known snapshot; never treat that as live.
             self.observed_windows.pop(identifier, None)
+            self.observation_changes.pop(identifier, None)
         else:
             self.observed_windows[identifier] = details
 
-        self.observation_events.append({"event": event, "window": details})
-        # Only retain the most recent events; moving windows can be chatty.
+        # 'existing', 'added' and 'removed' cannot be evicted by dragging.
+        # This is still a bounded diagnostic history, NOT an audit log.
+        self.observation_events.append(record)
         del self.observation_events[:-128]
 
     # Read-only diagnostic query. Output is JSON, not a public management
     # registry: class, caption and PID are observational hints only.
     @dbus.service.method(IFACE, in_signature="", out_signature="s")
     def ListObserved(self):
+        # Preserve the familiar 'events' shape for existing jq consumers.
+        # Its contents are a merge of independently bounded lifecycle
+        # history and latest-per-UUID change summaries, ordered by event_id.
+        changes = list(self.observation_changes.values())
+        events = sorted(self.observation_events + changes,
+                        key=lambda record: record["event_id"])
         return json.dumps({"windows": list(self.observed_windows.values()),
-                           "events": self.observation_events}, sort_keys=True)
+                           "events": events,
+                           "lifecycle_events": self.observation_events,
+                           "changes": changes}, sort_keys=True)
 
 
 # Unlike BUS/PATH/IFACE above, these identifiers address KWin's *own*

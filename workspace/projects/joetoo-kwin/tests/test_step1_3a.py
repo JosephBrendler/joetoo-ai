@@ -51,13 +51,14 @@ def load_broker_without_real_dbus():
     return module
 
 
-def observation(event='added', uuid=WINDOW_ID, x=100):
+def observation(event='added', uuid=WINDOW_ID, x=100,
+                caption='SSH session title (hint only)', desktops=None):
     """Simulate a JSON observation from the KWin resident, not a managed ID."""
     return json.dumps({'event': event, 'window': {
         'uuid': uuid, 'pid': 42, 'resource_class': 'konsole',
         'resource_name': 'konsole', 'desktop_file': 'org.kde.konsole',
-        'caption': 'SSH session title (hint only)',
-        'on_all_desktops': False, 'desktops': [3],
+        'caption': caption,
+        'on_all_desktops': False, 'desktops': [3] if desktops is None else desktops,
         'geometry': {'x': x, 'y': 80, 'width': 850, 'height': 700}
     }})
 
@@ -88,6 +89,8 @@ class ObservationTests(unittest.TestCase):
         self.assertEqual(data['events'][-1]['event'], 'removed')
         self.assertEqual(data['events'][-1]['window']['geometry']['x'], 123)
         self.assertEqual(data['events'][-1]['window']['uuid'], WINDOW_ID)
+        self.assertEqual(data['events'][-1]['window_uuid'], WINDOW_ID)
+        self.assertEqual(data['changes'], [])
 
     def test_invalid_uuid_and_field_shapes_rejected(self):
         for malformed in [observation(uuid='not-a-uuid'),
@@ -104,10 +107,74 @@ class ObservationTests(unittest.TestCase):
         data = json.loads(self.broker.ListObserved())
         self.assertEqual(data['windows'][0]['uuid'], WINDOW_ID)
 
-    def test_event_history_is_bounded(self):
-        for _ in range(135):
-            self.broker.ObserveWindow(observation('changed'))
-        self.assertEqual(len(json.loads(self.broker.ListObserved())['events']), 128)
+    def test_lifecycle_history_is_bounded_independently(self):
+        # Historical lifecycle records have their own 128-event ceiling.
+        for i in range(135):
+            identifier = f'{i + 1:08x}-0000-4000-8000-000000000001'
+            self.broker.ObserveWindow(observation('added', uuid=identifier))
+            self.broker.ObserveWindow(observation('removed', uuid=identifier))
+        data = json.loads(self.broker.ListObserved())
+        self.assertEqual(len(data['lifecycle_events']), 128)
+        self.assertEqual(len(data['events']), 128)
+        self.assertEqual(data['changes'], [])
+        self.assertEqual(data['windows'], [])
+        self.assertEqual(data['lifecycle_events'][-1]['event'], 'removed')
+        ids = [record['event_id'] for record in data['events']]
+        self.assertEqual(ids, sorted(set(ids)))
+
+    def test_hundreds_of_drag_updates_do_not_evict_lifecycle(self):
+        self.broker.ObserveWindow(observation('added', x=10))
+        for x in range(400):
+            self.broker.ObserveWindow(observation('changed', x=x))
+        data = json.loads(self.broker.ListObserved())
+        self.assertEqual([r['event'] for r in data['events']],
+                         ['added', 'changed'])
+        self.assertEqual(len(data['lifecycle_events']), 1)
+        self.assertEqual(data['changes'][0]['change_count'], 400)
+        self.assertEqual(data['changes'][0]['window_uuid'], WINDOW_ID)
+        self.assertEqual(data['windows'][0]['geometry']['x'], 399)
+        self.broker.ObserveWindow(observation('removed', x=399))
+        data = json.loads(self.broker.ListObserved())
+        self.assertEqual(data['windows'], [])
+        self.assertEqual(data['changes'], [])  # no stale per-window cache
+        self.assertEqual([r['event'] for r in data['events']],
+                         ['added', 'removed'])
+        self.assertEqual(data['events'][-1]['window']['geometry']['x'], 399)
+        self.assertLess(data['events'][0]['event_id'],
+                        data['events'][-1]['event_id'])
+
+    def test_interleaved_windows_coalesce_by_uuid(self):
+        other = 'd848c4c9-64ed-48bf-b083-40230314d5ac'
+        self.broker.ObserveWindow(observation('added', uuid=WINDOW_ID))
+        self.broker.ObserveWindow(observation('added', uuid=other))
+        for i in range(20):
+            self.broker.ObserveWindow(observation('changed', uuid=WINDOW_ID, x=i))
+            self.broker.ObserveWindow(observation('changed', uuid=other, x=100+i))
+        data = json.loads(self.broker.ListObserved())
+        changes = {r['window_uuid']: r for r in data['changes']}
+        self.assertEqual(set(changes), {WINDOW_ID, other})
+        self.assertEqual(changes[WINDOW_ID]['change_count'], 20)
+        self.assertEqual(changes[other]['change_count'], 20)
+        self.assertEqual(changes[WINDOW_ID]['window']['geometry']['x'], 19)
+        self.assertEqual(changes[other]['window']['geometry']['x'], 119)
+        self.assertEqual(len(data['lifecycle_events']), 2)
+        self.assertEqual(len({r['uuid'] for r in data['windows']}), 2)
+
+    def test_non_geometry_changes_and_refresh_deduplication(self):
+        self.broker.ObserveWindow(observation('existing'))
+        self.broker.ObserveWindow(observation('existing'))
+        self.broker.ObserveWindow(observation('changed',
+                                               caption='Renamed', desktops=[1, 2]))
+        self.broker.ObserveWindow(observation('existing',
+                                               caption='Renamed', desktops=[1, 2]))
+        data = json.loads(self.broker.ListObserved())
+        self.assertEqual([r['event'] for r in data['events']],
+                         ['existing', 'changed'])
+        self.assertEqual(data['windows'][0]['caption'], 'Renamed')
+        self.assertEqual(data['windows'][0]['desktops'], [1, 2])
+        self.assertEqual(data['changes'][0]['window']['caption'], 'Renamed')
+        self.assertIsNone(self.broker.request)
+        self.assertFalse(hasattr(self.broker, 'managed_windows'))
 
     def test_old_move_contract_still_works(self):
         request_id = self.broker.Submit(3, 100, 80, 850, 700)
