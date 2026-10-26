@@ -7,6 +7,9 @@ Preserves the move/launch contract, and initializes KWin resident JS;
 application process supervision and window persistence are not yet implemented.
 """
 
+# Standard Python libraries: JSON messages, process environment and IDs,
+# POSIX signals and file metadata, elapsed time, and unique request tokens.
+# No window-launching or SSH process control modules are needed here.
 import json
 import os
 import signal
@@ -15,11 +18,19 @@ import sys
 import time
 import uuid
 
+# dbus-python makes this process both a session-bus service (Broker) and
+# a client of KWin's own D-Bus scripting interface (ResidentCoordinator).
+# GLib supplies one event loop to dispatch messages, timers, and signals.
 import dbus
 import dbus.service
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 
+# Our D-Bus address has three parts:
+#   BUS  = unique service name that the Python process requests ownership of;
+#   PATH = object address *within* that service;
+#   IFACE = method namespace presented by the object.
+# An individual call also names a method, e.g. IFACE + ".Submit".
 BUS = "org.joetoo.KWinBridge"
 PATH = "/org/joetoo/KWinBridge"
 IFACE = BUS
@@ -27,6 +38,10 @@ IFACE = BUS
 
 def matches_class(expected, resource_class, desktop_file):
     """Accept either the advertised class or the final component of an app ID."""
+    # strip() removes surrounding whitespace; casefold() compares without
+    # case distinctions. A dotted desktop-file ID may have a namespace prefix
+    # such as "org.kde." before the expected application class.
+    # This is *provisional* class matching, not proof of window identity.
     target = str(expected).strip().casefold()
     if not target:
         return False
@@ -39,17 +54,28 @@ def matches_class(expected, resource_class, desktop_file):
 
 def validate_session_environment():
     """Reject root/wrong runtime-dir; never silently autolaunch a new D-Bus bus."""
+    # The caller must be the ordinary graphical user. geteuid() is the
+    # effective numeric user ID; zero would give the broker root privileges.
     if os.geteuid() == 0:
         raise RuntimeError("joetoo-kwind must not run as root")
+    # .get(key, "") returns an empty default for a missing variable.
+    # The graphical session's runtime directory must be an absolute path.
     runtime = os.environ.get("XDG_RUNTIME_DIR", "")
     if not runtime or not os.path.isabs(runtime):
         raise RuntimeError("XDG_RUNTIME_DIR must be an absolute path")
+    # os.stat() reads file metadata; unlike opening a file it does not
+    # execute anything. Re-raise an unavailable directory as a clear error.
     try:
         info = os.stat(runtime)
     except OSError as exc:
         raise RuntimeError("XDG_RUNTIME_DIR is unavailable") from exc
+    # Require an actual directory owned by this account. st_mode describes
+    # file type/permissions; st_uid gives its owner's numeric user ID.
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
         raise RuntimeError("XDG_RUNTIME_DIR must be a user-owned directory")
+    # Use the existing session-bus address when OpenRC passed it through.
+    # Otherwise look only for an already-existing Unix socket; never start
+    # a separate D-Bus daemon, which could address the wrong Plasma session.
     if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
         socket_path = os.path.join(runtime, "bus")
         try:
@@ -61,19 +87,32 @@ def validate_session_environment():
         os.environ["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=" + socket_path
 
 
+# dbus.service.Object is a base class that exposes Python methods over D-Bus.
+# Only one request record is held in memory at this early milestone. The
+# broker is NOT a parent/process supervisor for Konsole or SSH applications.
 class Broker(dbus.service.Object):
     def __init__(self, bus_name):
+        # super() initializes dbus-python's parent object with the acquired
+        # service name and this object's path. `self` is this Broker instance;
+        # None means that no move/launch request has been submitted yet.
         super().__init__(bus_name, PATH)
         self.request = None
 
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
+        # Shared implementation for Submit (move) and SubmitLaunch (launch).
+        # `_submit` is an internal Python method, not an exported D-Bus name.
         # Single-flight only, matching the already tested proof of concept.
         if (self.request is not None
                 and self.request["state"] in ("PENDING", "RUNNING")
+                # monotonic() is an elapsed-time clock, not wall-clock time.
+                # Only a recent pending/running request blocks another one.
                 and time.monotonic() - self.request["created"] < 20):
             raise dbus.DBusException("Previous request has not completed",
                                      name=IFACE + ".Busy")
 
+        # Enforce the broker's current bounds before accepting a request.
+        # The Bash CLI also validates input, but direct D-Bus clients can
+        # bypass it, so the broker must perform its own checks.
         if not (1 <= desktop <= 256 and
                 -32768 <= x <= 32768 and -32768 <= y <= 32768 and
                 1 <= width <= 32768 and 1 <= height <= 32768):
@@ -84,6 +123,9 @@ class Broker(dbus.service.Object):
             raise dbus.DBusException("Expected application class is required",
                                      name=IFACE + ".BadArguments")
 
+        # Save one in-memory request as a Python dictionary (key/value map).
+        # uuid4().hex is a random *transaction* ID, NOT a KWin window UUID.
+        # PENDING -> RUNNING -> OK/ERROR is the request state transition.
         self.request = {
             "id": uuid.uuid4().hex,
             "kind": kind,
@@ -97,27 +139,42 @@ class Broker(dbus.service.Object):
         return self.request["id"]
 
     def _take(self, kind):
+        # The KWin JS "Take" callback claims a pending request of this kind.
+        # `r` is another reference to the current request dictionary; changing
+        # r["state"] also changes self.request["state"].
         r = self.request
         if r is None or r["state"] != "PENDING" or r["kind"] != kind:
             return ""
         r["state"] = "RUNNING"
+        # Dictionary comprehension: copy only the selected fields into a
+        # smaller dictionary, then encode it as JSON text for the JS callback.
+        # Launch class and internal timestamps are not part of this payload.
         return json.dumps({k: r[k] for k in
                            ("id", "desktop", "x", "y", "width", "height")})
 
+    # A decorator (@...) exports the next Python method on this D-Bus
+    # interface. A D-Bus signature describes argument/result wire types:
+    # "i" = signed 32-bit integer, "s" = string, "" = no arguments/result.
+    # The methods below are the six public calls used by Bash and KWin JS.
     @dbus.service.method(IFACE, in_signature="iiiii", out_signature="s")
     def Submit(self, desktop, x, y, width, height):
+        # CLI arms a move and receives the request ID as a string.
         return self._submit("move", desktop, x, y, width, height)
 
     @dbus.service.method(IFACE, in_signature="", out_signature="s")
     def Take(self):
+        # Resident JS obtains the queued move request as JSON text.
         return self._take("move")
 
     @dbus.service.method(IFACE, in_signature="siiiii", out_signature="s")
     def SubmitLaunch(self, app_class, desktop, x, y, width, height):
+        # CLI arms a class-qualified launch *before* starting the application.
         return self._submit("launch", desktop, x, y, width, height, app_class)
 
     @dbus.service.method(IFACE, in_signature="ss", out_signature="s")
     def TakeLaunch(self, resource_class, desktop_file):
+        # KWin calls this after windowAdded. Only the first matching pending
+        # launch is eligible; no persistent window identity is recorded here.
         r = self.request
         if (r is None or r["state"] != "PENDING" or r["kind"] != "launch"
                 or not matches_class(r["app_class"], resource_class, desktop_file)):
@@ -126,6 +183,8 @@ class Broker(dbus.service.Object):
 
     @dbus.service.method(IFACE, in_signature="sss", out_signature="")
     def Complete(self, request_id, result, detail):
+        # JS reports the immediate placement result. Only a taken (RUNNING)
+        # request with exactly the matching ID may be completed.
         r = self.request
         if r is None or r["id"] != request_id or r["state"] != "RUNNING":
             raise dbus.DBusException("Unknown or inactive request",
@@ -134,16 +193,24 @@ class Broker(dbus.service.Object):
             raise dbus.DBusException("Invalid completion result",
                                      name=IFACE + ".BadArguments")
         r["state"] = str(result)
+        # Limit status text to 1024 characters so a D-Bus caller does not
+        # receive an unbounded diagnostic message.
         r["detail"] = str(detail)[:1024]
 
     @dbus.service.method(IFACE, in_signature="s", out_signature="s")
     def Status(self, request_id):
+        # Bash polls Status until it sees OK or ERROR (or times out). UNKNOWN
+        # means the ID is not the single request currently held by the broker.
         r = self.request
         if r is None or r["id"] != request_id:
             return "UNKNOWN"
         return r["state"] + (" " + r["detail"] if r["detail"] else "")
 
 
+# Unlike BUS/PATH/IFACE above, these identifiers address KWin's *own*
+# D-Bus scripting service, which we use to load our resident JavaScript.
+# The defaults are packaging locations; the user OpenRC configuration may
+# override them and passes the resolved values through environment variables.
 KWIN_BUS = "org.kde.KWin"
 KWIN_SCRIPTING = "org.kde.kwin.Scripting"
 KWIN_SCRIPT = "org.kde.kwin.Script"
@@ -153,38 +220,60 @@ SCRIPT_NAME_DEFAULT = "joetoo-bridge"
 
 class ResidentCoordinator:
     """Load the resident in KWin, never supervise KWin or user applications."""
+    # This object is a D-Bus *client*, not another public joetoo method set.
+    # A live Python reference keeps the coordinator/timer handlers available
+    # while the GLib event loop runs.
 
     def __init__(self, bus):
+        # The same existing graphical user's session bus is shared with the
+        # Broker; there must not be a separate daemon or KWin process here.
         self.bus = bus
         self.file = os.environ.get("JOETOO_KWIND_RESIDENT_JS", RESIDENT_DEFAULT)
         self.name = os.environ.get("JOETOO_KWIND_SCRIPT_NAME", SCRIPT_NAME_DEFAULT)
+        # GLib timers have numeric source IDs. None means no timer is queued.
+        # last_error suppresses printing the same retry failure repeatedly.
         self.timer = None
         self.last_error = None
         if not os.path.isabs(self.file) or not self.name:
             raise RuntimeError("Resident script path must be absolute and script name nonempty")
 
     def start(self):
+        # Subscribe to the session bus daemon's NameOwnerChanged notifications.
+        # arg0 restricts delivery to changes concerning org.kde.KWin. This is
+        # event-driven; no separate process continuously polls for restarts.
         self.bus.add_signal_receiver(
             self._owner_changed, signal_name="NameOwnerChanged",
             dbus_interface="org.freedesktop.DBus", bus_name="org.freedesktop.DBus",
             path="/org/freedesktop/DBus", arg0=KWIN_BUS)
+        # Schedule first initialization after returning to the event loop.
+        # The argument is milliseconds, not seconds.
         self._schedule(1)
 
     def _owner_changed(self, name, old_owner, new_owner):
+        # D-Bus supplies the old/new connection owners. They are not used
+        # here: owner disappearance or replacement simply schedules a retry.
         if name == KWIN_BUS:
             # KWin owns the script. A fresh KWin owner needs initialization.
             self._schedule(1)
 
     def _schedule(self, delay_ms):
+        # Cancel the previously scheduled GLib callback, if one exists, so
+        # multiple owner-change signals cannot accumulate duplicate retries.
         if self.timer is not None:
             GLib.source_remove(self.timer)
+        # timeout_add registers _attempt as an event-loop callback and
+        # returns the ID needed to cancel the pending call later.
         self.timer = GLib.timeout_add(delay_ms, self._attempt)
 
     def _attempt(self):
+        # This callback executes on the GLib main loop. The scheduled source
+        # has fired; clear its ID before either retrying or reporting success.
         self.timer = None
         try:
             result = self.ensure_loaded()
         except (OSError, RuntimeError, dbus.DBusException) as exc:
+            # KWin, its D-Bus interface, or our resident file may not yet be
+            # ready. Log a changed error once, then retry in five seconds.
             detail = str(exc)
             if detail != self.last_error:
                 print(f"joetoo-kwind: resident unavailable: {detail}",
@@ -194,26 +283,42 @@ class ResidentCoordinator:
         else:
             self.last_error = None
             print(f"joetoo-kwind: KWin resident {result}: {self.name}", flush=True)
+        # SOURCE_REMOVE tells GLib not to automatically repeat *this* timer;
+        # _schedule explicitly creates another only when necessary.
         return GLib.SOURCE_REMOVE
 
     def ensure_loaded(self):
         """Return 'reused' or 'started', without creating duplicate scripts."""
+        # Resolve KWin's scripting object, then bind to its named interface.
+        # introspect=False avoids an extra D-Bus introspection round trip;
+        # each method call has its own bounded timeout (in seconds).
         proxy = self.bus.get_object(KWIN_BUS, "/Scripting", introspect=False)
         scripting = dbus.Interface(proxy, KWIN_SCRIPTING)
+        # Presence is not identical to *running*: a script manually loaded
+        # without a subsequent `run()` may exist but not execute callbacks.
+        # Reuse prevents duplicate handler registrations during broker restart.
         if scripting.isScriptLoaded(self.name, timeout=5):
             return "reused"
+        # Only inspect the configured file if a new load is required.
+        # isfile() checks its type; access(..., R_OK) checks readability.
         if not os.path.isfile(self.file) or not os.access(self.file, os.R_OK):
             raise RuntimeError(f"resident script is not readable: {self.file}")
+        # loadScript registers a named KWin script and returns an object ID.
+        # Registering alone does *not* execute the script; `run()` comes next.
         script_id = int(scripting.loadScript(self.file, self.name, timeout=5))
         if script_id < 0:
             if scripting.isScriptLoaded(self.name, timeout=5):
                 return "reused"  # Someone else registered it first.
             raise RuntimeError("KWin refused resident load")
+        # An f-string inserts the numeric ID into the object path used by
+        # KWin's per-script run method (e.g. /Scripting/Script3).
         script_path = f"/Scripting/Script{script_id}"
         script_proxy = self.bus.get_object(KWIN_BUS, script_path, introspect=False)
         try:
             dbus.Interface(script_proxy, KWIN_SCRIPT).run(timeout=10)
         except dbus.DBusException:
+            # If starting a script we *just loaded* fails, remove that named
+            # registration so a later attempt can try cleanly.
             # Only undo a script this instance created; never unload another's.
             scripting.unloadScript(self.name, timeout=5)
             raise
@@ -222,24 +327,37 @@ class ResidentCoordinator:
 
 def main():
     try:
+        # Fail early unless this is a real non-root user graphical session.
         validate_session_environment()
+        # Connect dbus-python to GLib so its method calls and callbacks are
+        # dispatched by the same event loop as our signal handlers/timers.
         DBusGMainLoop(set_as_default=True)
         bus = dbus.SessionBus()
+        # Request exclusive ownership of our broker service name. If another
+        # broker already owns it, fail rather than waiting in the D-Bus queue.
         name = dbus.service.BusName(BUS, bus=bus, do_not_queue=True)
+        # Keep this object reachable throughout loop.run(): otherwise a
+        # garbage-collected object could no longer serve the six methods.
         broker = Broker(name)  # noqa: F841 - hold D-Bus object for lifetime
         resident = ResidentCoordinator(bus)
         loop = GLib.MainLoop()
         resident.start()
 
         def graceful_shutdown():
+            # Stop this broker's event loop only. Do not terminate KWin,
+            # the resident script, or Konsole/SSH processes owned by the user.
             loop.quit()
             return GLib.SOURCE_REMOVE
 
+        # Register the same callback for termination and interrupt signals.
+        # OpenRC stop sends a signal to the broker, not to managed windows.
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM,
                              graceful_shutdown)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT,
                              graceful_shutdown)
         print(f"Ready on session bus: {BUS} {PATH}", flush=True)
+        # This blocks, dispatching user D-Bus messages and timer callbacks,
+        # until graceful_shutdown() asks the loop to quit.
         loop.run()
         return 0
     except (RuntimeError, dbus.DBusException) as exc:
@@ -247,5 +365,8 @@ def main():
         return 1
 
 
+# Python sets __name__ to "__main__" when executing this file directly;
+# importing it (e.g. in tests) must not start a live D-Bus broker.
+# sys.exit propagates main()'s zero/nonzero result to OpenRC.
 if __name__ == "__main__":
     sys.exit(main())
