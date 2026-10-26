@@ -43,11 +43,9 @@ closing the Konsole window. These are maintainer-reported tests of the POCs,
 | KWin resident JavaScript | `joetoo-kwin-resident.js` | Observe KWin windows, UUIDs, geometry/desktops, KWin move/close actions, window removal | Own the durable launch configuration; infer SSH connectivity from a window's existence |
 | Configuration/profile | `/etc/joetoo-kwin/joetoo-kwin.conf` | Selected *desired* layout (symlink to profile under `configs/`) | Store ephemeral PIDs or KWin UUIDs |
 
-The service's precise installed paths, dependencies, cgroup behavior,
-user-session bus acquisition, and Plasma-ready/startup ordering are **to be
-verified in milestone 1.2**. The existing POC D-Bus names
-`org.joetoo.KWinBridge` and `/org/joetoo/KWinBridge` are an observed baseline;
-renaming the executable must not silently change the tested D-Bus contract.
+The OpenRC user-service POC has been validated on gmki91 (KWin/X11) and q552u01 (KWin/Wayland). Native testing established user-service start/stop/restart, broker-only crash recovery, session D-Bus communication, the effective user-owned POC installation paths, and preservation of independent Konsole/SSH processes across broker restarts. Process and cgroup continuity were also verified in the tested scenarios. Step 1.2b subsequently established KWin resident-script initialization and reuse across broker restarts.
+
+The eventual system-package installation paths, complete dependency and configuration integration, explicit Plasma-readiness guarantees, and automatic recovery of managed-window state remain subject to later validation. The established D-Bus service name `org.joetoo.KWinBridge`, object path `/org/joetoo/KWinBridge`, and existing method interfaces are compatibility contracts; renaming the executable must not silently change them.
 
 **Service lifecycle contract:** stop/restart of `joetoo-kwind` must leave all
 managed Konsole, SSH, and graphical client processes running. Restart
@@ -241,6 +239,7 @@ silently be writable by unrelated processes.
 | `-a` | Add one newly launched managed window; exact operands TBD |
 | `-d MANAGED_ID` | Gracefully close one managed window |
 | `-l` | List managed windows with readable IDs and states |
+| `-i MANAGED_ID` | Show info for one managed window |
 | `-s` | Broker/application status (not OpenRC process status) |
 | `-S` | Save reusable current layout; selection/path options TBD |
 | `-r` | Recreate last-known-good layout with new window/process IDs |
@@ -291,6 +290,8 @@ maintainer alone merges and integrates protected repositories.
 | **1.2a** | Early OpenRC **user** service `joetoo-kwind` prototype | Safe start/stop/restart, supervised restart, no Konsole/SSH loss |
 | **1.2b** | Session-bus and resident JS activation/reconnection | Correct KWin session, no double registration, idempotence across restart |
 | **1.3a** | KWin UUID, geometry and `windowRemoved` observation | gmki91 X11 and q552u01 Wayland identity tests |
+| **1.3a.1** | Separate lifecycle history and coalesce window changes by UUID | Bounded history unaffected by dragging; X11 and Wayland regression tests |
+| **1.3a.2** | Automatic broker-start/reconnect synchronization of current KWin window inventory | Full inventory restored without manual refresh; no duplicate subscriptions or implicit ownership |
 | **1.3b** | Launch-and-poll unique correlation; title-token feasibility | Same-class Konsole stress/ambiguity tests; no false adoption |
 | **1.4** | `joetoo-kwind` multiwindow in-memory registry and status/list/dump | Accurate 37-window mock; correct transaction/SSH separation |
 | **1.5** | Shared geometry + `mw l/r`; colorized `-c`; `-o` with tested SSH placeholders | Native layout/SSH/underlay tests; `-v/-q` |
