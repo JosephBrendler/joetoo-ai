@@ -55,6 +55,8 @@ reinitializes management and attempts bounded reconciliation; it does **not**
 close and reopen windows. No DDNS-style `trap 'kill 0' EXIT` in the broker.
 The `joetoo-kwin` CLI must not run as root or initiate root-level SSH.
 
+**Synchrnization of current window inventory:** When the broker starts or reconnects to an already-running KWin resident, it must automatically request a complete current-window inventory. This synchronization must be idempotent, tolerate concurrent window events, and must not confer managed ownership on observed windows. The existing manual joetoo_bridge_observe shortcut remains available for diagnostics. Managed-window checkpoint recovery is a separate responsibility addressed in Step 1.7.
+
 ## 3. Identity, ownership, and launch transactions
 
 Four separate concepts must be preserved:
