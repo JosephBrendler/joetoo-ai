@@ -20,7 +20,9 @@ bus=org.joetoo.KWinBridge
 path=/org/joetoo/KWinBridge
 # interface (set of callable methods) is analagous to plugin identifier. form: dot-separated
 iface=org.joetoo.KWinBridge
-# note: methods for the joetoo.KWinBridge service are implemented in the joetoo-kwin-resident.js kwin javascript
+# the org.joetoo.KWinBridge methods are implemented in the Python broker (libexec/joetoo-kwind)
+# the KWin resident JavaScript (joetoo-kwin-resident.js) callsthose methods to retrieve requests
+# and report placement results
 
 #-----[ functions ]-------------------------------------------------------------------------------------
 
