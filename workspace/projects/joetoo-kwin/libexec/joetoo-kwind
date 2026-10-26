@@ -97,6 +97,24 @@ class Broker(dbus.service.Object):
         # None means that no move/launch request has been submitted yet.
         super().__init__(bus_name, PATH)
         self.request = None
+        # Transient diagnostic observations are NOT a managed-window registry.
+        # No observed window becomes eligible for -d or -x; these records are
+        # session-local and deliberately disappear when this broker restarts.
+        self.observed_windows = {}
+        # Lifecycle history is bounded independently of geometry traffic.
+        # These events describe observation only, never managed ownership.
+        self.observation_events = []
+        # Each living UUID needs at most one coalesced change summary.
+        # This is NOT a second managed-window registry.
+        self.observation_changes = {}
+        # Sequence numbers identify retained events only during THIS broker
+        # lifetime. They do not survive restart or identify a KWin session.
+        self.observation_sequence = 0
+        # The current resident script is the source of our inventory. Revisions
+        # order its asynchronous messages; they never grant window ownership.
+        self.observation_source = None
+        self.observation_revision = -1
+        self.observation_synced = False
 
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
         # Shared implementation for Submit (move) and SubmitLaunch (launch).
@@ -207,6 +225,185 @@ class Broker(dbus.service.Object):
         return r["state"] + (" " + r["detail"] if r["detail"] else "")
 
 
+    # Step 1.3a: KWin's resident reports facts, not ownership decisions.
+    # One JSON string avoids altering the six established move/launch methods.
+    # The new signature 's' means one string arrives on the session bus;
+    # out_signature='' means there is no reply value. The sender is not yet
+    # authenticated as KWin, so observations must NEVER authorize closes.
+    @staticmethod
+    def _normalized_window(details):
+        """Validate/copy a KWin snapshot before changing any broker state."""
+        identifier = str(uuid.UUID(details["uuid"]))
+        geometry = details["geometry"]
+        if (not isinstance(details["pid"], int) or isinstance(details["pid"], bool)
+                or not isinstance(details["desktops"], list)
+                or not isinstance(details["on_all_desktops"], bool)
+                or not all(isinstance(details[field], str) for field in
+                           ("resource_class", "resource_name", "desktop_file", "caption"))
+                or not all(isinstance(geometry[field], (int, float)) and
+                           not isinstance(geometry[field], bool) for field in
+                           ("x", "y", "width", "height"))):
+            raise ValueError("invalid observation fields")
+        # Never mutate the dictionary supplied by a caller in-place.
+        return dict(details, uuid=identifier)
+
+    @staticmethod
+    def _source_revision(message):
+        """Read an optional resident source/revision pair as one unit."""
+        source = message.get("source")
+        revision = message.get("revision")
+        if source is None and revision is None:
+            return None  # Older diagnostic clients; never proof of ownership.
+        if (not isinstance(source, str) or not (1 <= len(source) <= 96)
+                or not isinstance(revision, int) or isinstance(revision, bool)
+                or revision < 1):
+            raise ValueError("invalid observation source/revision")
+        return source, revision
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="")
+    def ObserveWindow(self, payload):
+        # Preserve the existing single-string method and payload-size bound.
+        if len(payload) > 4096:
+            raise dbus.DBusException("Observation too large", name=IFACE + ".BadArguments")
+        try:
+            message = json.loads(payload)
+            event = message["event"]
+            if event not in ("existing", "added", "changed", "removed"):
+                raise ValueError("invalid observation event")
+            details = self._normalized_window(message["window"])
+            source_revision = self._source_revision(message)
+        except (TypeError, ValueError, KeyError, AttributeError) as exc:
+            raise dbus.DBusException("Malformed window observation",
+                                     name=IFACE + ".BadArguments") from exc
+
+        identifier = details["uuid"]
+        if source_revision is not None:
+            source, revision = source_revision
+            # A newly loaded resident must establish itself with a complete
+            # inventory before we accept its incremental events. Conversely,
+            # drop delayed messages belonging to the prior resident instance.
+            if self.observation_source is None:
+                self.observation_source = source
+            if source != self.observation_source or revision <= self.observation_revision:
+                return
+            self.observation_revision = revision
+        elif self.observation_synced:
+            # Legacy, unsequenced calls cannot supersede synchronized state.
+            return
+        if event == "existing" and identifier in self.observed_windows:
+            # A manual refresh republishes every live window. Update current
+            # state, but do NOT fabricate another window-creation event.
+            self.observed_windows[identifier] = details
+            return
+
+        # Only allocate an ID for a retained lifecycle record or change
+        # summary. A sequence is unique within one broker process, but is
+        # deliberately not a durable or globally unique event identity.
+        self.observation_sequence += 1
+        record = {"event_id": self.observation_sequence,
+                  "event": event, "window_uuid": identifier,
+                  "window": details}
+
+        if event == "changed":
+            # Keep one most-recent update per live window. The counter shows
+            # how many incoming change reports that entry summarizes. It
+            # covers geometry, desktops, captions and other observed fields.
+            before = self.observation_changes.get(identifier)
+            record["change_count"] = (before["change_count"] + 1
+                                      if before else 1)
+            self.observation_changes[identifier] = record
+            self.observed_windows[identifier] = details
+            return
+
+        if event == "removed":
+            # Drop the live state and coalesced changes. The removal event
+            # retains KWin's last known snapshot; never treat that as live.
+            self.observed_windows.pop(identifier, None)
+            self.observation_changes.pop(identifier, None)
+        else:
+            self.observed_windows[identifier] = details
+
+        # 'existing', 'added' and 'removed' cannot be evicted by dragging.
+        # This is still a bounded diagnostic history, NOT an audit log.
+        self.observation_events.append(record)
+        del self.observation_events[:-128]
+
+    # A whole inventory is one D-Bus method call and one broker replacement.
+    # Per-window "existing" updates are not an atomic inventory boundary:
+    # this snapshot also removes any stale UUIDs left by a missed removal.
+    @dbus.service.method(IFACE, in_signature="s", out_signature="")
+    def SyncInventory(self, payload):
+        if len(payload) > 262144:
+            raise dbus.DBusException("Inventory too large", name=IFACE + ".BadArguments")
+        try:
+            message = json.loads(payload)
+            source_revision = self._source_revision(message)
+            if source_revision is None:
+                raise ValueError("inventory requires source/revision")
+            source, revision = source_revision
+            windows = message["windows"]
+            if not isinstance(windows, list) or len(windows) > 512:
+                raise ValueError("invalid inventory length")
+            # Validate the entire inventory in a temporary map. Failure must
+            # leave the old state untouched, rather than half-synchronized.
+            replacement = {}
+            for item in windows:
+                details = self._normalized_window(item)
+                identifier = details["uuid"]
+                if identifier in replacement:
+                    raise ValueError("duplicate UUID in inventory")
+                replacement[identifier] = details
+        except (TypeError, ValueError, KeyError, AttributeError) as exc:
+            raise dbus.DBusException("Malformed window inventory",
+                                     name=IFACE + ".BadArguments") from exc
+
+        if source == self.observation_source and revision <= self.observation_revision:
+            return  # Old/out-of-order inventory; do not roll back live changes.
+        # A different resident instance replaces the source after a KWin
+        # reload. These UUIDs are still *observed*, never managed windows.
+        if source != self.observation_source:
+            self.observation_changes.clear()
+        self.observation_source = source
+        self.observation_revision = revision
+        self.observation_synced = True
+        # Do not invent "removed" events for entries absent in the snapshot:
+        # such entries could predate a broker restart or a missed notification.
+        previous = set(self.observed_windows)
+        self.observed_windows = replacement
+        for identifier in list(self.observation_changes):
+            if identifier not in replacement:
+                self.observation_changes.pop(identifier, None)
+            else:
+                self.observation_changes[identifier]["window"] = replacement[identifier]
+        # A full inventory is not a launch and never allocates managed IDs.
+        # Keep "existing" history limited to genuinely newly discovered UUIDs.
+        for identifier, details in replacement.items():
+            if identifier not in previous:
+                self.observation_sequence += 1
+                self.observation_events.append({
+                    "event_id": self.observation_sequence, "event": "existing",
+                    "window_uuid": identifier, "window": details})
+        del self.observation_events[:-128]
+
+    # Read-only diagnostic query. Output is JSON, not a public management
+    # registry: class, caption and PID are observational hints only.
+    @dbus.service.method(IFACE, in_signature="", out_signature="s")
+    def ListObserved(self):
+        # Preserve the familiar 'events' shape for existing jq consumers.
+        # Its contents are a merge of independently bounded lifecycle
+        # history and latest-per-UUID change summaries, ordered by event_id.
+        changes = list(self.observation_changes.values())
+        events = sorted(self.observation_events + changes,
+                        key=lambda record: record["event_id"])
+        return json.dumps({"windows": list(self.observed_windows.values()),
+                           "events": events,
+                           "lifecycle_events": self.observation_events,
+                           "changes": changes,
+                           "sync": {"complete": self.observation_synced,
+                                    "source": self.observation_source,
+                                    "revision": self.observation_revision}}, sort_keys=True)
+
+
 # Unlike BUS/PATH/IFACE above, these identifiers address KWin's *own*
 # D-Bus scripting service, which we use to load our resident JavaScript.
 # The defaults are packaging locations; the user OpenRC configuration may
@@ -224,10 +421,12 @@ class ResidentCoordinator:
     # A live Python reference keeps the coordinator/timer handlers available
     # while the GLib event loop runs.
 
-    def __init__(self, bus):
+    def __init__(self, bus, broker=None):
         # The same existing graphical user's session bus is shared with the
         # Broker; there must not be a separate daemon or KWin process here.
         self.bus = bus
+        # Keep a reference to diagnostic sync completion for bounded retries.
+        self.broker = broker
         self.file = os.environ.get("JOETOO_KWIND_RESIDENT_JS", RESIDENT_DEFAULT)
         self.name = os.environ.get("JOETOO_KWIND_SCRIPT_NAME", SCRIPT_NAME_DEFAULT)
         # GLib timers have numeric source IDs. None means no timer is queued.
@@ -253,6 +452,8 @@ class ResidentCoordinator:
         # D-Bus supplies the old/new connection owners. They are not used
         # here: owner disappearance or replacement simply schedules a retry.
         if name == KWIN_BUS:
+            if self.broker is not None:
+                self.broker.observation_synced = False
             # KWin owns the script. A fresh KWin owner needs initialization.
             self._schedule(1)
 
@@ -271,6 +472,11 @@ class ResidentCoordinator:
         self.timer = None
         try:
             result = self.ensure_loaded()
+            # A newly started script reports its inventory at initialization;
+            # one that survived the Python broker restart needs an explicit
+            # refresh, otherwise quiet preexisting windows remain invisible.
+            if result == "reused":
+                self.request_inventory_refresh()
         except (OSError, RuntimeError, dbus.DBusException) as exc:
             # KWin, its D-Bus interface, or our resident file may not yet be
             # ready. Log a changed error once, then retry in five seconds.
@@ -283,6 +489,10 @@ class ResidentCoordinator:
         else:
             self.last_error = None
             print(f"joetoo-kwind: KWin resident {result}: {self.name}", flush=True)
+            # Invocation returns before the resident's asynchronous inventory
+            # reaches us. If it is still absent, recheck/retry in one second.
+            if self.broker is not None and not self.broker.observation_synced:
+                self._schedule(1000)
         # SOURCE_REMOVE tells GLib not to automatically repeat *this* timer;
         # _schedule explicitly creates another only when necessary.
         return GLib.SOURCE_REMOVE
@@ -324,6 +534,15 @@ class ResidentCoordinator:
             raise
         return "started"
 
+    def request_inventory_refresh(self):
+        """Invoke the resident's existing no-hotkey refresh action via D-Bus."""
+        proxy = self.bus.get_object("org.kde.kglobalaccel", "/component/kwin",
+                                    introspect=False)
+        accel = dbus.Interface(proxy, "org.kde.kglobalaccel.Component")
+        # This is the same KGlobalAccel action already tested manually on
+        # X11 and Wayland; it does not restart KWin or application processes.
+        accel.invokeShortcut("joetoo_bridge_observe", timeout=5)
+
 
 def main():
     try:
@@ -339,7 +558,7 @@ def main():
         # Keep this object reachable throughout loop.run(): otherwise a
         # garbage-collected object could no longer serve the six methods.
         broker = Broker(name)  # noqa: F841 - hold D-Bus object for lifetime
-        resident = ResidentCoordinator(bus)
+        resident = ResidentCoordinator(bus, broker)
         loop = GLib.MainLoop()
         resident.start()
 
