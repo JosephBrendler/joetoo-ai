@@ -89,3 +89,20 @@ test('explicit refresh republishes existing windows without duplicate subscripti
     assert.equal(w.frameGeometryChanged.count(), 1);
     assert.ok(c.shortcuts.has('joetoo_bridge_move'));
 });
+
+test('refresh sends a complete inventory with a later resident revision', () => {
+    const a = windowObject(A, 'A');
+    const b = windowObject(B, 'B');
+    const c = residentWith([a, b]);
+    const inventories = () => c.calls.filter(args => args[3] === 'SyncInventory')
+        .map(args => JSON.parse(args[4]));
+    assert.equal(inventories().length, 1);
+    assert.deepEqual(inventories()[0].windows.map(w => w.uuid), [A, B]);
+    assert.equal(inventories()[0].source, c.events()[0].source);
+    assert.ok(inventories()[0].revision > c.events().at(-1).revision);
+    c.workspace.stackingOrder = [a];
+    c.shortcuts.get('joetoo_bridge_observe')();
+    assert.deepEqual(inventories().at(-1).windows.map(w => w.uuid), [A]);
+    assert.ok(inventories()[1].revision > inventories()[0].revision);
+    assert.equal(a.frameGeometryChanged.count(), 1);
+});

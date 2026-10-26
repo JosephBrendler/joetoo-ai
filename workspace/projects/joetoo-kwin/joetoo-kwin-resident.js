@@ -169,6 +169,12 @@ registerShortcut("joetoo_bridge_move", "Joetoo brokered move", "", moveFromBroke
 // It does NOT know whether a Konsole runs ssh_wrapper, distccmon-tui, etc.
 // Those application-level launch recipes belong to a later milestone.
 //
+// Source/revision labels separate this KWin script instance from an older
+// one and order its asynchronous D-Bus messages. They are NOT ownership proof
+// or secure authentication tokens; they are diagnostic ordering metadata.
+const observerSource = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
+let observerRevision = 0;
+
 // Store plain snapshots keyed by KWin UUID. Unlike request IDs from the
 // Python broker, internalId belongs to the WINDOW and lasts only as long as
 // that KWin window does. No managed_id or permission to close is created.
@@ -221,7 +227,8 @@ function captureWindow(win) {
 function sendObservation(event, snapshot) {
     if (!snapshot) return;
     callDBus(BRIDGE, PATH, BRIDGE, "ObserveWindow",
-             JSON.stringify({event: event, window: snapshot}));
+             JSON.stringify({source: observerSource, revision: ++observerRevision,
+                             event: event, window: snapshot}));
 }
 
 // Refresh an already known snapshot; suppress an unchanged 'changed' event.
@@ -294,10 +301,19 @@ function forgetWindow(win) {
 // the running KWin resident script.
 function reportExistingWindows() {
     const windows = workspace.stackingOrder;
+    const snapshots = [];
     for (const win of windows) {
-        observeWindow("existing", win);
+        const id = observeWindow("existing", win);
         followWindow(win);
+        if (id) snapshots.push(observedWindows.get(id));
     }
+    // The separate existing events retain backward-compatible diagnostics.
+    // This ONE complete inventory message marks a synchronization boundary:
+    // the broker validates it first, then atomically replaces its current map.
+    // KWin runs this enumeration synchronously on its scripting thread.
+    callDBus(BRIDGE, PATH, BRIDGE, "SyncInventory", JSON.stringify({
+        source: observerSource, revision: ++observerRevision, windows: snapshots
+    }));
 }
 
 // Install event handlers BEFORE enumerating, so windows created during script
