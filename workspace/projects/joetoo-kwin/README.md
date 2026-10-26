@@ -1,9 +1,9 @@
 # joetoo-kwin
 
 Active engineering sources for joetoo-kwin in the joetoo-ai collaboration
-repository. Current milestone: Step 1.2b (KWin resident-script
-initialization and reconnection). The Step 1.2a OpenRC user-service
-lifecycle was validated on gmki91/X11 and q552u01/Wayland.
+repository. Current milestone status: Steps 1.2a and 1.2b established the OpenRC user-service and KWin resident-script lifecycle. Step 1.3a established UUID-based window observation on X11 and Wayland. Step 1.3a.1 extends observation history with lifecycle retention and change coalescing; final native validation is in progress. Automatic inventory synchronization (Step 1.3a.2) is the next proposed substep.
+
+See ARCHITECTURE.md for the authoritative milestone definitions and remaining development gates.
 
 ## Active files
 
