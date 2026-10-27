@@ -20,7 +20,6 @@ Follow the branch-and-review process in [README.md](README.md#collaboration-cycl
   baseline; preserve their edits, metadata, formatting, and validation evidence.
   Preserve an existing draft before replacing it. Never silently overwrite
   local work or reapply an entire stale draft over a newer baseline.
-- When drafting code, make clear comments throughout; explain every step, call, and assignment clearly, as if written for someone who has little to no experience with the associated syntax. It will be easier to trim comments later than to interpret and try to apply comments to unreadable code later.
 - Use an existing isolated checkout. Use a task branch from the current accepted baseline; start a fresh follow-up branch when the earlier PR has merged. Do not create a worktree unless the user requests one.
 - Use maintainer's coding style including use of announce, act, report idiom; script_header_joetoo functions, and other [AI skills](../.agents/skills/).
 - Prepare a concrete diff before requesting publication
