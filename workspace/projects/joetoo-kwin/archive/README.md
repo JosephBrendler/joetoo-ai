@@ -11,6 +11,8 @@ Archived reference directories:
 - `step1-candidate/` — coupled CLI/planner prototype, sample config and tests
 - `step1.2a-candidate/` — pre-promotion OpenRC/broker candidate, tests,
   installer and native validation record
+- `STEP1_3B_PROBE.md` — completed Step 1.3b experimental protocol,
+  diagnostic observations and original test instructions
 
 The two candidate directories retain their original contents and modes;
 only their repository paths changed. Their READMEs describe their historical

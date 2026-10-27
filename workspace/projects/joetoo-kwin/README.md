@@ -1,106 +1,101 @@
 # joetoo-kwin
 
-Active engineering sources for joetoo-kwin in the joetoo-ai collaboration
-repository. Steps 1.2a–1.2b established broker and resident lifecycles;
-Steps 1.3a–1.3a.2 established observed UUIDs, retained lifecycle diagnostics,
-and automatic inventory recovery on X11 and Wayland. Step 1.3b is currently
-investigating *unique launch-to-window correlation*, before any managed
-ownership registry or authorized close operation.
+Development workspace for replacing the joetoo X11 `xdotool_*` window workflows
+with KWin-compatible tools on both X11 and Wayland. These are candidate sources
+in `joetoo-ai`, not installed Gentoo packages. See [ARCHITECTURE.md](ARCHITECTURE.md)
+for version 1 requirements, design contracts, and acceptance gates.
 
-See ARCHITECTURE.md for the authoritative milestone definitions and remaining development gates.
+## Current status
 
-## Active files
+**Completed through Step 1.3b** (October 2026). Current sources can observe
+KWin window identities and lifecycles, recover observational inventory after a
+broker restart, and diagnose direct-PID launch-to-window correlation. They do
+**not** provide a managed-window ownership registry, a multiwindow `-o`
+launcher, or safe managed-window close operations.
 
-- `libexec/joetoo-kwind` — foreground Python D-Bus broker
-- `user-init.d/joetoo-kwind` — OpenRC user service
-- `conf.d/joetoo-kwind` — global executable default
-- `user-conf.d/joetoo-kwind` — optional administrator override template
-- `poc-user-conf.d/joetoo-kwind` — per-user POC executable override
-- `joetoo-kwin-resident.js` — KWin window placement handlers
-- `joetoo-kwin` — Bash move and single-window launch client
-- `tools/joetoo-kwin-correlation-probe` — diagnostic launch-to-UUID experiment (Step 1.3b.1)
-- `tools/` — POC installation and OpenRC user environment configuration
-- `tests/` — headless regression suites
+**Next: Step 1.4 — in-memory multiwindow registry**, in four agreed increments:
 
-The Step 1.2b broker coordinates resident KWin JavaScript initialization.
-The Step 1 CLI and its coupled `joetoo-kwin-plan-functions` remain together
-under `archive/step1-candidate/` until launcher integration.
-`archive/step1.2a-candidate/NATIVE_VALIDATION.md` records the completed
-native lifecycle checks. `archive/README.md` indexes historical POCs.
+| Increment | Intended outcome |
+| --- | --- |
+| 1.4a | Review the proposed record/identity model and create headless contract tests; approve design changes before implementing them |
+| 1.4b | Implement multiwindow registration and observational state updates, without class-only adoption |
+| 1.4c | Expose read-only managed-window list, detail, and broker status |
+| 1.4d | Validate a 37-window mock, then native X11 and Wayland scenarios |
 
-`ARCHITECTURE.md` records the design and milestone definitions.
-These are development sources, not the final installed Gentoo package.
+The detailed registry schema, eligibility rules, and new D-Bus method names
+remain **design questions**, not approved implementation contracts.
 
-## Step 1.2b stage 1: manual resident integration
+## Development and validation platforms
 
-The resident script `joetoo-kwin-resident.js` is the unchanged launch POC.
-Stage 2 adds startup and KWin D-Bus owner-change initialization.
-The active Bash client exercises the existing broker's move and single-window
-launch APIs. The historical Step 1 `-c` planner remains archived;
-`-o` is not yet integrated.
+The native validation reported below was conducted on Gentoo Linux with KDE
+Plasma 6.7.5, OpenRC, and user-session KWin. These are test environments,
+not permanent hardware or minimum-version requirements.
 
-From a local graphical Plasma Konsole as the ordinary user, with the
-OpenRC user service running:
+| Host | Relevant platform | KWin backend |
+| --- | --- | --- |
+| `gmki91` | GMKtec NucBox M3 PLUS, Intel i9-12900HK, x86_64 | X11 |
+| `q552u01` | ASUS Q552UB, Intel i7-6500U, x86_64 | Wayland |
 
-```bash
-cd ~/joetoo-ai/workspace/projects/joetoo-kwin
-rc-service -U joetoo-kwind status
+Both used 1920×1080 displays for the recorded development tests. Kernel,
+theme, transient memory/battery use, and other fastfetch details are deliberately
+not maintained here.
 
-# Reset only the named POC resident if already loaded.
-qdbus6 org.kde.KWin /Scripting \
-    org.kde.kwin.Scripting.unloadScript joetoo-bridge 2>/dev/null || :
+## Completed proof-of-concept and milestone evidence
 
-script_id=$(qdbus6 org.kde.KWin /Scripting \
-    org.kde.kwin.Scripting.loadScript "$PWD/joetoo-kwin-resident.js" joetoo-bridge) || exit 1
-qdbus6 org.kde.KWin "/Scripting/Script${script_id}" org.kde.kwin.Script.run
+| Step | Maintainer-reported result | Reference |
+| --- | --- | --- |
+| 0 / early POCs | KWin positioning, independent Konsole, interactive SSH `bash --rcfile`, unreachable-target placeholder, original-shell return and process exit behavior demonstrated | [Historical POCs](archive/README.md) |
+| 1.2a–1.2b | OpenRC user-service and resident KWin JavaScript start/restart and reconnection validated; broker restart did not terminate existing Konsole/SSH clients | [Native validation](archive/step1.2a-candidate/NATIVE_VALIDATION.md) |
+| 1.3a–1.3a.2 | KWin UUID/geometry/lifecycle observation and automatic inventory synchronization on both backends, without implied ownership | [PR #16](https://github.com/JosephBrendler/joetoo-ai/pull/16) |
+| 1.3b.1–1.3b.2 | Diagnostic exact-PID correlation, class-candidate reporting, and conservative ambiguous/timeout behavior on both backends | [PR #17](https://github.com/JosephBrendler/joetoo-ai/pull/17) |
 
-# Focus a disposable Konsole before active-window placement.
-./joetoo-kwin -m 3 100 80 850 700
+**Step 1.3b detail:** Konsole (`--separate`) and Dolphin (`--new-window`)
+produced exact-PID `MATCHED` results on X11 and Wayland. Existing-profile
+Chrome launches delegated to a running browser and correctly returned `TIMEOUT`
+with a class-only candidate, not ownership. Unique Chrome `--user-data-dir`
+launches matched their KWin PID and UUID on both backends, at the cost of an
+isolated browser profile. Both machines passed 74 Python and 4 JavaScript
+regression tests. This establishes useful diagnostics, **not** production-grade
+ownership for arbitrary delegated applications. See the
+[archived Step 1.3b notes](archive/STEP1_3B_PROBE.md) for the original experiment
+instructions and protocol details.
 
-# Arm a single request, then create a separate Konsole.
-./joetoo-kwin test-launch konsole 3 100 80 850 700 -- konsole --separate
-```
+## Active development files and checks
 
-`test-launch` uses the existing `SubmitLaunch`, `TakeLaunch`, `Complete`
-and `Status` D-Bus methods. It is intentionally single-flight and is not
-the eventual multiwindow `-o` launcher. The POC installer now installs the CLI and resident JS alongside the
-broker and OpenRC user service. Stage 1 manual loading remains available
-for diagnosis; the broker no longer requires it during ordinary startup.
+- `libexec/joetoo-kwind` — Python session D-Bus broker and observational data.
+- `joetoo-kwin-resident.js` — KWin resident observation/placement interface.
+- `joetoo-kwin` — current Bash client for active-window movement and legacy
+  single-launch POC. The richer Step 1 planner is still archived.
+- `tools/joetoo-kwin-correlation-probe` — read-only launch correlation probe.
+- `user-init.d/`, `conf.d/`, `user-conf.d/`, `poc-user-conf.d/` — OpenRC
+  service and executable configuration.
+- `tools/joetoo-kwind-install-poc` — user-owned POC installation/checking tool.
+- `tests/` — headless regression tests; `archive/` — historical references.
 
-## Step 1.2b stage 2: installed resident and broker coordination
-
-The source files remain in this project tree. The eventual package paths
-are `/usr/libexec/joetoo-kwind`, `/usr/bin/joetoo-kwin` and
-`/usr/share/joetoo-kwin/joetoo-kwin-resident.js`. The user POC installer
-replicates their runtime layout beneath `~/.local/` and places the user
-service and override under the user's XDG configuration directory.
-
-Configuration precedence is unchanged: `/etc/conf.d/joetoo-kwind`, then
-`/etc/user/conf.d/joetoo-kwind`, then the optional account override in
-`~/.config/rc/conf.d/joetoo-kwind` (or `$XDG_CONFIG_HOME/rc/conf.d/`).
-The new settings are `JOETOO_KWIND_RESIDENT_JS` and
-`JOETOO_KWIND_SCRIPT_NAME`; OpenRC exports their resolved values to Python.
-
-From a local Plasma Konsole on each host, for an existing Stage 1 POC:
+Run these checks from `workspace/projects/joetoo-kwin/`:
 
 ```bash
-# Existing broker can be stopped without terminating the Konsole/SSH windows.
-rc-service -U joetoo-kwind stop
-# Remove only the previously loaded test resident before verifying new startup.
-qdbus6 org.kde.KWin /Scripting     org.kde.kwin.Scripting.unloadScript joetoo-bridge 2>/dev/null || :
-
-./tools/joetoo-kwind-install-poc --update
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+node --test tests/test_step1_3a.js
+bash -n joetoo-kwin tools/joetoo-kwin-correlation-probe
 ./tools/joetoo-kwind-install-poc --check
-rc-service -U joetoo-kwind start
-
-# Validate placement through the installed CLI, without calling loadScript/run.
-~/.local/bin/joetoo-kwin -m 3 100 80 850 700
-~/.local/bin/joetoo-kwin test-launch konsole 3 100 80 850 700 -- konsole --separate
 ```
 
-The broker checks `isScriptLoaded` before loading and runs newly loaded
-scripts. If KWin is not ready, it retries at five-second intervals; a
-change to KWin's D-Bus owner also triggers initialization. A broker restart
-reuses an already-loaded resident. KWin's `isScriptLoaded` indicates presence,
-not proven execution: manually loaded-but-not-run scripts may still require
-manual unloading. These checks do not test the final ebuild installation.
+The POC user service can be inspected in a local Plasma session with
+`rc-service -U joetoo-kwind status`. Installing/updating the POC or running
+window-launching experiments are separate, explicit maintainer operations.
+
+## Design and development references
+
+- [Architecture and version 1 requirements](ARCHITECTURE.md) — authoritative
+  product design; proposed schema and open questions remain subject to review.
+- [Project AGENTS.md](AGENTS.md) — AI collaboration and documentation policy.
+- [Archive index](archive/README.md) — original POCs, candidate designs and
+  historical testing instructions.
+- [PR #16](https://github.com/JosephBrendler/joetoo-ai/pull/16) and
+  [PR #17](https://github.com/JosephBrendler/joetoo-ai/pull/17) — signed
+  implementation history and milestone-level test evidence.
+
+Do not treat historical examples or evidence as newly accepted design
+requirements. Architectural choices are discussed with the maintainer before
+they are incorporated into `ARCHITECTURE.md`.
