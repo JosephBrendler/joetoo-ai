@@ -20,7 +20,7 @@ launcher, or safe managed-window close operations.
 | 1.4a | Review the proposed record/identity model and create headless contract tests; approve design changes before implementing them |
 | 1.4b | Implement multiwindow registration and observational state updates, without class-only adoption |
 | 1.4c | Expose read-only managed-window list, detail, and broker status |
-| 1.4d | Validate a 37-window mock, then native X11 and Wayland scenarios |
+| 1.4d | The Step 1.4a registry contract is defined in ARCHITECTURE.md §4–5. Internal representations and exact state transitions are finalized through 1.4a tests; implementation and native results will be recorded here at milestone completion. |
 
 The detailed registry schema, eligibility rules, and new D-Bus method names
 remain **design questions**, not approved implementation contracts.
