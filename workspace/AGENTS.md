@@ -35,3 +35,6 @@ Follow the branch-and-review process in [README.md](README.md#collaboration-cycl
   candidate files and test results back to joetoo-ai. The next iteration must
   inspect that feedback before applying further changes. Do not infer official
   repository state or synchronization from a stale workspace copy.
+
+## Working Principles
+- Engineering drives documentation; documentation must not drive unnecessary engineering work, nor should documentation drive unnecessary documentation work (or be changed to do so).
