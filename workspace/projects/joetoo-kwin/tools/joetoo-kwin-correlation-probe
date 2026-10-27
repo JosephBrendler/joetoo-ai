@@ -1,0 +1,75 @@
+#!/bin/bash
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Step 1.3b.1 diagnostic probe: launch a local command and report the KWin
+# UUID associated with its child PID, when that association is unambiguous.
+# This does not request placement, register ownership or kill the child.
+
+source /usr/sbin/script_header_joetoo
+PN=${0##*/}
+if [ -f /etc/joetoolkit/BUILD ]; then . /etc/joetoolkit/BUILD; else BUILD="0.0.1"; fi
+[ -z "$verbosity" ] && verbosity="${notice}"
+
+checknotroot
+
+# CLASS is the KWin resource class/desktop-file hint, not necessarily PROGRAM.
+# A title token can be supplied for diagnostic comparison, but the probe
+# deliberately does not accept it as identity proof without a PID match.
+if (( $# < 3 )); then
+    j_msg "-${err}" -p "Usage: ${PN} CLASS [--title-token TOKEN] -- PROGRAM [ARG ...]"
+    exit 2
+fi
+expected_class=$1
+shift
+title_token=
+if [[ ${1:-} == --title-token ]]; then
+    if (( $# < 3 )) || [[ -z ${2:-} ]]; then
+        j_msg "-${err}" -p "Missing title token"
+        exit 2
+    fi
+    title_token=$2
+    shift 2
+fi
+if [[ ${1:-} != -- || $# -lt 2 ]]; then
+    j_msg "-${err}" -p "Expected -- PROGRAM [ARG ...]"
+    exit 2
+fi
+shift
+if ! command -v "$1" >/dev/null 2>&1; then
+    j_msg "-${err}" -p "Program not found: $1"
+    exit 2
+fi
+bus=org.joetoo.KWinBridge
+path=/org/joetoo/KWinBridge
+iface=org.joetoo.KWinBridge
+
+# Arm BEFORE starting the application, so previously existing UUIDs cannot
+# be accidentally attributed to this particular launch.
+request_id=$(qdbus6 "$bus" "$path" "$iface.BeginCorrelation"              "$expected_class" "$title_token") || exit 1
+j_msg "-${notice}" -p "Armed diagnostic correlation request [$request_id]"
+
+# This shell launches the program independently of the broker; $! is the PID
+# of the Bash-launched process, which may differ from the eventual KWin PID.
+"$@" &
+child_pid=$!
+j_msg "-${notice}" -p "Launched [$1], shell PID [$child_pid]"
+qdbus6 "$bus" "$path" "$iface.SetCorrelationPid" "$request_id"     "$child_pid" >/dev/null || exit 1
+
+# Poll for <=15 seconds. Never kill an application on diagnostic failure.
+for ((attempt=0; attempt<150; attempt++)); do
+    result=$(qdbus6 "$bus" "$path" "$iface.PollCorrelation" "$request_id") || exit 1
+    state=$(jq -er '.state' <<<"$result") || exit 1
+    case $state in
+        MATCHED)
+            j_msg "-${notice}" -p "Unique PID correlation: $result"
+            exit 0 ;;
+        AMBIGUOUS|STALE_SOURCE|TIMEOUT|UNKNOWN)
+            j_msg "-${err}" -p "Correlation [$state]: $result"
+            exit 1 ;;
+        PENDING) sleep 0.1 ;;
+        *) j_msg "-${err}" -p "Unexpected broker result: $result"; exit 1 ;;
+    esac
+done
+j_msg "-${err}" -p "Correlation polling ended without a terminal result"
+exit 1
