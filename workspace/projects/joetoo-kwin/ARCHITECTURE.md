@@ -20,18 +20,34 @@ KDE Plasma/KWin on **X11 and Wayland**. Support the maintainer's normal interact
 shell workflow, a declarative multi-desktop session layout, independently
 manageable SSH and graphical windows, and conservative window closure.
 
-Version 1 **requires** an OpenRC-supervised management daemon and reliable
-initialization/reconnection of resident KWin JavaScript. Development may have
-0.x prototypes, but neither lifecycle requirement is deferred past version 1.
+Version 1 **requirements:**
+- an OpenRC-supervised management daemon (joetoo-kwind)
+- reliable initialization/reconnection of resident KWin JavaScript
+- Development may have 0.x prototypes, but neither lifecycle requirement is deferred past version 1.
 
-The successful Step 0 native POC tests on gmki91/X11 and q552u01/Wayland
-established active-window placement, new Konsole placement, an interactive
+# to do - move this to project README.md with POC/DT results
+- active-window placement, new Konsole placement, interactive
 `bash --rcfile` SSH session, an unavailable-target placeholder, return to the
 *original* Bash after logout, and termination of recorded SSH/Bash PIDs on
-closing the Konsole window. These are maintainer-reported tests of the POCs,
-**not** proof of the proposed registry, durable recovery, or 37-window behavior.
+closing the Konsole window were all demonstrated in version 0 proofs of concept (POC). These are maintainer-reported tests of the POCs,**not** proof of the proposed registry, durable recovery, or managed-window behavior.
+- OpenRC user-service POC has been validated on gmki91 (KWin/X11) and q552u01 (KWin/Wayland). Native testing established user-service start/stop/restart, broker-only crash recovery, session D-Bus communication, the effective user-owned POC installation paths, and preservation of independent Konsole/SSH processes across broker restarts. Process and cgroup continuity were also verified in the tested scenarios. Step 1.2b subsequently established KWin resident-script initialization and reuse across broker restarts.
+- The eventual system-package installation paths, complete dependency and configuration integration, explicit Plasma-readiness guarantees, and automatic recovery of managed-window state remain subject to later validation. The established D-Bus service name `org.joetoo.KWinBridge`, object path `/org/joetoo/KWinBridge`, and existing method interfaces are compatibility contracts; renaming the executable must not silently change them.
+- Launch-and-correlate status: the step 1.3 POC matches mainly on class and allows only one outstanding request.
+It must be extended before claiming robust same-class multiwindow ownership.
+Whether Konsole propagates a deliberately assigned title to the KWin caption
+soon enough for correlation, and whether PID correspondence is dependable on
+both backends, require native verification. The label is a **hint**, not proof.
 
-## 2. Components and ownership
+## 2. Development platforms
+Successful Step 0 native POC tests have been conducted on two joetoo/gentoo Linux machines running KDE/Plasma version 6.7 --
+| hostname | system specs |
+| --- | --- | 
+| gmki91 desktop | OS: Gentoo Linux x86_64<br>Host: NucBox M3 PLUS<br>Kernel: Linux 6.18.57-gentoo-dist-hardened-joetoo<br>Shell: bash 5.3.20<br>Display (SMB2330H): 1920x1080 in 7", 60 Hz [External]<br>**DE: KDE Plasma 6.7.5**<br>WM: KWin (X11)<br>WM Theme: Breeze<br>Theme: oxygen (Oxygen) [Qt], Breeze [GTK2/3]<br>Icons: oxygen [Qt], oxygen [GTK2/3/4]<br>Font: Noto Sans (11pt) [Qt], Noto Sans (11pt) [GTK2/3/4]<br>Cursor: Oxygen_Yellow (24px)<br>Terminal: konsole 26.4.3<br>Terminal Font: Hack (8pt)<br>CPU: 12th Gen Intel(R) Core(TM) i9-12900HK (12+8) @ 5.00 GHz<br>GPU: Intel Iris Xe Graphics @ 1.45 GHz [Integrated]<br>Memory: 5.68 GiB / 31.09 GiB (18%)<br>Locale: en_US.UTF-8 |
+| q552u01 laptop | OS: Gentoo Linux x86_64<br>Host: Q552UB (1.0)<br>Kernel: Linux 6.18.57-gentoo-dist-hardened-joetoo<br>Shell: bash 5.3.20<br>Display (LGD046F): 1920x1080 in 16", 60 Hz [Built-in]<br>**DE: KDE Plasma 6.7.5**<br>WM: KWin (Wayland)<br>WM Theme: Breeze<br>Theme: Breeze (Light) [Qt], Breeze [GTK2/3]<br>Icons: Breeze [Qt], breeze [GTK2/3/4]<br>Font: Noto Sans (10pt) [Qt], Noto Sans (10pt) [GTK2/3/4]<br>Cursor: Breeze (24px)<br>Terminal: sshd<br>CPU: Intel(R) Core(TM) i7-6500U (4) @ 3.10 GHz<br>GPU 1: NVIDIA GeForce 940M [Discrete]<br>GPU 2: Intel HD Graphics 520 @ 1.05 GHz [Integrated]<br>Memory: 3.16 GiB / 11.57 GiB (27%)<br>>Battery (ASUS Battery): 102% [AC Connected]<br>Locale: en_US.UTF-8 |
+
+Design proofs of concept (POC) and developmental test (DT) results are documented in the project [README.md](./README.md)
+
+## 3. Components and ownership
 
 | Component | Intended name | Owns | Must not do |
 | --- | --- | --- | --- |
@@ -41,10 +57,6 @@ closing the Konsole window. These are maintainer-reported tests of the POCs,
 | KWin resident JavaScript | `joetoo-kwin-resident.js` | Observe KWin windows, UUIDs, geometry/desktops, KWin move/close actions, window removal | Own the durable launch configuration; infer SSH connectivity from a window's existence |
 | Configuration/profile | `/etc/joetoo-kwin/joetoo-kwin.conf` | Selected *desired* layout (symlink to profile under `configs/`) | Store ephemeral PIDs or KWin UUIDs |
 
-The OpenRC user-service POC has been validated on gmki91 (KWin/X11) and q552u01 (KWin/Wayland). Native testing established user-service start/stop/restart, broker-only crash recovery, session D-Bus communication, the effective user-owned POC installation paths, and preservation of independent Konsole/SSH processes across broker restarts. Process and cgroup continuity were also verified in the tested scenarios. Step 1.2b subsequently established KWin resident-script initialization and reuse across broker restarts.
-
-The eventual system-package installation paths, complete dependency and configuration integration, explicit Plasma-readiness guarantees, and automatic recovery of managed-window state remain subject to later validation. The established D-Bus service name `org.joetoo.KWinBridge`, object path `/org/joetoo/KWinBridge`, and existing method interfaces are compatibility contracts; renaming the executable must not silently change them.
-
 **Service lifecycle contract:** stop/restart of `joetoo-kwind` must leave all
 managed Konsole, SSH, and graphical client processes running. Restart
 reinitializes management and attempts bounded reconciliation; it does **not**
@@ -53,9 +65,9 @@ The `joetoo-kwin` CLI must not run as root or initiate root-level SSH.
 
 **Synchrnization of current window inventory:** When the broker starts or reconnects to an already-running KWin resident, it must automatically request a complete current-window inventory. This synchronization must be idempotent, tolerate concurrent window events, and must not confer managed ownership on observed windows. The existing manual joetoo_bridge_observe shortcut remains available for diagnostics. Managed-window checkpoint recovery is a separate responsibility addressed in Step 1.7.
 
-## 3. Identity, ownership, and launch transactions
+## 4. Identity, ownership; launch configuration and transactions
 
-Four separate concepts must be preserved:
+**Runtime window management schema:** Four separate concepts must be preserved:
 
 | Field | Meaning | Lifetime |
 | --- | --- | --- |
@@ -64,6 +76,7 @@ Four separate concepts must be preserved:
 | `managed_id` | Human-usable identifier for *one registered window instance* (e.g., `w017`) | Registered instance |
 | `window_uuid` | Actual KWin `internalId` of a matched, existing window | KWin compositor/window lifetime |
 
+**Saved configuration:** (Runtime launches each configured entry)
 `desktop`, `slot`, `program`, `mode`, and `target` describe a **logical launch
 recipe**; they are not sufficient to uniquely identify a runtime window.
 A readable window title/label such as **`joetoo_konsole_3.1`** means intended
@@ -71,13 +84,19 @@ desktop 3, slot 1. Use this naming shape where it can be set and observed
 reliably. It is **not a globally unique key**: repeated runs can create
 `joetoo_konsole_3.1` again, and titles can change. Preserve `request_id`,
 `managed_id`, and matched UUID independently of visible caption.
+| Field | Type | Meaning |
+| desktop | integer | KDE/Plasma virtual desktop number |
+| slot | integer | Layout position within/on virtual desktop |
+| program | string | basename of executable program |
+| mode | string | one-word descrption of role of program |
+| target | string | hostname of remote target |
 
-`-m` on an arbitrary preexisting window changes its geometry; it does **not**
+`joetoo-kwin -m ...` on an arbitrary preexisting window changes its geometry; it does **not**
 automatically enroll that window for subsequent `-x` closure. Only a window
 created by an authorized joetoo launch and **positively correlated** with that
 launch becomes managed. Uncertain matches must not become close targets.
 
-### Launch-and-correlate contract (proposed; milestone 1.3 tests)
+### Launch-and-correlate contract
 
 1. Validate the requested layout/launch and allocate a `run_id` and
    `request_id`; record the expected program, desktop/slot, and optional
@@ -95,19 +114,15 @@ launch becomes managed. Uncertain matches must not become close targets.
 5. On timeout or ambiguous matches, report **unmatched/ambiguous** and never
    take ownership of an arbitrary class-matching window.
 
-The current POC matches mainly on class and allows only one outstanding request.
-It must be extended before claiming robust same-class multiwindow ownership.
-Whether Konsole propagates a deliberately assigned title to the KWin caption
-soon enough for correlation, and whether PID correspondence is dependable on
-both backends, require native verification. The label is a **hint**, not proof.
+## 5. Working registry and operation outcomes (proposed schema)
 
-## 4. Working registry and operation outcomes (proposed schema)
+Maintainer note: project data structures and schema are "under development" and expected to evolve as development and DT experience dictate.  Any changes must be approved by maintainer, and the change decision is to be documented in the project README.md"
 
 The authoritative **joetoo ownership registry** lives in broker memory,
 conceptually as Python mappings such as `runs`, `windows`, `requests`, and
 `session`, with `windows` indexed by KWin UUID (and a secondary lookup by
 `managed_id`). These are *proposed logical structures*, not current variables
-in the POC. KWin remains authoritative for **actual window existence and
+in the implementation or a POC. KWin remains authoritative for **actual window existence and
 current geometry**. The broker reconciles its claims against KWin observations.
 
 A managed entry is expected to carry:
@@ -134,7 +149,7 @@ SSH transport solely because a PID or open TCP port was observed. Individual
 SSH session events may be reported from the interactive `--rcfile` launcher,
 with exact semantics verified during implementation.
 
-## 5. Geometry and visibility
+## 6. Geometry and visibility
 
 `-c`, `-o`, and interactive `-m l|r` must use **one shared geometry policy**.
 Do not duplicate calculations inside aliases, the broker, and the planner.
@@ -165,7 +180,7 @@ Do not duplicate calculations inside aliases, the broker, and the planner.
   `screen_width`/`screen_height` from configuration. Do not present them as
   autodetected.
 
-## 6. Unavailable SSH is a valid placeholder
+## 7. Unavailable SSH is a valid placeholder
 
 For a configured SSH target that cannot be reached, keep the correctly placed
 Konsole window, identifying **which connection was attempted and why** (its
@@ -181,7 +196,7 @@ makes the launch incomplete. Persist the intent for placeholders, so a later
 `-r` makes a **new connection attempt** rather than trying to revive old SSH
 processes. Do not mistake network health for window-management success.
 
-## 7. Runtime checkpoint versus restorable layout
+## 8. Runtime checkpoint versus restorable layout
 
 ### 7.1 Working state and private runtime JSON (accepted direction)
 
@@ -225,7 +240,7 @@ specified in milestone 1.8. Do not conflate user-issued `-S` with every registry
 write. The exported file is a *trusted* Bash configuration and should not
 silently be writable by unrelated processes.
 
-## 8. CLI contract (target; not all flags implemented)
+## 9. CLI contract (target; not all flags implemented)
 
 | Invocation | Intended action |
 | --- | --- |
@@ -252,7 +267,7 @@ unimplemented `-o`; the table above is a **target**, not a description of
 current capabilities. Retire the POC `move` subcommand when `-m` coverage is
 validated; use `mw` as an alias/function and preserve `ow`/`cw` shorthands.
 
-## 9. Supervision, safety and identity invariants
+## 10. Supervision, safety and identity invariants
 
 1. A managed UUID must be matched to a *specific* launch transaction before
    that UUID is eligible for `-d` or `-x`.
@@ -273,7 +288,7 @@ validated; use `mw` as an alias/function and preserve `ow`/`cw` shorthands.
 8. Preserve verified POCs unchanged as regression references unless their
    modification is explicitly in scope and documented.
 
-## 10. Numbered implementation and review gates
+## 11. Numbered implementation and review gates
 
 New candidate work is under `workspace/projects/joetoo-kwin/`; each substep
 uses the accepted baseline and the **branch-and-review** workflow described in
@@ -303,7 +318,7 @@ The outputs of Step 1.2a broker/OpenRC implementation and tests now reside in th
 Intent for archive/ -- retain candidate and POC products with known-good X11/Wayland behavior as available future-capability integration resources or references and regression tests at each
 relevant gate. OpenRC and launch-correlation were advanced to early candidate work as critical-path risks, not optional post-release polishing. As of step 1.2a graduation from candidate to implemented status, the OpenRC components are installed at project root, but the demonstrated launch-correlation capability has not yet been so-promoted.
 
-## 11. Open questions and explicit verification tasks
+## 12. Open questions and explicit verification tasks
 
 - Can Konsole reliably expose a title like `joetoo_konsole_3.1` as the
   **KWin-visible window caption**, with enough timing/uniqueness to aid
@@ -325,7 +340,7 @@ Resolve each experimentally and record **actual** tests/decisions in this
 file or a linked, reviewed project record before promoting a proposal to an
 accepted design invariant.
 
-## 12. Inspected baseline and evidence
+## 13. Inspected baseline and evidence
 
 At drafting time, the accessible `joetoo-ai/main` baseline was
 `252a1569a3c3007212c1dd2ba2c3ef07f35d017b` (2026-10-24). Sources read:
