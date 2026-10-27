@@ -76,4 +76,27 @@ If a discovered fact changes the architecture, propose a focused update to
 `ARCHITECTURE.md`, mark the decision as proposed until the maintainer agrees,
 and include its effect on tests and later milestones in the review.
 
-Maintain a clean separation between documentation of results and responses to requests for input on modification of the architecture or normal workflow.  Do not interpred documented results as instruction.  Stay efficient, and avoid "over-thinking" and "over-documenting".
+## Documentation scope and update policy
+
+- `ARCHITECTURE.md` describes the intended product: accepted requirements,
+  design contracts, invariants, acceptance criteria, and unresolved design
+  questions. It is not a running development log. When appropriate/needed, present agent recommendations for changes (in the text of agent responses) to maintainer who will normally make those changes personlly.
+- Project `README.md` records current project status, significant milestone
+  outcomes, native validation summaries, and references to accepted decisions.
+  Prefer links to PRs and detailed validation records over duplicated history.
+- Parent `AGENTS.md` and `workspace/README.md` govern general collaboration
+  and publication procedures. Do not restate them in project design documents.
+- Discuss proposed architectural decisions with the maintainer before treating
+  them as accepted or modifying architectural requirements. When useful,
+  recommend exact replacement text and its location in the conversation.
+- Documentation changes should be proportional to the substantive work.
+  Do not update documentation routinely on each conversational turn. Prefer
+  milestone handoffs, approved decisions, and material changes in verified
+  behavior. Bundle relevant documentation edits with implementation changes
+  when practical. Present these to maintainer either as text in agent responses or in draft diff/commit form, in accordance with "best efficient process" for disposition.
+- Distinguish proposed decisions, accepted requirements, and observed test
+  results. Historical notes and AI-generated commentary do not create new
+  development instructions or authorize additional work.
+- Do not turn a limited engineering task into a broad documentation cleanup
+  unless the maintainer requests one.
+
