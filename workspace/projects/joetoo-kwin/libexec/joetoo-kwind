@@ -104,6 +104,9 @@ class Broker(dbus.service.Object):
         # Lifecycle history is bounded independently of geometry traffic.
         # These events describe observation only, never managed ownership.
         self.observation_events = []
+        # Highest lifecycle event ID evicted by the 128-record cap. A probe
+        # started before that event cannot claim to list every new candidate.
+        self.observation_evicted_through = 0
         # Each living UUID needs at most one coalesced change summary.
         # This is NOT a second managed-window registry.
         self.observation_changes = {}
@@ -115,6 +118,9 @@ class Broker(dbus.service.Object):
         self.observation_source = None
         self.observation_revision = -1
         self.observation_synced = False
+        # Step 1.3b diagnostic-only: one pending correlation probe. This is
+        # deliberately NOT the managed-window registry of Step 1.4.
+        self.correlation = None
 
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
         # Shared implementation for Submit (move) and SubmitLaunch (launch).
@@ -225,6 +231,184 @@ class Broker(dbus.service.Object):
         return r["state"] + (" " + r["detail"] if r["detail"] else "")
 
 
+    # Step 1.3b.1: a read-only launch correlation probe. It does not replace
+    # SubmitLaunch/TakeLaunch, move a window or grant managed ownership.
+    @dbus.service.method(IFACE, in_signature="ss", out_signature="s")
+    def BeginCorrelation(self, expected_class, title_token):
+        """Snapshot KWin identities before the caller launches its command."""
+        expected_class = str(expected_class).strip()
+        if (not expected_class or len(expected_class) > 128
+                or len(title_token) > 128):
+            raise dbus.DBusException("Invalid correlation hints",
+                                     name=IFACE + ".BadArguments")
+        if not self.observation_synced or not self.observation_source:
+            raise dbus.DBusException("Wait for KWin inventory synchronization",
+                                     name=IFACE + ".NotSynchronized")
+        now = time.monotonic()
+        if (self.correlation is not None
+                and self.correlation["state"] not in
+                ("MATCHED", "AMBIGUOUS", "TIMEOUT", "STALE_SOURCE")
+                and now < self.correlation["deadline"]):
+            raise dbus.DBusException("A correlation probe is already active",
+                                     name=IFACE + ".Busy")
+        request_id = uuid.uuid4().hex
+        self.correlation = {
+            "id": request_id, "expected_class": expected_class,
+            "title_token": str(title_token), "pid": None,
+            "source": self.observation_source,
+            "baseline": set(self.observed_windows),
+            "event_floor": self.observation_sequence,
+            "created": now, "deadline": now + 15.0,
+            "first_unique": None, "first_unique_at": None,
+            "state": "PENDING", "result": None,
+        }
+        return request_id
+
+    @dbus.service.method(IFACE, in_signature="si", out_signature="")
+    def SetCorrelationPid(self, request_id, pid):
+        """Record the shell-spawned child PID after the process starts."""
+        c = self.correlation
+        if (c is None or c["id"] != request_id or c["pid"] is not None
+                or c["state"] != "PENDING" or time.monotonic() >= c["deadline"]
+                or not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0):
+            raise dbus.DBusException("Unknown, expired or invalid correlation",
+                                     name=IFACE + ".InvalidRequest")
+        c["pid"] = int(pid)
+
+    def _correlation_class_candidates(self, c):
+        """Describe retained new-class observations; never decide ownership.
+
+        An addition event proves this UUID was *observed* after the request
+        began. It does NOT prove that the request caused the window. Read the
+        latest snapshot for a living UUID, or the last removal snapshot for a
+        closed one, while retaining the original addition's event identity.
+        """
+        results = []
+        seen = set()
+        for event in self.observation_events:
+            identifier = event["window_uuid"]
+            if (event["event"] != "added"
+                    or event["event_id"] <= c["event_floor"]
+                    or identifier in c["baseline"] or identifier in seen):
+                continue
+            seen.add(identifier)
+            current = self.observed_windows.get(identifier)
+            details = current or event["window"]
+            if current is None:
+                # The window may already have closed. A retained removal
+                # snapshot is newer than its addition snapshot, when present.
+                for later in reversed(self.observation_events):
+                    if (later["window_uuid"] == identifier
+                            and later["event"] == "removed"
+                            and later["event_id"] > event["event_id"]):
+                        details = later["window"]
+                        break
+            # On some applications KWin learns the class only after the
+            # windowAdded signal. Allow the latest or original class to
+            # qualify, but neither is sufficient evidence of ownership.
+            expected = c["expected_class"]
+            if not (matches_class(expected, details["resource_class"],
+                                  details["desktop_file"])
+                    or matches_class(expected, event["window"]["resource_class"],
+                                     event["window"]["desktop_file"])):
+                continue
+            if c["pid"] is not None and details["pid"] == c["pid"]:
+                evidence = "pid"
+            elif c["title_token"] and c["title_token"] in details["caption"]:
+                evidence = "class_title_hint"
+            else:
+                evidence = "class_only"
+            results.append({
+                "window_uuid": identifier,
+                "pid": details["pid"],
+                "event_id": event["event_id"],
+                "currently_observed": current is not None,
+                "evidence": evidence,
+            })
+        # observation_events is ordered by broker-local event_id; ordering
+        # results likewise makes diagnostics stable across successive polls.
+        return results
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
+    def PollCorrelation(self, request_id):
+        """Return current evidence; never infer ownership from a title/class."""
+        c = self.correlation
+        if c is None or c["id"] != request_id:
+            return json.dumps({"state": "UNKNOWN"})
+        if c["result"] is not None:
+            return json.dumps(c["result"], sort_keys=True)
+
+        def finish(state, **fields):
+            # Terminal results are stable for this broker-local request ID.
+            c["state"] = state
+            c["result"] = dict(state=state, request_id=c["id"], **fields)
+            return json.dumps(c["result"], sort_keys=True)
+
+        if not self.observation_synced or c["source"] != self.observation_source:
+            return finish("STALE_SOURCE", class_candidates=[],
+                          candidate_history_complete=False)
+        # The diagnostic list is independent of the exact-PID selection path.
+        # Do not promote class/timing matches into a MATCHED or AMBIGUOUS state.
+        diagnostic = {
+            "class_candidates": self._correlation_class_candidates(c),
+            "candidate_history_complete": (
+                self.observation_evicted_through <= c["event_floor"]),
+        }
+        # A "changed" event does not establish window creation. Only a UUID
+        # from an "added" lifecycle record after BeginCorrelation is eligible.
+        # The history is bounded: if the record was evicted, fail closed.
+        fresh_ids = {
+            e["window_uuid"] for e in self.observation_events
+            if e["event"] == "added" and e["event_id"] > c["event_floor"]
+        }
+        candidates = {
+            identifier: details
+            for identifier, details in self.observed_windows.items()
+            if (identifier not in c["baseline"] and identifier in fresh_ids
+                and matches_class(c["expected_class"],
+                                  details["resource_class"], details["desktop_file"]))
+        }
+        # PID is direct evidence worth testing, but it is not a universal
+        # identity contract: a shell child may exec, fork or delegate a window.
+        by_pid = sorted(identifier for identifier, w in candidates.items()
+                        if c["pid"] is not None and w["pid"] == c["pid"])
+        # A unique visible title is a useful diagnostic HINT, not proof.
+        by_title = sorted(identifier for identifier, w in candidates.items()
+                          if c["title_token"] and c["title_token"] in w["caption"])
+        if len(by_pid) > 1:
+            return finish("AMBIGUOUS", candidates=by_pid, evidence="pid",
+                          **diagnostic)
+        now = time.monotonic()
+        if len(by_pid) == 1 and diagnostic["candidate_history_complete"]:
+            # Permit another same-PID KWin window to arrive before returning
+            # a unique diagnostic match (the probe never enrolls ownership).
+            # If lifecycle events were evicted during the probe, a different
+            # matching window may be missing: do not assert uniqueness.
+            if c["first_unique"] != by_pid[0]:
+                c["first_unique"] = by_pid[0]
+                c["first_unique_at"] = now
+            elif now - c["first_unique_at"] >= 0.5:
+                return finish("MATCHED", window_uuid=by_pid[0],
+                              pid=c["pid"], evidence="pid", **diagnostic)
+        else:
+            c["first_unique"] = None
+            c["first_unique_at"] = None
+        if now >= c["deadline"]:
+            return finish("TIMEOUT", title_hints=by_title,
+                          pid_candidates=by_pid, **diagnostic)
+        return json.dumps({"state": "PENDING", "request_id": c["id"],
+                           "pid_candidates": by_pid,
+                           "title_hints": by_title,
+                           **diagnostic}, sort_keys=True)
+
+
+    def _bound_observation_events(self):
+        """Limit lifecycle history and remember whether a probe lost events."""
+        if len(self.observation_events) > 128:
+            dropped = self.observation_events[:-128]
+            self.observation_evicted_through = dropped[-1]["event_id"]
+            del self.observation_events[:-128]
+
     # Step 1.3a: KWin's resident reports facts, not ownership decisions.
     # One JSON string avoids altering the six established move/launch methods.
     # The new signature 's' means one string arrives on the session bus;
@@ -326,7 +510,7 @@ class Broker(dbus.service.Object):
         # 'existing', 'added' and 'removed' cannot be evicted by dragging.
         # This is still a bounded diagnostic history, NOT an audit log.
         self.observation_events.append(record)
-        del self.observation_events[:-128]
+        self._bound_observation_events()
 
     # A whole inventory is one D-Bus method call and one broker replacement.
     # Per-window "existing" updates are not an atomic inventory boundary:
@@ -383,7 +567,7 @@ class Broker(dbus.service.Object):
                 self.observation_events.append({
                     "event_id": self.observation_sequence, "event": "existing",
                     "window_uuid": identifier, "window": details})
-        del self.observation_events[:-128]
+        self._bound_observation_events()
 
     # Read-only diagnostic query. Output is JSON, not a public management
     # registry: class, caption and PID are observational hints only.

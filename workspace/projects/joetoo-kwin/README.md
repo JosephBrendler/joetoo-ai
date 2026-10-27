@@ -1,7 +1,11 @@
 # joetoo-kwin
 
 Active engineering sources for joetoo-kwin in the joetoo-ai collaboration
-repository. Current milestone status: Steps 1.2a and 1.2b established the OpenRC user-service and KWin resident-script lifecycle. Step 1.3a established UUID-based window observation on X11 and Wayland. Step 1.3a.1 extends observation history with lifecycle retention and change coalescing; final native validation is in progress. Automatic inventory synchronization (Step 1.3a.2) is the next proposed substep.
+repository. Steps 1.2a–1.2b established broker and resident lifecycles;
+Steps 1.3a–1.3a.2 established observed UUIDs, retained lifecycle diagnostics,
+and automatic inventory recovery on X11 and Wayland. Step 1.3b is currently
+investigating *unique launch-to-window correlation*, before any managed
+ownership registry or authorized close operation.
 
 See ARCHITECTURE.md for the authoritative milestone definitions and remaining development gates.
 
@@ -14,8 +18,9 @@ See ARCHITECTURE.md for the authoritative milestone definitions and remaining de
 - `poc-user-conf.d/joetoo-kwind` — per-user POC executable override
 - `joetoo-kwin-resident.js` — KWin window placement handlers
 - `joetoo-kwin` — Bash move and single-window launch client
+- `tools/joetoo-kwin-correlation-probe` — diagnostic launch-to-UUID experiment (Step 1.3b.1)
 - `tools/` — POC installation and OpenRC user environment configuration
-- `tests/` — Step 1.2a regression tests
+- `tests/` — headless regression suites
 
 The Step 1.2b broker coordinates resident KWin JavaScript initialization.
 The Step 1 CLI and its coupled `joetoo-kwin-plan-functions` remain together
