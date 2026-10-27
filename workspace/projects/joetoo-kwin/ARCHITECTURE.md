@@ -56,14 +56,26 @@ The `joetoo-kwin` CLI must not run as root or initiate root-level SSH.
 
 ## 4. Identity, ownership; launch configuration and transactions
 
-**Runtime window management schema:** Four separate concepts must be preserved:
+**Runtime identities:** joetoo-assigned logical identifiers and
+externally assigned identities have distinct purposes.
 
-| Field | Meaning | Lifetime |
-| --- | --- | --- |
-| `run_id` | One invocation of `-o` or `-r`; groups intended launches | Registry/history |
-| `request_id` | A single asynchronous launch, move, or close transaction | Transaction/history |
-| `managed_id` | Human-usable identifier for *one registered window instance* (e.g., `w017`) | Registered instance |
-| `window_uuid` | Actual KWin `internalId` of a matched, existing window | KWin compositor/window lifetime |
+| Identifier | Assigned by | Meaning | Lifetime |
+| --- | --- | --- | --- |
+| `run_id` | joetoo | Groups coordinated operations when needed | Execution/reporting |
+| `request_id` | joetoo | Identifies one requested operation or transaction | Operation and bounded result history |
+| `managed_id` | joetoo | Human-readable alias for one registered window (e.g. `win-004`) | Registered instance |
+| `window_uuid` | KWin | Identifies the actual KWin window | Compositor/window lifetime |
+
+Each active managed-window record has exactly one `managed_id`
+and one `window_uuid`, with a unique bidirectional association
+within the broker's active registry.
+
+A `managed_id` is an alias, not proof of ownership or authorization
+for destructive operations. Linux PIDs and KWin observation-source
+identifiers are separate runtime metadata.
+
+Runs need not be retained beyond completion, and not every CLI
+invocation requires a broker-visible `run_id`.
 
 **Saved configuration:** (Runtime launches each configured entry)
 `desktop`, `slot`, `program`, `mode`, and `target` describe a **logical launch
@@ -88,57 +100,87 @@ launch becomes managed. Uncertain matches must not become close targets.
 
 ### Launch-and-correlate contract
 
-1. Validate the requested layout/launch and allocate a `run_id` and
-   `request_id`; record the expected program, desktop/slot, and optional
-   application-specific correlation signature.
-2. Capture existing KWin window identities, arm a specific pending request in
-   the broker, and launch one application instance independently of the daemon's
-   process group.
-3. Observe `windowAdded` and subsequent changes if needed. Poll/await a **bounded**
-   period for a *unique* match using available evidence: new UUID, application
-   class/desktop file, launch PID when trustworthy, and optionally an explicit
-   title token such as `joetoo_konsole_3.1`.
-4. Record matched `window_uuid` and current metadata, request KWin placement,
-   verify readback when settled, and complete the transaction with a structured
-   result. Keep launch and placement outcomes distinct.
-5. On timeout or ambiguous matches, report **unmatched/ambiguous** and never
-   take ownership of an arbitrary class-matching window.
+1. Validate the requested layout/launch, allocate a request_id and, when coordinated operations require one, a run_id
+2. Capture existing KWin window identities, arm a specific pending request in the broker, and launch one application instance independently of the daemon's process group.
+3. Observe `windowAdded` and subsequent changes if needed. Poll/await a **bounded** period for a *unique* match using available evidence: new UUID, application class/desktop file, launch PID when trustworthy, and optionally an explicit title token such as `joetoo_konsole_3.1`.
+4. Record matched `window_uuid` and current metadata, request KWin placement, verify readback when settled, and complete the transaction with a structured result. Keep launch and placement outcomes distinct.
+5. On timeout or ambiguous matches, report **unmatched/ambiguous** and never take ownership of an arbitrary class-matching window.
 
-## 5. Working registry and operation outcomes (proposed schema)
 
-The schema is provisional and will be refined during Step 1.4; the structures
-below are design candidates rather than implemented Python interfaces.
+## 5. Working registry and operation outcomes
 
-The authoritative **joetoo ownership registry** lives in broker memory,
-conceptually as Python mappings such as `runs`, `windows`, `requests`, and
-`session`, with `windows` indexed by KWin UUID (and a secondary lookup by
-`managed_id`). These are *proposed logical structures*, not current variables
-in the implementation or a POC. KWin remains authoritative for **actual window existence and
-current geometry**. The broker reconciles its claims against KWin observations.
+The broker maintains distinct kinds of runtime information:
 
-A managed entry is expected to carry:
+- `observed_windows`: KWin-reported windows, regardless of whether
+  joetoo manages them.
+- `managed_windows`: positively correlated and registered window
+  instances, indexed by KWin UUID with a unique secondary lookup
+  by `managed_id`.
+- `requests`: pending operations and bounded completed results.
+- `runs`: transient contexts for coordinated operations, retained
+  only as necessary for execution and reporting.
+- `application_sessions`: activities established within windows,
+  where application-specific reporting supports them.
+- `graphical_context`: broker/KWin observation-source and
+  graphical-environment metadata, distinct from application sessions.
 
-- Identity: `run_id`, `request_id`, `managed_id`, `window_uuid` and a compositor/
-  graphical-session epoch for safe reconciliation.
-- Recipe: `desktop`, `slot`, `program`, `mode`, `target` and validated
-  launch/geometry policy; readable window label if supported.
-- Observation: KWin PID when available; optionally shell/SSH PIDs from the
-  tested Bash launcher; last observed desktop, geometry, and window presence.
-- Operation records: requested action, timestamp, outcome, diagnostic; keep
-  actual launch/placement status distinct from connection status.
+These are logical responsibilities; exact Python structures remain
+implementation details. The broker validates observations,
+correlates launches, maintains the records, and reports outcomes.
+KWin is authoritative for actual window existence and geometry.
 
-Suggested independent state dimensions (exact enums remain design candidates):
+### registry contract (Implementation Step 1.4a)
 
-| Dimension | Candidate values | Interpretation |
-| --- | --- | --- |
-| Window | `planned`, `launching`, `matched`, `placed`, `closing`, `closed`, `missing`, `uncertain` | Existence, correlation and KWin placement |
-| Launch transaction | `pending`, `running`, `OK`, `ERROR`, `timeout`, `ambiguous` | One operation's outcome |
-| SSH transport | `not_attempted`, `connecting`, `connected`, `unavailable`, `exited`, `unknown` | Never inferred solely from a Konsole window or TCP probe |
+1. A window becomes managed only after a broker-associated launch
+   is positively correlated with a newly observed KWin UUID.
+2. Registration requires a synchronized prelaunch inventory,
+   unique qualifying correlation, no relevant observation-history
+   gap, and confirmation that the UUID remains present.
+3. Unresolved or ambiguous requests do not create managed-window
+   registrations. Observation, inspection, or movement of an
+   existing window does not confer managed ownership.
+4. Each active registration has a unique, one-to-one association
+   between `managed_id` and `window_uuid`. Duplicate or conflicting
+   registrations must be rejected without altering existing records.
+5. Window existence, placement, operation outcome, and application
+   session state are independent. Successful window registration
+   does not imply successful placement or connection.
+6. A failed SSH/VNC connection does not invalidate an otherwise
+   successfully registered window. An unsuccessful connection
+   attempt does not create an established application session.
+7. The broker updates registered windows using exact UUID-based
+   observations. Missing or uncertain windows must not be silently
+   re-adopted through class, title, desktop, or slot matching.
+8. Registration does not itself authorize destructive operations.
+   Stronger validation is required before managed close operations
+   are introduced.
+9. Multiple managed windows and completed requests must coexist.
+   Correlation and registration operations may initially be
+   serialized; no arbitrary fixed window-count requirement applies.
+10. Read-only managed-window list, detail, and status semantics
+    are defined during Step 1.4a and exposed in Step 1.4c.
 
-The registry records **reported, observed facts**; avoid claiming a connected
-SSH transport solely because a PID or open TCP port was observed. Individual
-SSH session events may be reported from the interactive `--rcfile` launcher,
-with exact semantics verified during implementation.
+### Independent state dimensions
+
+| Dimension | Candidate states |
+| --- | --- |
+| Request | `pending`, `running`, `succeeded`, `failed`, `timeout`, `ambiguous` |
+| Window observation | `present`, `missing`, `uncertain` |
+| Placement | `not_requested`, `pending`, `succeeded`, `failed` |
+| Application connection | `not_attempted`, `connecting`, `connected`, `unavailable`, `exited`, `unknown` |
+
+Exact state representations and permitted transitions are to be
+finalized and tested during Step 1.4a. Avoid redundant flags or
+a generalized state-machine framework without demonstrated need.
+
+An application window may be associated with zero or more
+application sessions over its lifetime. General session tracking
+is not required for Step 1.4.
+
+Managed IDs are broker-lifetime identifiers initially; safe
+same-session recovery and stale-ID protection are addressed
+before destructive operations are enabled.
+
 
 ## 6. Geometry and visibility
 
@@ -294,7 +336,10 @@ Current completion status and supporting evidence are recorded in the
 | **1.3a.1** | Separate lifecycle history and coalesce window changes by UUID | Bounded history unaffected by dragging; X11 and Wayland regression tests |
 | **1.3a.2** | Automatic broker-start/reconnect synchronization of current KWin window inventory | Full inventory restored without manual refresh; no duplicate subscriptions or implicit ownership |
 | **1.3b** | Launch-and-poll unique correlation; title-token feasibility | Same-class Konsole stress/ambiguity tests; no false adoption |
-| **1.4** | `joetoo-kwind` multiwindow in-memory registry and status/list/dump | Accurate 37-window mock; correct transaction/SSH separation |
+| **1.4a** | In-memory registry data model, identity rules, state transitions, and headless contract tests | Unique UUID/managed-ID association; lifecycle and registration safety tests |
+| **1.4b** | Multiwindow registration and UUID-based observation reconciliation | Multiple independent registrations; duplicate rejection; conservative missing/uncertain handling |
+| **1.4c** | Read-only managed-window list, detail, and status interfaces | Structured broker queries; existing D-Bus compatibility preserved |
+| **1.4d** | Multiwindow integration and native validation | Representative mock scenarios, then X11 and Wayland tests; no fixed capacity requirement |
 | **1.5** | Shared geometry + `mw l/r`; colorized `-c`; `-o` with tested SSH placeholders | Native layout/SSH/underlay tests; `-v/-q` |
 | **1.6** | Managed `-a`, `-d`, `-x` | Close one/all managed, leave unrelated Konsole untouched |
 | **1.7** | Private atomic JSON checkpoint and same-session reconciliation | Daemon restart preserves all running windows; registry revalidated |
