@@ -155,7 +155,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.override.write_text("CUSTOM=previous\\n")
         p = self.run_tool(INSTALL_TOOL, "--update")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-        backups = list(self.override.parent.glob("joetoo-kwind.before-step1.2a-update.*"))
+        backups = list(self.override.parent.glob("joetoo-kwind.before-update.*"))
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].read_text(), "CUSTOM=previous\\n")
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
@@ -183,7 +183,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         p = self.run_tool(INSTALL_TOOL, "--update")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
-        backups = list(self.service.parent.glob('joetoo-kwind.before-step1.2a-update.*'))
+        backups = list(self.service.parent.glob('joetoo-kwind.before-update.*'))
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].read_text(), 'OLD\n')
 

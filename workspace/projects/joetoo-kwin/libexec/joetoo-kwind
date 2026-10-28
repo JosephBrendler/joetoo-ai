@@ -242,6 +242,45 @@ class Broker(dbus.service.Object):
             return "UNKNOWN"
         return r["state"] + (" " + r["detail"] if r["detail"] else "")
 
+    # Step 1.4d: a launch-intent interface, NOT an arbitrary registration API.
+    # The broker alone creates registration records, after exact PID/UUID
+    # correlation; clients cannot provide a window UUID or managed ID.
+    @dbus.service.method(IFACE, in_signature="siiiiii", out_signature="s")
+    def SubmitManagedLaunch(self, app_class, desktop, slot, x, y, width, height):
+        """Atomically arm placement and broker-owned managed correlation."""
+        if not isinstance(slot, int) or isinstance(slot, bool) or not 1 <= slot <= 256:
+            raise dbus.DBusException("Invalid launch slot", name=IFACE + ".BadArguments")
+        previous_request = self.request
+        placement_id = self._submit("launch", desktop, x, y, width, height, app_class)
+        try:
+            registration_id = self._begin_managed_launch(
+                expected_class=app_class,
+                recipe={"desktop": int(desktop), "slot": int(slot),
+                        "program": str(app_class), "mode": "local", "target": ""})
+        except RegistryError as exc:
+            # Both arms must succeed or neither may remain active. Since D-Bus
+            # dispatch is single-threaded here, no resident event can consume
+            # the newly created placement request before this method returns.
+            self.request = previous_request
+            raise dbus.DBusException(str(exc), name=IFACE + ".InvalidRequest") from exc
+        return json.dumps({"placement_request_id": placement_id,
+                           "registration_request_id": registration_id}, sort_keys=True)
+
+    @dbus.service.method(IFACE, in_signature="si", out_signature="")
+    def SetManagedLaunchPid(self, request_id, pid):
+        """Supply the freshly spawned child's PID; never choose a KWin UUID."""
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+            raise dbus.DBusException("Invalid launch PID", name=IFACE + ".BadArguments")
+        try:
+            self._set_managed_launch_pid(request_id, pid)
+        except RegistryError as exc:
+            raise dbus.DBusException(str(exc), name=IFACE + ".InvalidRequest") from exc
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
+    def PollManagedLaunch(self, request_id):
+        """Report privately verified registration; caller supplies no UUID."""
+        return json.dumps(self._poll_managed_launch(request_id), sort_keys=True)
+
 
     # Step 1.3b.1: a read-only launch correlation probe. It does not replace
     # SubmitLaunch/TakeLaunch, move a window or grant managed ownership.
