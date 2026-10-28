@@ -7,14 +7,6 @@ for version 1 requirements, design contracts, and acceptance gates.
 
 ## Current status
 
-# Proposed README update for Step 1.4d review
-
-This is a **draft replacement** for the `## Current status` block in
-`workspace/projects/joetoo-kwin/README.md`, stopping before
-`## Development and validation platforms`. It is not part of the code patch.
-
-## Current status
-
 **Completed through Step 1.4c** (October 2026). The broker observes KWin
 window UUIDs and lifecycles, recovers observational inventory, and diagnoses
 PID-based launch correlation. Steps 1.4a–1.4b introduced an in-memory
