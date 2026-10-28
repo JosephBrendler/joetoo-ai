@@ -137,9 +137,11 @@ class Broker(dbus.service.Object):
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
         # Shared implementation for Submit (move) and SubmitLaunch (launch).
         # `_submit` is an internal Python method, not an exported D-Bus name.
-        # Single-flight only, matching the already tested proof of concept.
+        # In-flight verification is still a placement request: never allow a
+        # second request to overwrite the UUID before it settles or times out.
+        self._advance_placement()
         if (self.request is not None
-                and self.request["state"] in ("PENDING", "RUNNING")
+                and self.request["state"] in ("PENDING", "RUNNING", "VERIFYING")
                 # monotonic() is an elapsed-time clock, not wall-clock time.
                 # Only a recent pending/running request blocks another one.
                 and time.monotonic() - self.request["created"] < 20):
@@ -217,26 +219,130 @@ class Broker(dbus.service.Object):
             return ""
         return self._take("launch")
 
+    def _sync_managed_placement(self):
+        """Cross-check target UUID and record placement without granting ownership.
+
+        Registration and placement can complete in either order. A successful
+        placement on a different UUID must NEVER be attributed to the managed
+        window, even when both have the same application class or PID.
+        """
+        r = self.request
+        if r is None or not r.get("registration_request_id"):
+            return
+        launch = self.registry.requests.get(r["registration_request_id"])
+        if launch is None or launch.state != "succeeded":
+            return
+        managed = self.registry.get_window(launch.result)
+        if managed is None:
+            return
+        if managed.placement == "not_requested":
+            if managed.presence != "present":
+                return
+            self.registry.set_placement(managed.window_uuid, "pending")
+            managed = self.registry.get_window(managed.window_uuid)
+        target = r.get("placement_uuid")
+        if target is not None and target != managed.window_uuid:
+            r["state"] = "ERROR"
+            r["detail"] = "placement UUID differs from positively registered UUID"
+        if managed.placement != "pending":
+            return
+        if (r["state"] == "OK" and target == managed.window_uuid
+                and managed.presence == "present"):
+            self.registry.set_placement(managed.window_uuid, "succeeded")
+        elif r["state"] == "ERROR":
+            self.registry.set_placement(managed.window_uuid, "failed")
+
+    def _advance_placement(self, removed_uuid=None):
+        """Resolve VERIFYING from exact-UUID KWin observations or deadline.
+
+        KWin's resident already emits changed/removed events on geometry and
+        desktop changes. No arbitrary sleeps or JS timer API are needed.
+        """
+        r = self.request
+        if r is None or r["state"] != "VERIFYING":
+            return
+        identifier = r["placement_uuid"]
+        if r["observation_source"] != self.observation_source:
+            r["state"] = "ERROR"
+            r["detail"] = "resident observation source changed during placement"
+        elif removed_uuid == identifier:
+            r["state"] = "ERROR"
+            r["detail"] = "target window disappeared during placement"
+        else:
+            observed = self.observed_windows.get(identifier)
+            if observed is not None:
+                geo = observed["geometry"]
+                desired = all(geo[key] == r[key]
+                              for key in ("x", "y", "width", "height"))
+                desktop_ok = (observed["desktops"] == [r["desktop"]]
+                              and not observed["on_all_desktops"])
+                if desired and desktop_ok:
+                    r["state"] = "OK"
+                    r["detail"] = (f'{r["kind"]}: {observed["caption"]} '
+                                   f'(pid={observed["pid"]}) '
+                                   f'before={r["placement_before"]} '
+                                   f'after=[{r["desktop"]}] '
+                                   f'({geo["x"]},{geo["y"]}) '
+                                   f'{geo["width"]}x{geo["height"]} '
+                                   f'tiled={str(r["placement_tiled"]).lower()} '
+                                   f'fullscreen={str(r["placement_fullscreen"]).lower()}')
+            if (r["state"] == "VERIFYING" and
+                    time.monotonic() >= r["created"] + 15.0):
+                observed = self.observed_windows.get(identifier)
+                actual = "window not observed"
+                if observed is not None:
+                    actual = (f'desktops={observed["desktops"]} '
+                              f'geometry={observed["geometry"]}')
+                r["state"] = "ERROR"
+                r["detail"] = "placement confirmation timed out: " + actual
+        if r["state"] in ("OK", "ERROR"):
+            self._sync_managed_placement()
+
     @dbus.service.method(IFACE, in_signature="sss", out_signature="")
     def Complete(self, request_id, result, detail):
-        # JS reports the immediate placement result. Only a taken (RUNNING)
-        # request with exactly the matching ID may be completed.
+        """KWin reports accepted assignment; broker confirms observed state.
+
+        Preserve existing OK/ERROR messages for legacy callers and tests.
+        VERIFY is an additive result, with an exact KWin UUID and diagnostics.
+        """
         r = self.request
         if r is None or r["id"] != request_id or r["state"] != "RUNNING":
             raise dbus.DBusException("Unknown or inactive request",
                                      name=IFACE + ".InvalidRequest")
-        if result not in ("OK", "ERROR"):
+        if result not in ("OK", "ERROR", "VERIFY"):
             raise dbus.DBusException("Invalid completion result",
                                      name=IFACE + ".BadArguments")
-        r["state"] = str(result)
-        # Limit status text to 1024 characters so a D-Bus caller does not
-        # receive an unbounded diagnostic message.
-        r["detail"] = str(detail)[:1024]
+        if result == "VERIFY":
+            try:
+                payload = json.loads(detail)
+                identifier = str(uuid.UUID(payload["window_uuid"]))
+                before = payload["before"]
+                if (not isinstance(before, str) or len(before) > 256
+                        or not isinstance(payload["tiled"], bool)
+                        or not isinstance(payload["fullscreen"], bool)):
+                    raise ValueError("invalid placement detail")
+            except (KeyError, TypeError, ValueError, AttributeError) as exc:
+                raise dbus.DBusException("Invalid placement verification",
+                                         name=IFACE + ".BadArguments") from exc
+            if not self.observation_synced:
+                r["state"] = "ERROR"
+                r["detail"] = "KWin observation is not synchronized"
+            else:
+                r["state"] = "VERIFYING"
+                r["placement_uuid"] = identifier
+                r["placement_before"] = before
+                r["placement_tiled"] = payload["tiled"]
+                r["placement_fullscreen"] = payload["fullscreen"]
+                r["observation_source"] = self.observation_source
+                self._advance_placement()
+        else:
+            r["state"] = result
+            r["detail"] = str(detail)[:1024]
+        self._sync_managed_placement()
 
     @dbus.service.method(IFACE, in_signature="s", out_signature="s")
     def Status(self, request_id):
-        # Bash polls Status until it sees OK or ERROR (or times out). UNKNOWN
-        # means the ID is not the single request currently held by the broker.
+        self._advance_placement()
         r = self.request
         if r is None or r["id"] != request_id:
             return "UNKNOWN"
@@ -263,6 +369,7 @@ class Broker(dbus.service.Object):
             # the newly created placement request before this method returns.
             self.request = previous_request
             raise dbus.DBusException(str(exc), name=IFACE + ".InvalidRequest") from exc
+        self.request["registration_request_id"] = registration_id
         return json.dumps({"placement_request_id": placement_id,
                            "registration_request_id": registration_id}, sort_keys=True)
 
@@ -401,6 +508,7 @@ class Broker(dbus.service.Object):
                 answer = {"state": "failed", "request_id": request_id,
                           "detail": str(exc)}
             else:
+                self._sync_managed_placement()
                 answer = {"state": "registered", "request_id": request_id,
                           "managed_id": managed.managed_id,
                           "window_uuid": managed.window_uuid}
@@ -651,6 +759,7 @@ class Broker(dbus.service.Object):
             # state, but do NOT fabricate another window-creation event.
             self.observed_windows[identifier] = details
             self._refresh_registered_window(identifier, details)
+            self._advance_placement()
             return
 
         # Only allocate an ID for a retained lifecycle record or change
@@ -671,6 +780,7 @@ class Broker(dbus.service.Object):
             self.observation_changes[identifier] = record
             self.observed_windows[identifier] = details
             self._refresh_registered_window(identifier, details)
+            self._advance_placement()
             return
 
         if event == "removed":
@@ -682,6 +792,7 @@ class Broker(dbus.service.Object):
             self.observed_windows[identifier] = details
         self._refresh_registered_window(
             identifier, None if event == "removed" else details)
+        self._advance_placement(removed_uuid=identifier if event == "removed" else None)
 
         # 'existing', 'added' and 'removed' cannot be evicted by dragging.
         # This is still a bounded diagnostic history, NOT an audit log.
@@ -754,6 +865,7 @@ class Broker(dbus.service.Object):
             else:
                 self._refresh_registered_window(
                     identifier, self.observed_windows.get(identifier))
+        self._advance_placement()
 
     # Read-only diagnostic query. Output is JSON, not a public management
     # registry: class, caption and PID are observational hints only.
