@@ -61,3 +61,4 @@ Follow the branch-and-review process in [README.md](README.md#collaboration-cycl
 
 ## Working Principles
 - Engineering drives documentation; documentation must not drive unnecessary engineering work, nor should documentation drive unnecessary documentation work (or be changed to do so).
+- One authoritative collaboration policy, subordinate role-specific guidance, explicit task-level delegation, and continuous maintainer visibility and control.
