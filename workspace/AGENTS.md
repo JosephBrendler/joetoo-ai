@@ -2,7 +2,24 @@
 
 **Purpose:** Establish AI and human agent common understanding of the objective - joetoo-ai/workspace is a place in which agent and human developer/maintainer can collaboratively and iteratively develop software supporting the [joetoo](../../joetoo) / [joetoo-upstream](../../joetoo-upstream) ecosystem. This work should be conducted in a manner that is itself consistent with and produces outcomes that are consistent with best practices in agile, efficient, continuous development and integration of reliable and secure software. The purpose of the continuous collaborative workflow described here and refined in each project is to enable a more efficient and better process and better outcomes than could be achieved without an AI-human collaboration.
 
-## Start-of-assignment discovery
+## Agent roles and active-task discovery
+
+All agents must follow the governing AGENTS.md hierarchy.
+
+Local implementation agents, including Codex CLI, must also
+read and follow workspace/LOCAL_AGENTS.md.
+
+Cloud collaboration agents, including ChatGPT, must also
+read and follow workspace/CLOUD_AGENTS.md.
+
+Before beginning task-specific work, identify the active task
+handoff document and read its objectives, scope, authorization,
+current state, validation evidence, and next action.
+
+Role-specific guidance must not override repository policies
+or the maintainer's authorization boundaries.
+
+## General start-of-assignment discovery
 
 At the beginning of a substantive joetoo assignment, identify the target repository and inspect its current applicable instructions and policies. Enumerate available `.agents/skills/*/SKILL.md` files by name and description; read only relevant skills. If orientation is needed, follow the `joetoo-start` skill where available. Do not rely solely on a remembered skill inventory. If source or skill material is inaccessible, disclose the limitation and do not imply that it was read.
 
