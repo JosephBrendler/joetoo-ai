@@ -327,6 +327,8 @@ Current completion status and supporting evidence are recorded in the
 [project README](README.md); collaboration procedures are governed by
 `AGENTS.md` and the parent workspace instructions.
 
+### Phase 1 - Initial implementation
+
 | Gate | Deliverable | Native/validation gate |
 | --- | --- | --- |
 | **1.1** | This architecture/registry/CLI contract and project `AGENTS.md` | Source-referenced review; accepted decisions distinguished from proposals |
@@ -345,6 +347,27 @@ Current completion status and supporting evidence are recorded in the
 | **1.7** | Private atomic JSON checkpoint and same-session reconciliation | Daemon restart preserves all running windows; registry revalidated |
 | **1.8** | Durable `.conf` snapshot, `-S` and `-r` | Clean-reboot launch with new UUID/PIDs, including SSH placeholders |
 | **1.9** | `eselect`, packaging and full regression | Maintainer-driven joetoo/joetoo-upstream integration; version 1 lifecycle gate |
+
+### Phase 2 — Optimization and refinement
+
+**Objective:** Improve the performance, efficiency, maintainability, robustness, and usability of the working joetoo-kwin prototype without sacrificing its established behavior, safety guarantees, or cross-platform compatibility.
+
+Phase 1 prioritizes completion and validation of the functional prototype. Phase 2 begins after the essential Phase 1 capabilities have been implemented and demonstrated on both supported KWin backends.
+
+Optimization work shall:
+
+1. **Establish a measured baseline** for startup latency, window-launch latency, placement confirmation, resource consumption, and other relevant operating characteristics.
+2. **Identify and prioritize improvements** based on measured deficiencies, user experience, implementation complexity, and expected benefit.
+3. **Optimize existing mechanisms** where justified, including D-Bus transaction overhead, event handling, polling, timeouts, resource consumption, and unnecessary serialization.
+4. **Refine reliability and usability**, including diagnostics, error reporting, configuration, and operational ergonomics.
+5. **Preserve established behavior**, supported environments, compatibility contracts, and security invariants through regression testing.
+6. **Validate improvements** against the baseline on both X11 and Wayland, distinguishing demonstrated improvements from theoretical expectations.
+
+Premature optimization shall not delay progress toward the functional prototype unless a deficiency materially compromises correctness, safety, security, or essential usability.
+
+Optimization is not a substitute for required correctness or security controls. Such controls must be implemented at the earliest milestone where the relevant capability requires them.
+
+Phase 2 work shall be divided into focused, reviewable tasks, with measurable acceptance criteria wherever practical.
 
 ## 12. Open questions and explicit verification tasks
 
