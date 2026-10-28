@@ -7,20 +7,14 @@ for version 1 requirements, design contracts, and acceptance gates.
 
 ## Current status
 
-**Completed through Step 1.4c** (October 2026). The broker observes KWin
-window UUIDs and lifecycles, recovers observational inventory, and diagnoses
-PID-based launch correlation. Steps 1.4a–1.4b introduced an in-memory
-managed-window registry with broker-private, positively correlated registration
-and conservative per-UUID reconciliation. Step 1.4c added read-only D-Bus
-`ListManaged`, `GetManaged`, and `RegistryStatus` queries without exposing a
-public registration or close API.
+**Completed through Step 1.4d** (October 2026). T
 
 | Increment | Status and scope | Evidence |
 | --- | --- | --- |
 | 1.4a | Complete: registry model, identities and headless contract tests | [PR #19](https://github.com/JosephBrendler/joetoo-ai/pull/19) |
 | 1.4b | Complete: broker-private registration, multiple records, UUID-based observation reconciliation | [PR #20](https://github.com/JosephBrendler/joetoo-ai/pull/20) |
 | 1.4c | Complete: read-only managed list/detail/status D-Bus interfaces | [PR #21](https://github.com/JosephBrendler/joetoo-ai/pull/21) |
-| 1.4d | In progress: multiwindow scenarios and X11/Wayland native validation | Pending maintainer results |
+| 1.4d | Complete: multiwindow scenarios and X11/Wayland native validation | [PR #22] |
 
 On `gmki91`, the maintainer reported **114 Python and 4 JavaScript tests
 passing** for the merged Step 1.4c candidate. These are headless regression
