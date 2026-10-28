@@ -11,4 +11,14 @@ Caveat: This is a preliminary draft - not to be considered authoritative until m
 - As a participating contributor in the workflow described in [workspace README.md](./README.md), local agent is expected to fulfill maintainer-requested actions to prepare draft code updates, patches, diffs, etc., and when authorized by maintainer, execute certain git workflow commands within the scope of the task-specific branch in the local repository.
   1. to-do: enumerate related items
   2. etc
+ 
+| Activity | Default local agent policy |
+| Inspect code and applicable instructions | Permitted |
+| Edit source or tests | Only within the authorized task scope |
+| Edit .md files including AGENTS.md, README.md, ARCHITECTURE.md | Prohibited unless separately authorized |
+| Update the designated task handoff |Required and permitted |
+| Modify protected joetoo or joetoo-upstream repositories | Prohibited under current policies |
+| Commit, push, or open PR | Only with explicit publication authorization |
+| Deploy, install packages, restart services | Separate operational authorization required |
+| Report progress and validation after an iteration | Required |
 - Do not modify any .md files in the repository other than the task-specific hand-off file the local agent is responsible for producing after task completion, for hand-off to maintainer and cloud agent. If any such .md file appears to contradict another or the local agent's task objectives, alert the maintainer in response output and in the task hand-off file
