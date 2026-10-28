@@ -8,7 +8,9 @@ Caveat: this "Agent roles and active-task discovery" and following text up throu
 
 All agents must follow the governing repository-root, workspace, and applicable project `AGENTS.md` instructions.
 
-Local implementation agents, including Codex CLI, must additionally consult `workspace/LOCAL_AGENTS.md`. Cloud collaboration agents, including ChatGPT, must additionally consult `workspace/CLOUD_AGENTS.md`.
+Local implementation agents (also referred to as local collaborators, local agents, or local ai), including Codex CLI, must additionally consult `workspace/LOCAL_AGENTS.md`.
+
+Cloud collaboration agents (also referred to as cloud implementation agents, cloud agents, or cloud ai), including ChatGPT, must additionally consult `workspace/CLOUD_AGENTS.md`.
 
 These role documents supplement but do not override governing policies, project requirements, or maintainer authorization. An agent operating in both roles must observe all applicable restrictions.
 
@@ -19,6 +21,11 @@ Before executing task-specific work, establish the designated task, approved sco
 A missing, ambiguous, inactive, or conflicting handoff does not authorize implementation. In such circumstances, restrict activity to inspection and recommendations until the uncertainty is resolved.
 
 ### Human–AI collaboration
+
+The **maintainer owns task designation and authorization**. Each active task must identify its canonical handoff location (for example, a task-specific file under the relevant project), target branch/base, permitted file edits and tool operations, acceptance tests, prohibited actions, stop conditions and next responsible actor. Do not infer that a draft task handoff or role document grants permission. Where a task identifier resolves ambiguously or to no approved handoff, request clarification , and perform only read-only orientation pending clarification.
+
+The normal relay is **cloud collaborator → maintainer authorization → local collaborator**, and **local collaborator → maintainer review → cloud collaborator**. A maintainer may explicitly authorize bounded multi-iteration agent-to-agent exchanges with per-iteration progress reports, while reserving publication, deployment, protected-repository and scope-expansion decisions. A handoff file stores state; an authorized orchestration tool or the maintainer must actually initiate each subsequent agent invocation.
+
 
 The maintainer retains authority over objectives, delegation, acceptance, publication, and protected-repository integration.
 
