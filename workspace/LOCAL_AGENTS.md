@@ -22,4 +22,4 @@ Caveat: This is a preliminary draft - not to be considered authoritative until m
 | Commit, push, or open PR | Only with explicit publication authorization |
 | Deploy, install packages, restart services | Separate operational authorization required |
 | Report progress and validation after an iteration | Required |
-- Do not modify any .md files in the repository other than the task-specific hand-off file the local agent is responsible for producing after task completion, for hand-off to maintainer and cloud agent. If any such .md file appears to contradict another or the local agent's task objectives, alert the maintainer in response output and in the task hand-off file
+- Do not modify any .md files in the repository other than the task-specific hand-off file the local agent is responsible for producing after task completion, for hand-off to maintainer and cloud agent, unless explicitly authorized by exception. If any such .md file appears to contradict another or the local agent's task objectives, alert the maintainer in response output and in the task hand-off file
