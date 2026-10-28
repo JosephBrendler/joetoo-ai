@@ -20,11 +20,12 @@ This is the standing norm for development workflow for explicitly authorized col
 - The turn-to-turn handoff document for any current task will be owned and reviewed by the maintainer and updated by agents in the workspace/projects/joetoo-kwin/task_<step_enum>/ directory (along with evidence, implementation guidance or other non-production documentation).
 - Maintainer and agents are responsible for different parts of HANDOFF.md and are authorized to change only the sections they are responsible for.
 - The stucture of HANDOFF.md will likely evolve, but its baseline minimal content will include --
+
 |Section | Responsible party |
 | --- | --- |
 | Task ID, objective and accepted requirements | Maintainer, with cloud-agent drafting assistance |
 | Base commit, branch and allowed paths | Maintainer-approved task setup |
-| Authorized actions and stop conditions | Maintainer, with cloud-agent drafting assistance |
+| Authorized actions and stop conditions | Maintainer |
 | Implementation progress and changed files | Acting implementation agent |
 | Tests, outcomes and unresolved problems | Acting agent, supported by evidence |
 | Review findings and recommendations | Reviewing agent |
