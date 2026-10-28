@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025-2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Headless tests for the Step 1.4d native managed-launch fixture."""
+"""Headless tests for the deliberately managed launch fixture."""
 
 from pathlib import Path
 import os
@@ -43,6 +43,7 @@ class TestMultiLaunchFixtureTests(TestCase):
     def test_four_fixed_placements_and_separate_process_requests(self):
         code, calls = self.run_fixture()
         self.assertEqual(code, 0)
+        # argument order is now CLASS SLOT DESKTOP X Y WIDTH HEIGHT -- PROGRAM
         self.assertEqual(calls, [
             'konsole 1 1 19 54 816 918 -- konsole --separate',
             'konsole 2 1 873 54 816 918 -- konsole --separate',
