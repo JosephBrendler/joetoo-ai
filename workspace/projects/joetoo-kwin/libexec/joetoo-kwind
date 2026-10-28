@@ -11,6 +11,7 @@ application process supervision and window persistence are not yet implemented.
 # POSIX signals and file metadata, elapsed time, and unique request tokens.
 # No window-launching or SSH process control modules are needed here.
 import json
+from copy import deepcopy
 import os
 import signal
 import stat
@@ -25,6 +26,13 @@ import dbus
 import dbus.service
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
+
+# The installed daemon and registry module must reside in the same libexec
+# directory. The headless test loader does not add that directory to sys.path.
+_libexec_dir = os.path.dirname(os.path.realpath(__file__))
+if _libexec_dir not in sys.path:
+    sys.path.insert(0, _libexec_dir)
+from joetoo_kwin_registry import RegistryError, WindowRegistry
 
 # Our D-Bus address has three parts:
 #   BUS  = unique service name that the Python process requests ownership of;
@@ -121,6 +129,10 @@ class Broker(dbus.service.Object):
         # Step 1.3b diagnostic-only: one pending correlation probe. This is
         # deliberately NOT the managed-window registry of Step 1.4.
         self.correlation = None
+        # Step 1.4b: ownership and correlation kept entirely broker-private.
+        # None of these methods is exposed as a D-Bus registration API.
+        self.registry = WindowRegistry()
+        self._managed_correlation = None
 
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
         # Shared implementation for Submit (move) and SubmitLaunch (launch).
@@ -245,6 +257,11 @@ class Broker(dbus.service.Object):
             raise dbus.DBusException("Wait for KWin inventory synchronization",
                                      name=IFACE + ".NotSynchronized")
         now = time.monotonic()
+        self._expire_managed_correlation(now)
+        if (self._managed_correlation is not None
+                and self._managed_correlation["state"] == "PENDING"):
+            raise dbus.DBusException("A managed launch is already active",
+                                     name=IFACE + ".Busy")
         if (self.correlation is not None
                 and self.correlation["state"] not in
                 ("MATCHED", "AMBIGUOUS", "TIMEOUT", "STALE_SOURCE")
@@ -252,7 +269,14 @@ class Broker(dbus.service.Object):
             raise dbus.DBusException("A correlation probe is already active",
                                      name=IFACE + ".Busy")
         request_id = uuid.uuid4().hex
-        self.correlation = {
+        self.correlation = self._new_correlation(
+            request_id, expected_class, title_token)
+        return request_id
+
+    def _new_correlation(self, request_id, expected_class, title_token):
+        """Broker-owned correlation snapshot; no ownership implied."""
+        now = time.monotonic()
+        return {
             "id": request_id, "expected_class": expected_class,
             "title_token": str(title_token), "pid": None,
             "source": self.observation_source,
@@ -262,7 +286,95 @@ class Broker(dbus.service.Object):
             "first_unique": None, "first_unique_at": None,
             "state": "PENDING", "result": None,
         }
+
+    def _expire_managed_correlation(self, now=None):
+        """Release an expired, unpolled private launch without adoption.
+
+        An interrupted launch caller must not hold the broker's one active
+        registry request forever. Only this broker-private transaction can be
+        expired here; the public diagnostic correlation remains independent.
+        """
+        c = self._managed_correlation
+        if c is None or c["state"] != "PENDING":
+            return
+        if now is None:
+            now = time.monotonic()
+        if now < c["deadline"]:
+            return
+        self.registry.finish_failed(c["id"], "timeout", "TIMEOUT")
+        c["state"] = "TIMEOUT"
+        c["managed_result"] = {"state": "timeout", "request_id": c["id"],
+                               "detail": "TIMEOUT"}
+
+    def _begin_managed_launch(self, *, expected_class, recipe, run_id=None,
+                              title_token=""):
+        """Internal-only launch intent; the public probe cannot authorize it.
+
+        A trusted broker-side launch orchestrator will call this before
+        launching an application (Step 1.5). No D-Bus entry point yet exists.
+        """
+        expected_class = str(expected_class).strip()
+        if not expected_class or len(expected_class) > 128 or len(title_token) > 128:
+            raise RegistryError("invalid managed correlation hints")
+        if (self.correlation is not None
+                and self.correlation["state"] == "PENDING"
+                and time.monotonic() < self.correlation["deadline"]):
+            raise RegistryError("diagnostic correlation is still active")
+        self._expire_managed_correlation()
+        if (self._managed_correlation is not None
+                and self._managed_correlation["state"] == "PENDING"):
+            raise RegistryError("managed correlation is still active")
+        request_id = uuid.uuid4().hex
+        self.registry.begin_launch(
+            request_id, source=self.observation_source,
+            synchronized=self.observation_synced,
+            baseline=self.observed_windows, recipe=recipe, run_id=run_id)
+        self._managed_correlation = self._new_correlation(
+            request_id, expected_class, title_token)
         return request_id
+
+    def _set_managed_launch_pid(self, request_id, pid):
+        """Private launch-PID handoff; never use public SetCorrelationPid."""
+        c = self._managed_correlation
+        if (c is None or c["id"] != request_id or c["pid"] is not None
+                or c["state"] != "PENDING" or time.monotonic() >= c["deadline"]):
+            raise RegistryError("inactive managed correlation")
+        self.registry.mark_running(request_id, pid)
+        c["pid"] = pid
+
+    def _poll_managed_launch(self, request_id):
+        """Internal-only correlation, registration and terminal reporting."""
+        c = self._managed_correlation
+        if c is None or c["id"] != request_id:
+            return {"state": "UNKNOWN"}
+        if "managed_result" in c:
+            return deepcopy(c["managed_result"])
+        result = json.loads(self._poll_correlation(c))
+        outcome = result["state"]
+        if outcome == "MATCHED":
+            try:
+                managed = self.registry.register_match(
+                    request_id, result, current_windows=self.observed_windows,
+                    source=self.observation_source,
+                    synchronized=self.observation_synced)
+            except RegistryError as exc:
+                self.registry.finish_failed(request_id, "failed", str(exc))
+                answer = {"state": "failed", "request_id": request_id,
+                          "detail": str(exc)}
+            else:
+                answer = {"state": "registered", "request_id": request_id,
+                          "managed_id": managed.managed_id,
+                          "window_uuid": managed.window_uuid}
+        elif outcome in ("AMBIGUOUS", "TIMEOUT", "STALE_SOURCE"):
+            terminal = {"AMBIGUOUS": "ambiguous", "TIMEOUT": "timeout",
+                        "STALE_SOURCE": "failed"}[outcome]
+            self.registry.finish_failed(request_id, terminal, outcome)
+            answer = {"state": terminal, "request_id": request_id,
+                      "detail": outcome}
+        else:
+            return {"state": "pending", "request_id": request_id}
+        c["managed_result"] = answer
+        return deepcopy(answer)
 
     @dbus.service.method(IFACE, in_signature="si", out_signature="")
     def SetCorrelationPid(self, request_id, pid):
@@ -335,6 +447,10 @@ class Broker(dbus.service.Object):
         c = self.correlation
         if c is None or c["id"] != request_id:
             return json.dumps({"state": "UNKNOWN"})
+        return self._poll_correlation(c)
+
+    def _poll_correlation(self, c):
+        """One evaluator for diagnostic and broker-private correlation."""
         if c["result"] is not None:
             return json.dumps(c["result"], sort_keys=True)
 
@@ -409,6 +525,23 @@ class Broker(dbus.service.Object):
             self.observation_evicted_through = dropped[-1]["event_id"]
             del self.observation_events[:-128]
 
+    def _refresh_registered_window(self, identifier, details):
+        """Reconcile one existing registration, never adopt an observed UUID."""
+        record = self.registry.managed_windows.get(identifier)
+        if record is None:
+            return
+        if details is None:
+            self.registry.set_presence(identifier, "missing")
+        elif record.presence == "present":
+            # PID changes or a mismatched identity are cause for uncertainty,
+            # not for trusting an observation as a replacement registration.
+            if details["pid"] != record.observation["pid"]:
+                self.registry.set_presence(identifier, "uncertain")
+            else:
+                self.registry.set_presence(identifier, "present", details)
+        # A previously missing/uncertain record cannot be re-adopted by an
+        # inventory refresh or a later class/title/UUID observation.
+
     # Step 1.3a: KWin's resident reports facts, not ownership decisions.
     # One JSON string avoids altering the six established move/launch methods.
     # The new signature 's' means one string arrives on the session bus;
@@ -478,6 +611,7 @@ class Broker(dbus.service.Object):
             # A manual refresh republishes every live window. Update current
             # state, but do NOT fabricate another window-creation event.
             self.observed_windows[identifier] = details
+            self._refresh_registered_window(identifier, details)
             return
 
         # Only allocate an ID for a retained lifecycle record or change
@@ -497,6 +631,7 @@ class Broker(dbus.service.Object):
                                       if before else 1)
             self.observation_changes[identifier] = record
             self.observed_windows[identifier] = details
+            self._refresh_registered_window(identifier, details)
             return
 
         if event == "removed":
@@ -506,6 +641,8 @@ class Broker(dbus.service.Object):
             self.observation_changes.pop(identifier, None)
         else:
             self.observed_windows[identifier] = details
+        self._refresh_registered_window(
+            identifier, None if event == "removed" else details)
 
         # 'existing', 'added' and 'removed' cannot be evicted by dragging.
         # This is still a bounded diagnostic history, NOT an audit log.
@@ -545,6 +682,8 @@ class Broker(dbus.service.Object):
             return  # Old/out-of-order inventory; do not roll back live changes.
         # A different resident instance replaces the source after a KWin
         # reload. These UUIDs are still *observed*, never managed windows.
+        source_changed = (self.observation_source is not None
+                          and source != self.observation_source)
         if source != self.observation_source:
             self.observation_changes.clear()
         self.observation_source = source
@@ -568,6 +707,14 @@ class Broker(dbus.service.Object):
                     "event_id": self.observation_sequence, "event": "existing",
                     "window_uuid": identifier, "window": details})
         self._bound_observation_events()
+        # An inventory replacement never invents new ownership. A new resident
+        # source invalidates prior managed evidence even if UUIDs recur.
+        for identifier in list(self.registry.managed_windows):
+            if source_changed:
+                self.registry.set_presence(identifier, "uncertain")
+            else:
+                self._refresh_registered_window(
+                    identifier, self.observed_windows.get(identifier))
 
     # Read-only diagnostic query. Output is JSON, not a public management
     # registry: class, caption and PID are observational hints only.

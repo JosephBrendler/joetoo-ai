@@ -17,12 +17,14 @@ case $1 in --check|--install|--update) action=$1 ;; *) usage ;; esac
 config_home=${XDG_CONFIG_HOME:-"$HOME/.config"}
 case $config_home in /*) ;; *) echo 'XDG_CONFIG_HOME must be absolute' >&2; exit 1 ;; esac
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
-root=$(CDPATH= cd -- "$script_dir/.." && pwd -P)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+root=$(CDPATH='' cd -- "$script_dir/.." && pwd -P)
 service_source=$root/user-init.d/joetoo-kwind
 daemon_source=$root/libexec/joetoo-kwind
+registry_source=$root/libexec/joetoo_kwin_registry.py
 service_dest=$config_home/rc/init.d/joetoo-kwind
 daemon_dest=$HOME/.local/libexec/joetoo-kwind
+registry_dest=$HOME/.local/libexec/joetoo_kwin_registry.py
 override_source=$root/poc-user-conf.d/joetoo-kwind
 override_dest=$config_home/rc/conf.d/joetoo-kwind
 resident_source=$root/joetoo-kwin-resident.js
@@ -33,12 +35,13 @@ config_helper=$root/tools/joetoo-kwind-configure-openrc-user
 
 printf 'OpenRC user service: %s\n' "$service_dest"
 printf 'Daemon executable:  %s\n' "$daemon_dest"
+printf 'Registry module:     %s\n' "$registry_dest"
 printf 'Resident JavaScript: %s\n' "$resident_dest"
 printf 'Bash CLI:           %s\n' "$cli_dest"
 printf 'OpenRC user override: %s\n' "$override_dest"
 printf 'OpenRC user config:  %s\n' "$config_home/rc/rc.conf"
 
-for dest in "$service_dest" "$daemon_dest" "$override_dest" "$resident_dest" "$cli_dest"; do
+for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest"; do
     if [ -L "$dest" ] || { [ -e "$dest" ] && [ ! -f "$dest" ]; }; then
         printf 'Refusing unexpected installation destination: %s\n' "$dest" >&2
         exit 1
@@ -47,10 +50,11 @@ done
 
 if [ "$action" = --check ]; then
     status=0
-    for mapping in service daemon override resident cli; do
+    for mapping in service daemon registry override resident cli; do
         case $mapping in
             service) src=$service_source; dest=$service_dest ;;
             daemon) src=$daemon_source; dest=$daemon_dest ;;
+            registry) src=$registry_source; dest=$registry_dest ;;
             override) src=$override_source; dest=$override_dest ;;
             resident) src=$resident_source; dest=$resident_dest ;;
             cli) src=$cli_source; dest=$cli_dest ;;
@@ -67,7 +71,7 @@ if [ "$action" = --check ]; then
 fi
 
 if [ "$action" = --install ]; then
-    for dest in "$service_dest" "$daemon_dest" "$override_dest" "$resident_dest" "$cli_dest"; do
+    for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest"; do
         if [ -e "$dest" ]; then
             printf 'Already installed: %s (use --check or --update)\n' "$dest" >&2
             exit 1
@@ -87,7 +91,7 @@ if [ "$action" = --update ]; then
     # Explicit update preserves the previous on-disk POC. No silent reset of a
     # known-working service/daemon installation.
     backup_suffix=".before-step1.2a-update.$(date +%Y%m%d-%H%M%S).$$"
-    for dest in "$service_dest" "$daemon_dest" "$override_dest" "$resident_dest" "$cli_dest"; do
+    for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest"; do
         if [ -f "$dest" ]; then
             cp -p -- "$dest" "$dest$backup_suffix" || exit 1
             printf 'Backup: %s\n' "$dest$backup_suffix"
@@ -97,10 +101,11 @@ fi
 # -D creates BOTH parent paths if missing, avoiding manual mkdir commands.
 install -D -m 0755 -- "$service_source" "$service_dest"
 install -D -m 0755 -- "$daemon_source" "$daemon_dest"
+install -D -m 0644 -- "$registry_source" "$registry_dest"
 install -D -m 0644 -- "$override_source" "$override_dest"
 install -D -m 0644 -- "$resident_source" "$resident_dest"
 install -D -m 0755 -- "$cli_source" "$cli_dest"
-printf 'Installed five Step 1.2b user-owned files. No service was started.\n'
+printf 'Installed six user-owned joetoo-kwind files. No service was started.\n'
 printf 'From a local Plasma Konsole, run:\n'
 printf '  rc-service -U joetoo-kwind start\n'
 printf '  rc-service -U joetoo-kwind status\n'
