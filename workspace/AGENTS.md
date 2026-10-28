@@ -6,11 +6,9 @@
 
 All agents must follow the governing AGENTS.md hierarchy.
 
-Local implementation agents, including Codex CLI, must also
-read and follow workspace/LOCAL_AGENTS.md.
+Local implementation agents, including Codex CLI, must read, and also re-read at the beginning of every task and turn, and follow workspace/LOCAL_AGENTS.md.
 
-Cloud collaboration agents, including ChatGPT, must also
-read and follow workspace/CLOUD_AGENTS.md.
+Cloud collaboration agents, including ChatGPT, must read, and also re-read at the beginning of every task and turn, and follow workspace/CLOUD_AGENTS.md.
 
 Before beginning task-specific work, identify the active task
 handoff document and read its objectives, scope, authorization,
