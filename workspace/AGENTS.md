@@ -21,7 +21,6 @@ Follow the branch-and-review process in [README.md](README.md#collaboration-cycl
   Preserve an existing draft before replacing it. Never silently overwrite
   local work or reapply an entire stale draft over a newer baseline.
 - Use an existing isolated checkout. Use a task branch from the current accepted baseline; start a fresh follow-up branch when the earlier PR has merged. Do not create a worktree unless the user requests one.
-- Use maintainer's coding style including use of announce, act, report idiom; script_header_joetoo functions, and other [AI skills](../.agents/skills/).
 - Prepare a concrete diff before requesting publication
   permission. At that point, explicitly ask for the next needed authorization
   (normally commit, push, and draft PR together), identifying the branch, scope,
