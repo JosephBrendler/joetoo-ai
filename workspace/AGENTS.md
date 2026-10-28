@@ -4,6 +4,8 @@
 
 ## Agent roles and active-task discovery
 
+Caveat: this "Agent roles and active-task discovery" and following text up through the end of the table on "Division of responsibility in multi-agent-human collaborative workflow" is to be considered draft and with no instructive authority until maintainer finalizes and approves it and removes this caveat.
+
 All agents must follow the governing AGENTS.md hierarchy.
 
 Local implementation agents, including Codex CLI, must read, and also re-read at the beginning of every task and turn, and follow workspace/LOCAL_AGENTS.md.
@@ -16,6 +18,15 @@ current state, validation evidence, and next action.
 
 Role-specific guidance must not override repository policies
 or the maintainer's authorization boundaries.
+
+### Division of responsibility in multi-agent-human collaborative workflow
+| Step | Lead actor | Other participants |
+| --- | --- | --- |
+| Review operational requirement described by maintainer and prepare outline of task-step candidate software change requirements | Cloud agent (e.g. ChatGPT) | local agemt (e.g. codes CLI) can produce a local diff and test evidence; maintainer evaluates results and findings and articulates updates to operational requirement specifications |
+| Prepare validation/handoff record following completion of each task |	All | Cloud agent uses handoff record to translate maintainer's operational requirement into an outline of software development tasks to be performed by local agent. Local agent supplies implementation evidence, state of local repository not otherwise visible to cloud agent; maintainer reviews handoff file in all exchangesor and either approves or expresses modification requirements either in the handoff file itself, or in prompts to cloud and local agent |
+| Commit, push, open draft PR | Maintainer may perform or authorize	local or cloud agent | Local and cloud agent can perform explicitly authorized joetoo-ai publication actionsv |
+| Add cross-agent workflow convention |	ChatGPT drafts; Maintainer approves | appropriate authorized actor updates policy files |
+| Pilot Codex, MCP, and GitHub Actions | Codex for local implementation; ChatGPT for design/review |Maintainer authorizes tool installation and CI publication, and reviews results |
 
 ## General start-of-assignment discovery
 
