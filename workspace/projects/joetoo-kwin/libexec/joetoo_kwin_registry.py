@@ -199,7 +199,10 @@ class WindowRegistry:
             "succeeded": ("pending",),
             "failed": ("pending",),
         }
-        if record.presence != "present" or state not in allowed[record.placement]:
+        # A disappeared window may finish an already pending placement as
+        # failed. Never declare placement succeeded unless presence is present.
+        if (state not in allowed[record.placement]
+                or (state != "failed" and record.presence != "present")):
             raise RegistryError("invalid placement transition")
         record.placement = state
 

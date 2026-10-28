@@ -49,59 +49,43 @@ function geometryText(win) {
 // This changes the window's desktop *membership*; it does not explicitly
 // switch the currently displayed virtual desktop.
 function placeWindow(win, request, operation) {
-    // `!win` rejects a missing object; `win.deleted` rejects a window already
-    // removed while the asynchronous request was in flight.
     if (!win || win.deleted) {
         finish(request, "ERROR", "Window disappeared before placement");
         return;
     }
-    // Broker requests use 1-based desktop numbers; JavaScript array indices
-    // start at zero. A missing entry means that desktop was not configured.
     const desktop = workspace.desktops[request.desktop - 1];
     if (!desktop) {
         finish(request, "ERROR", "Virtual desktop " + request.desktop +
                " does not exist");
         return;
     }
-
-    // The try/catch keeps a failed KWin API operation from silently leaving
-    // the broker request pending until the Bash client's polling times out.
+    // UUID is the identity of the exact window acted on, never an ownership
+    // claim. The broker must cross-check it with positive managed correlation.
+    const uuid = windowUUID(win);
+    if (!uuid) {
+        finish(request, "ERROR", "Target window has no KWin UUID");
+        return;
+    }
     try {
-        const beforeText = geometryText(win);
-        // Capture the pre-change state for the result message. These flags
-        // describe the state observed, not a request to change it.
-        const wasTiled = win.tile !== null;
-        const wasFullscreen = win.fullScreen;
-
-        // KWin accepts an array of virtual-desktop objects for `desktops`.
-        // Assign the requested desktop, then assign the requested frame
-        // rectangle (position and dimensions), both through KWin's API.
+        const before = geometryText(win);
+        const tiled = win.tile !== null;
+        const fullscreen = win.fullScreen;
+        // Wayland geometry can require a client configure/commit round-trip.
+        // Assigning these properties is not proof they have already settled.
         win.desktops = [desktop];
         win.frameGeometry = {
             x: request.x, y: request.y,
             width: request.width, height: request.height
         };
-
-        // Immediate KWin readback; Wayland clients can settle asynchronously.
-        // This tests the *immediate* observed values only. It is not a promise
-        // that no compositor/client adjustment will occur after this callback.
-        const afterText = geometryText(win);
-        const g = win.frameGeometry;
-        // `===` means strict equality in JavaScript; `&&` requires every
-        // desktop/coordinate/dimension comparison to agree with the request.
-        const match = desktopNumber(win) === request.desktop &&
-                      g.x === request.x && g.y === request.y &&
-                      g.width === request.width && g.height === request.height;
-        // The ternary `condition ? A : B` selects one of two strings.
-        // Include before/after geometry so the CLI can show useful evidence.
-        finish(request, match ? "OK" : "ERROR",
-               operation + ": " + win.caption + " (pid=" + win.pid + ")\n" +
-               " before=" + beforeText + "\n" +
-               " after=" + afterText + "\n" +
-               " tiled=" + wasTiled + " fullscreen=" + wasFullscreen +
-               (match ? "" : " (desktop/geometry differs from request)"));
+        // The broker's existing window-observation event stream confirms the
+        // final frame asynchronously, or times out if the client rejects it.
+        // Do not return ERROR simply because an immediate readback is stale.
+        finish(request, "VERIFY", JSON.stringify({
+            window_uuid: uuid, operation: operation,
+            before: before, immediate: geometryText(win),
+            tiled: tiled, fullscreen: fullscreen
+        }));
     } catch (err) {
-        // Convert an exception into an explicit failed broker request.
         finish(request, "ERROR", "KWin operation failed: " + err);
     }
 }

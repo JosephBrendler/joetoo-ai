@@ -30,6 +30,7 @@ usage() {
     j_msg "-${notice}" -p "Usage: ${PN} -m DESKTOP X Y WIDTH HEIGHT"
     j_msg "-${notice}" -p "       ${PN} move DESKTOP X Y WIDTH HEIGHT  (compatibility)"
     j_msg "-${notice}" -p "       ${PN} test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]"
+    j_msg "-${notice}" -p "       ${PN} test-multi-launch  (TEST ONLY: register 4 local Konsoles)"
     j_msg "-${notice}" -p "       ${PN} -h"
     j_msg "-${notice}" -p "       ${PN} -c/-o (not yet integrated)"
 }
@@ -130,6 +131,96 @@ launch_one_window() {
     wait_for_request "$_lw_request" launch
 }
 
+# Managed launch test entry point. The broker owns the registry and performs
+# all UUID selection; the Bash client supplies only intent and its child PID.
+launch_managed_window() {
+    local _lm_class=$1 _lm_slot=$2 _lm_payload _lm_placement _lm_registration
+    local _lm_pid _lm_result _lm_state _lm_attempt _lm_registration_rc=1
+    local _lm_placement_rc=1
+    shift 2
+    if (( $# < 7 )) || [[ ${6:-} != -- || -z ${7:-} ]]; then
+        bad_args 'managed test launch requires CLASS SLOT DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]'
+        return 2
+    fi
+    validate_geometry "$1" "$2" "$3" "$4" "$5" || return $?
+    if ! isint "$_lm_slot" || (( _lm_slot < 1 || _lm_slot > 256 )); then
+        j_msg "-${err}" -p "${PN}: invalid test slot [${_lm_slot}]"
+        return 2
+    fi
+    if [[ -z $_lm_class || ${#_lm_class} -gt 128 ]]; then
+        j_msg "-${err}" -p "${PN}: invalid expected KWin class"
+        return 2
+    fi
+    local -a _lm_geometry=("$1" "$2" "$3" "$4" "$5")
+    shift 6
+    if ! command -v "$1" >/dev/null 2>&1; then
+        j_msg "-${err}" -p "${PN}: program not found [${1}]"
+        return 1
+    fi
+    _lm_payload=$(qdbus6 "$bus" "$path" "$iface.SubmitManagedLaunch" \
+        "$_lm_class" "${_lm_geometry[0]}" "$_lm_slot" "${_lm_geometry[@]:1}") || return 1
+    _lm_placement=$(jq -er '.placement_request_id | select(type == "string" and length > 0)' \
+        <<< "$_lm_payload") || return 1
+    _lm_registration=$(jq -er '.registration_request_id | select(type == "string" and length > 0)' \
+        <<< "$_lm_payload") || return 1
+    j_msg "-${notice}" -p "Armed managed launch [${_lm_registration}], placement [${_lm_placement}]"
+    "$@" &
+    _lm_pid=$!
+    j_msg "-${notice}" -p "Launched [${1}], shell PID [${_lm_pid}]"
+    if ! qdbus6 "$bus" "$path" "$iface.SetManagedLaunchPid" "$_lm_registration" "$_lm_pid"; then
+        j_msg "-${err}" -p "${PN}: managed PID handoff failed for [${_lm_registration}]"
+        return 1
+    fi
+    # Correlation has a 15-second deadline. Poll it before the potentially
+    # 15-second placement wait so the quiet-period match can complete.
+    for ((_lm_attempt=0; _lm_attempt<150; _lm_attempt++)); do
+        _lm_result=$(qdbus6 "$bus" "$path" "$iface.PollManagedLaunch" "$_lm_registration") || return 1
+        _lm_state=$(jq -er '.state | select(type == "string")' <<< "$_lm_result") || return 1
+        case $_lm_state in
+            registered)
+                j_msg "-${notice}" -p "Registered [$(jq -r '.managed_id' <<< "$_lm_result")] UUID [$(jq -r '.window_uuid' <<< "$_lm_result")]"
+                _lm_registration_rc=0
+                break ;;
+            pending) sleep 0.1 ;;
+            failed|timeout|ambiguous|UNKNOWN)
+                j_msg "-${err}" -p "${PN}: managed registration [${_lm_state}]: ${_lm_result}"
+                break ;;
+            *) j_msg "-${err}" -p "${PN}: unexpected registration result: ${_lm_result}"; break ;;
+        esac
+    done
+    if wait_for_request "$_lm_placement" launch; then
+        _lm_placement_rc=0
+    fi
+    (( _lm_registration_rc == 0 && _lm_placement_rc == 0 ))
+}
+
+# Step 1.4d native registration test fixture, not the configured -o launcher.
+# The four coordinates deliberately describe one 1920x1080 test display.
+# These are fixed TEST VALUES; the shared geometry policy belongs to Step 1.5.
+# Each launch must become managed by positive PID/UUID correlation.
+test_multi_launch() {
+    local _tml_desktop _tml_x _tml_slot _tml_failed=0
+    j_msg "-${notice}" -p "${PN}: TEST ONLY: register four local Konsole windows on desktops 1 and 2"
+    for _tml_desktop in 1 2; do
+        _tml_slot=0
+        for _tml_x in 19 873; do
+            _tml_slot=$((_tml_slot + 1))
+            if launch_managed_window konsole "$_tml_slot" "$_tml_desktop" "$_tml_x" 54 816 918 -- konsole --separate; then
+                :
+            else
+                _tml_failed=$((_tml_failed + 1))
+                j_msg "-${err}" -p "${PN}: test launch failed (desktop [${_tml_desktop}], x [${_tml_x}])"
+            fi
+        done
+    done
+    if (( _tml_failed > 0 )); then
+        j_msg "-${err}" -p "${PN}: [${_tml_failed}] of four test launches failed"
+        return 1
+    fi
+    j_msg "-${notice}" -p "${PN}: all four test launches registered and placement succeeded"
+    return 0
+}
+
 #-----[ main script ]----------------------------------------------------------------------------------
 
 # run as regular user, not root
@@ -145,6 +236,10 @@ case ${1:-} in
         shift
         if (( $# < 8 )); then bad_args 'test-launch requires a class, geometry and program'; exit 2; fi
         launch_one_window "$@" ;;
+    test-multi-launch)
+        shift
+        if (( $# != 0 )); then bad_args 'test-multi-launch accepts no operands'; exit 2; fi
+        test_multi_launch ;;
     -h|--help) usage ;;
     -o) action="open";   # open multiple windows
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
