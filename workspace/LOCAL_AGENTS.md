@@ -13,6 +13,7 @@ Caveat: This is a preliminary draft - not to be considered authoritative until m
   2. etc
  
 | Activity | Default local agent policy |
+| --- | --- |
 | Inspect code and applicable instructions | Permitted |
 | Edit source or tests | Only within the authorized task scope |
 | Edit .md files including AGENTS.md, README.md, ARCHITECTURE.md | Prohibited unless separately authorized |
