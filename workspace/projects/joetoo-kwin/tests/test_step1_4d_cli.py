@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025-2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Headless tests for the deliberately non-managed 1.4d launch fixture."""
+"""Headless tests for the Step 1.4d native managed-launch fixture."""
 
 from pathlib import Path
 import os
@@ -26,9 +26,9 @@ class TestMultiLaunchFixtureTests(TestCase):
                 notice=5
                 err=3
                 j_msg() { :; }
-                launch_one_window() {
+                launch_managed_window() {
                     printf '%s\n' "$*" >> "$TRACE"
-                    if [[ ${FAIL_LAUNCH:-0} == 1 && $2 == 2 && $3 == 873 ]]; then
+                    if [[ ${FAIL_LAUNCH:-0} == 1 && $3 == 2 && $4 == 873 ]]; then
                         return 1
                     fi
                     return 0
@@ -44,10 +44,10 @@ class TestMultiLaunchFixtureTests(TestCase):
         code, calls = self.run_fixture()
         self.assertEqual(code, 0)
         self.assertEqual(calls, [
-            'konsole 1 19 54 816 918 -- konsole --separate',
-            'konsole 1 873 54 816 918 -- konsole --separate',
-            'konsole 2 19 54 816 918 -- konsole --separate',
-            'konsole 2 873 54 816 918 -- konsole --separate'])
+            'konsole 1 1 19 54 816 918 -- konsole --separate',
+            'konsole 2 1 873 54 816 918 -- konsole --separate',
+            'konsole 1 2 19 54 816 918 -- konsole --separate',
+            'konsole 2 2 873 54 816 918 -- konsole --separate'])
 
     def test_failed_launch_returns_failure_without_aborting_other_attempts(self):
         code, calls = self.run_fixture(fail=True)
@@ -60,5 +60,5 @@ class TestMultiLaunchFixtureTests(TestCase):
         self.assertIn('    -o) action="open"', source)
         self.assertIn('not yet integrated', source)
         fixture = source[source.index('test_multi_launch() {'):source.index('#-----[ main script ]')]
-        self.assertNotIn('Register', fixture)
-        self.assertNotIn('BeginManaged', fixture)
+        self.assertIn('launch_managed_window', fixture)
+        self.assertNotIn('RegisterWindow', fixture)
