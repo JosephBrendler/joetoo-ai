@@ -45,7 +45,6 @@ If sources conflict, identify the conflict rather than silently choosing whichev
 1. Never leave an executable command as the last nonblank line.
 2. Append a harmless Bash comment, such as `# End of commands`, after the final executable command.
 3. Append an additional blank line before the closing code fence.
-4. Prefer inline commands when a code block is unnecessary.
 This prevents an invisible object replacement character introduced by the AI's interface from being appended to a runnable command when the maintainer copies the final displayed line. A subsequent maintainer paste-into-terminal will otherwise include these invisible characters, which produce errors like "bash: ￼ command not found" <-- $ echo ￼  | od -t x1 -tc<br>
 0000000  ef  bf  bc  0a<br>
         357 277 274  \n<br>
