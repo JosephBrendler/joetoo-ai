@@ -735,6 +735,81 @@ class Broker(dbus.service.Object):
                                     "revision": self.observation_revision}}, sort_keys=True)
 
 
+    # Step 1.4c: read-only managed-window queries. The returned JSON is an
+    # explicit allowlist, never a serialization of recipes or registry objects.
+    @staticmethod
+    def _managed_summary(record):
+        return {"managed_id": record.managed_id,
+                "window_uuid": record.window_uuid,
+                "request_id": record.request_id,
+                "run_id": record.run_id,
+                "presence": record.presence,
+                "placement": record.placement,
+                "connection": record.connection}
+
+    @dbus.service.method(IFACE, in_signature="", out_signature="s")
+    def ListManaged(self):
+        """List only positively registered windows in managed-ID order."""
+        records = sorted(self.registry.managed_windows.values(),
+                         key=lambda item: int(item.managed_id[4:]))
+        return json.dumps({"count": len(records),
+                           "windows": [self._managed_summary(item)
+                                       for item in records]}, sort_keys=True)
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
+    def GetManaged(self, identifier):
+        """Look up a managed ID or KWin UUID; unknown is not ownership."""
+        if not isinstance(identifier, str) or not (1 <= len(identifier) <= 128):
+            raise dbus.DBusException("Invalid managed-window identifier",
+                                     name=IFACE + ".BadArguments")
+        try:
+            record = self.registry.get_window(identifier)
+        except RegistryError:
+            record = None
+        if record is None:
+            return json.dumps({"state": "UNKNOWN"}, sort_keys=True)
+        detail = self._managed_summary(record)
+        # Observation is last-known if presence is missing or uncertain.
+        # A KWin observation may contain extra fields. Do not forward them.
+        observed = record.observation
+        geometry = observed["geometry"]
+        detail["observation"] = {
+            "pid": observed["pid"],
+            "resource_class": observed["resource_class"],
+            "desktop_file": observed["desktop_file"],
+            "caption": observed["caption"][:256],
+            "desktops": list(observed["desktops"]),
+            "on_all_desktops": observed["on_all_desktops"],
+            "geometry": {key: geometry[key]
+                         for key in ("x", "y", "width", "height")},
+        }
+        return json.dumps({"state": "FOUND", "window": detail}, sort_keys=True)
+
+    @dbus.service.method(IFACE, in_signature="", out_signature="s")
+    def RegistryStatus(self):
+        """Return in-memory registry counts and observer synchronization."""
+        presence = {state: 0 for state in ("present", "missing", "uncertain")}
+        for record in self.registry.managed_windows.values():
+            presence[record.presence] += 1
+        requests = {state: 0 for state in
+                    ("pending", "running", "succeeded", "failed",
+                     "timeout", "ambiguous")}
+        for request in self.registry.requests.values():
+            requests[request.state] += 1
+        return json.dumps({
+            "managed_count": len(self.registry.managed_windows),
+            "presence_counts": presence,
+            "request_count": len(self.registry.requests),
+            "request_counts": requests,
+            "observation": {
+                "synchronized": self.observation_synced,
+                "source": self.observation_source,
+                "revision": self.observation_revision,
+                "observed_count": len(self.observed_windows),
+            },
+        }, sort_keys=True)
+
+
 # Unlike BUS/PATH/IFACE above, these identifiers address KWin's *own*
 # D-Bus scripting service, which we use to load our resident JavaScript.
 # The defaults are packaging locations; the user OpenRC configuration may
