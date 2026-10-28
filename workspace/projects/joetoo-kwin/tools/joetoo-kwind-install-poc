@@ -90,7 +90,7 @@ fi
 if [ "$action" = --update ]; then
     # Explicit update preserves the previous on-disk POC. No silent reset of a
     # known-working service/daemon installation.
-    backup_suffix=".before-step1.2a-update.$(date +%Y%m%d-%H%M%S).$$"
+    backup_suffix=".before-update.$(date +%Y%m%d-%H%M%S).$$"
     for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest"; do
         if [ -f "$dest" ]; then
             cp -p -- "$dest" "$dest$backup_suffix" || exit 1

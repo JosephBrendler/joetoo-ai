@@ -30,6 +30,7 @@ usage() {
     j_msg "-${notice}" -p "Usage: ${PN} -m DESKTOP X Y WIDTH HEIGHT"
     j_msg "-${notice}" -p "       ${PN} move DESKTOP X Y WIDTH HEIGHT  (compatibility)"
     j_msg "-${notice}" -p "       ${PN} test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]"
+    j_msg "-${notice}" -p "       ${PN} test-multi-launch  (TEST ONLY: 4 local Konsoles, fixed 1920x1080)"
     j_msg "-${notice}" -p "       ${PN} -h"
     j_msg "-${notice}" -p "       ${PN} -c/-o (not yet integrated)"
 }
@@ -130,6 +131,31 @@ launch_one_window() {
     wait_for_request "$_lw_request" launch
 }
 
+# Step 1.4d native placement fixture, not the configured -o launcher.
+# The four coordinates deliberately describe one 1920x1080 test display.
+# These are fixed TEST VALUES; the shared geometry policy belongs to Step 1.5.
+# This exercises SubmitLaunch/Status and does NOT enroll managed windows.
+test_multi_launch() {
+    local _tml_desktop _tml_x _tml_failed=0
+    j_msg "-${notice}" -p "${PN}: TEST ONLY: four local Konsole windows on desktops 1 and 2"
+    for _tml_desktop in 1 2; do
+        for _tml_x in 19 873; do
+            if launch_one_window konsole "$_tml_desktop" "$_tml_x" 54 816 918 -- konsole --separate; then
+                :
+            else
+                _tml_failed=$((_tml_failed + 1))
+                j_msg "-${err}" -p "${PN}: test launch failed (desktop [${_tml_desktop}], x [${_tml_x}])"
+            fi
+        done
+    done
+    if (( _tml_failed > 0 )); then
+        j_msg "-${err}" -p "${PN}: [${_tml_failed}] of four test launches failed"
+        return 1
+    fi
+    j_msg "-${notice}" -p "${PN}: four placement requests completed; managed registration was NOT tested"
+    return 0
+}
+
 #-----[ main script ]----------------------------------------------------------------------------------
 
 # run as regular user, not root
@@ -145,6 +171,10 @@ case ${1:-} in
         shift
         if (( $# < 8 )); then bad_args 'test-launch requires a class, geometry and program'; exit 2; fi
         launch_one_window "$@" ;;
+    test-multi-launch)
+        shift
+        if (( $# != 0 )); then bad_args 'test-multi-launch accepts no operands'; exit 2; fi
+        test_multi_launch ;;
     -h|--help) usage ;;
     -o) action="open";   # open multiple windows
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
