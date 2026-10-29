@@ -1,11 +1,13 @@
-# Step 1.5 — initial task handoff (draft)
+# Step 1.5 — active task handoff
 
-**Status:** TASK SETUP; maintainer approval: `20261028-20:50:35`<br>
-**Decided Location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`<br>
-**Source baseline observed at drafting:** `joetoo-ai/main`, `reference hash to be assigned after merge and new branch creation`<br>
-**Task branch:** not yet created - **name:** `task/joetoo-kwin-step1.5-layout-ssh-workflows`.<br>
+**Status:** Step 1.5a candidate implemented and headless-tested; awaiting maintainer review and publication decision. Step 1.5 objective approved `20261028-20:50:35`; Step 1.5a implementation authorized `20261028-23:49:38`.<br>
+**Canonical location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`<br>
+**Original task-branch baseline:** `fefb8b2059a7d069043bc0506d3386599be58c17` (historical starting commit).<br>
+**Step 1.5a implementation starting HEAD:** `03b3ca493c067f18d434d078fd0c8789de80ca95` (included authorization updates).<br>
+**Task branch:** `task/joetoo-kwin-step1.5-layout-ssh-workflows` (created; active).<br>
+**Current HEAD:** determine dynamically with `git rev-parse HEAD`; do not store a self-referential commit ID here.<br>
 **Product authority:** `../ARCHITECTURE.md` (especially §§3–9 and implementation gate 1.5).<br>
-**Governing rules:** repository-root, workspace and project `AGENTS.md`; current draft role-specific guidance has no authority until activated by maintainer.<br>
+**Governing rules:** repository-root, workspace and project `AGENTS.md`; supplemental role instructions remain draft where their approval caveats have not been removed.<br>
 
 ## 1. Maintainer-approved task definition
 
@@ -32,7 +34,7 @@
 - Historical SSH process/rcfile experiments: `../archive/joetoo-kwin-ssh-rcfile-poc/`, `../archive/joetoo-kwin-ssh-nc-poc/` and documented `ssh_wrapper` conventions.
 - Skills relevant to any affected code: discover current `.agents/skills/` first; inspect actual `script_header_joetoo` interfaces rather than assuming names or signatures.
 
-## 3. Proposed scoped workflow — not authorization
+## 3. Task workflow — authorization boundaries are in Section 4
 
 **Cloud/design/review agent:** inspect source and archived planner/SSH references, propose a minimal decomposition and acceptance tests; report any unresolved geometry/config interface questions to maintainer.
 
@@ -42,9 +44,9 @@
 
 **Native validation:** maintainer performs or separately authorizes X11 on `gmki91` and Wayland on `q552u01`, including SSH reachable/unreachable cases as relevant. No native Step 1.5 results exist yet.
 
-## 4. Authorization and execution controls — maintainer to complete
+## 4. Authorization and execution controls — Step 1.5a
 
-| Control | Initial value / decision pending |
+| Control | Approved scope / retained restrictions |
 | --- | --- |
 | Agent-authorized write paths | `joetoo-kwin` CLI; new Step 1.5a planning helpers under `libexec/` if necessary; relevant `tests/`; new task-support artifacts under `task_step1.5/`; and the agent-owned iteration section of `task_step1.5/HANDOFF.md`. |
 | Read-only reference paths | `archive/`, including historical planner and SSH POCs; existing configuration examples; installed `/usr/sbin/script_header_joetoo`; relevant `joetoo` and `joetoo-upstream` sources, subject to their policies. |
@@ -77,9 +79,17 @@ This handoff is a state/communication record, not an instruction bypass. Propose
 | Iteration | Actor | Base / changed files | Verification | Outcome and next actor |
 | --- | --- | --- | --- | --- |
 | 0 | ChatGPT (drafting assistance) | No repository edits; this proposed handoff only | Documentation/source review, no Step 1.5 test execution | Maintainer to review scope and authorize planning/implementation |
+| 1 | Codex (2026-10-29) | Branch `task/joetoo-kwin-step1.5-layout-ssh-workflows`, HEAD `03b3ca493c067f18d434d078fd0c8789de80ca95`; only this agent-owned record changed | Reread handoff and governing root/workspace/project instructions. Confirmed tracked working tree initially clean, with only the two exempted maintainer-owned untracked artifacts. Required `git fetch origin` failed: `cannot open '.git/FETCH_HEAD': Read-only file system`. No implementation or tests performed. | Step 1.5a authorization confirmed, but baseline-fetch prerequisite could not be completed within client permissions. Stopped before implementation; maintainer to fetch the accepted baseline and provide confirmation or make fetching available. No commit, push, deployment, or protected-repository changes. |
+
+| 2 | Codex (2026-10-29) | Same branch/HEAD `03b3ca493c067f18d434d078fd0c8789de80ca95`; `joetoo-kwin`, new `libexec/joetoo-kwin-plan-functions`, `tests/test_step1_5a_plan.py`, task review/example/test evidence and this record; Iteration 1 preserved | Maintainer verified fetch satisfied, HEAD equals origin/main, no incoming commits; no repeat fetch. 161 Python tests passed (17 new); 2 Node test files passed; Bash syntax, ShellCheck and diff whitespace checks passed. See [review and evidence](step1.5a-review.md). | Step 1.5a candidate ready for maintainer review: defaults/config/CLI precedence, shared geometry and colorized `-c` dry run. No launch/transport calls in headless spies. Explicit configured screen dimensions required; no native validation. Stopped at review/publication boundary; later tranches require maintainer tasking. Both exempted untracked artifacts preserved; no commit, push, deploy or protected-repository changes. |
+
+| 3 | Codex (2026-10-29), focused review fixes | Same branch/HEAD `03b3ca493c067f18d434d078fd0c8789de80ca95`; planner `print_plan`, Python planner tests, new portable test-header fixture, task review/diffs/evidence and this agent-owned record | 165 Python tests passed with no skips (including installed-header integration and ordinary tests with header reads blocked); 2 Node test files passed; Bash syntax, ShellCheck and whitespace checks passed. Initial lint style findings corrected; final checks rerun. CLI and planner geometry/defaults/validation byte-compared unchanged against prior bundle. | Addressed all three review findings: portable ordinary tests with separately guarded installed-header coverage; display-width-aware colorized columns tested with long targets; dry-run wording explicitly permits trusted-config side effects. See [Iteration 3 review and complete diff](step1.5a-iteration3-review.md). Earlier bundle/records and maintainer artifacts preserved. No native tests or scope expansion. Maintainer review next; no staging, commit, push, deploy or protected-repository changes. |
 
 On subsequent iterations, record only material changes, actual evidence and unresolved work. Keep detailed logs, temporary patches, input files and generators alongside this handoff under `task_step1.5/` as appropriate; keep live source/tests in the normal project-root paths.
 
-## 6. Next decision
+## 6. Next gate — Step 1.5a candidate review
 
-**Maintainer:** review branch name recommendation, updated hash, clarify any missing Step 1.5 decisions and authorize steps in initial tranche of task 1.5 to be proposed by agents. The acceptance criteria and permissions must be approved before another agent treats this document as an executable task.
+**Maintainer:** ReviewStep 1.5a candidate implementation, [review report](step1.5a-review.md), [review patch](step1.5a-review.patch), and validation evidence. The Step 1.5a authorization was granted and acted upon; it is **not** awaiting initial task approval. Decide whether to request focused corrections or authorize publication of a reviewed candidate. No commit, push, merge, deployment, or changes to protected repositories are authorized by this handoff alone.
+maintainer decision: [20261029-01:37:01] review complete. Generating commit/push. Will open PR and merge.  Agents are requested to recommend implementation detail for 1.5a.2 for maintainer approval
+
+**Agents:** Preserve the maintainer-owned authorization and task-definition sections. Record subsequent implementation or review iterations in the assigned handoff section. Work under Steps 1.5b–1.5d requires subsequent maintainer tasking and scope decisions.
