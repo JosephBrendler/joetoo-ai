@@ -1,9 +1,9 @@
 # Step 1.5 — active task handoff
 
-**Status:** Step 1.5a candidate implemented and headless-tested; awaiting maintainer review and publication decision. Step 1.5 objective approved `20261028-20:50:35`; Step 1.5a implementation authorized `20261028-23:49:38`.<br>
+**Status:** Step 1.5a is complete. 1.5b is maintainer-approved for development.<br>
 **Canonical location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`<br>
-**Original task-branch baseline:** `fefb8b2059a7d069043bc0506d3386599be58c17` (historical starting commit).<br>
-**Step 1.5a implementation starting HEAD:** `03b3ca493c067f18d434d078fd0c8789de80ca95` (included authorization updates).<br>
+**Original task-branch baseline:** `efb8b2059a7d069043bc0506d3386599be58c17` (historical starting commit).<br>
+**Step 1.5b implementation starting HEAD:** `55f4e31aafc8ba9cadb8e73daae385f7b4ad0522` (included authorization updates).<br>
 **Task branch:** `task/joetoo-kwin-step1.5-layout-ssh-workflows` (created; active).<br>
 **Current HEAD:** determine dynamically with `git rev-parse HEAD`; do not store a self-referential commit ID here.<br>
 **Product authority:** `../ARCHITECTURE.md` (especially §§3–9 and implementation gate 1.5).<br>
