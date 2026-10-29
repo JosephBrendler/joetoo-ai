@@ -1,32 +1,34 @@
 # Step 1.5 — initial task handoff (draft)
 
-**Status:** PROPOSED TASK SETUP; NOT YET AUTHORIZED FOR IMPLEMENTATION.  
-**Intended location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`.  
-**Source baseline observed at drafting:** `joetoo-ai/main`, `99245ca4dc12900761999ed51446201df9f2aae5` (reverify when preparing a task branch).  
-**Task branch:** not yet created/selected. Use a new task branch from the maintainer-approved current baseline, not the merged/deleted Step 1.4d branch.  
-**Product authority:** `../ARCHITECTURE.md` (especially §§3–9 and implementation gate 1.5).  
-**Governing rules:** repository-root, workspace and project `AGENTS.md`; current draft role-specific guidance has no authority until activated by maintainer.
+**Status:** TASK SETUP; maintainer approval: `20261028-20:50:35`<br>
+**Decided Location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`<br>
+**Source baseline observed at drafting:** `joetoo-ai/main`, `reference hash to be assigned after merge and new branch creation`<br>
+**Task branch:** not yet created - **name:** `task/joetoo-kwin-step1.5-layout-ssh-workflows`.<br>
+**Product authority:** `../ARCHITECTURE.md` (especially §§3–9 and implementation gate 1.5).<br>
+**Governing rules:** repository-root, workspace and project `AGENTS.md`; current draft role-specific guidance has no authority until activated by maintainer.<br>
 
-## 1. Maintainer-owned task definition — proposed for approval
+## 1. Maintainer-approved task definition
 
 **Objective:** Turn the verified Step 1.4 multiwindow and asynchronous placement foundation into practical, consistent layout and launch workflows, while preserving the legacy joetoo interaction requirements and both X11/Wayland backends.
 
 **Step 1.5 deliverables, as recorded in the current architecture:**
 
-1. One shared geometry policy for `-c`, `-o`, and interactive `-m l|r` (no duplicate calculations). Default total terminal region 87% of usable display width for 1–3 terminals, with configurable gutters, clickable spacing and right-hand visibility. Four terminals use two-by-two layout; more than four per desktop initially rejected. Respect the supported geometry policy rather than treating the Step 1.4d 1920×1080 fixture as generalized screen detection.
+1. One shared geometry policy for `-c`, `-o`, and interactive `-m l|r` (no duplicate calculations). Default total terminal region 87% of usable display width for 1–3 terminals, with configurable gutters, clickable spacing and right-hand visibility. Four terminals use two-by-two layout; more than four per desktop initially rejected. Respect the supported geometry policy rather than treating the Step 1.4d 1920×1080 fixture as generalized screen detection. Do NOT hard-code "magic numbers" assign default global values which can be overridden by sourcing a config file, and which config may be overridden by (future) explicit cmdline override.  See launch POC and former xdotool_open_windows.conf as legacy references.
 2. `-m l` / `-m r` (`mw` convenience) moves the **active** window to the corresponding left/right two-terminal position on its current virtual desktop. Preserve existing supported `-m DESKTOP X Y [WIDTH HEIGHT]` semantics, including omit-size behavior.
 3. `-c [-f CONFIG]`: validated, colorized **dry-run** plan with no application launches.
 4. `-o [-f CONFIG]`: use the plan to launch/identify/place managed windows. A configured unreachable SSH target still results in a usable, correctly placed Konsole placeholder, retaining the original local interactive Bash and allowing manual retry. Transport failures and placement/registration results must remain independent.
 5. Validate `-v` / `-q` through established `script_header_joetoo` CLI conventions and preserve the requested visibility/gutter/underlay behavior as supported.
+6. Reference associated SKILL.md and employ announce/act/report idiom at notice, info, and debug verbosity, to enable high script-state awareness for user experience.
+7. Maintaner-added (not previously in ARCHITECTURE.md), in joetoo-kwin use script_header_joetoo varlist method to identify and show_config() to display global variable assingments resulting from default->config->cmdline , followed by launch plan from POC, and then confirm_continue_or_exit, and THEN launch
 
 **Non-goals for Step 1.5:** Do not implement `-a`, `-d`, `-x` (1.6), checkpoint recovery (1.7), durable `-S/-r` restore (1.8) or overlay packaging (1.9). Do not turn Phase 1 into broad performance optimization. Destructive authorization and D-Bus security must be addressed before adding destructive methods.
 
-**Proposed success criteria:** configuration dry run never launches; configured windows register and reach expected geometry; SSH placeholder is not classified as a placement failure; existing windows remain unaffected; X11/Wayland native results agree; headless regression suite remains green.
+**Proposed success criteria:** configuration dry run present the "plan" but never launches; configured windows register and reach expected geometry; SSH placeholder is not classified as a placement failure; existing windows remain unaffected; X11/Wayland native results agree; window/session-state race condition risks are mitigated; headless regression suite remains green.
 
 ## 2. Sources to inspect before coding
 
-- Current project root: `joetoo-kwin`, `joetoo-kwin-resident.js`, `libexec/joetoo-kwind`, `libexec/joetoo_kwin_registry.py`, config and related tests.
-- Historical planning prototype: `../archive/step1-candidate/` and `../archive/joetoo-kwin-plan-poc/` (reference only; do not restore stale code wholesale).
+- Current project root: `joetoo-kwin`, `joetoo-kwin-resident.js`, `libexec/joetoo-kwind`, `libexec/joetoo_kwin_registry.py`, config and related tests; legacy xdotool_open_windows; script_header_joetoo.
+- Historical planning prototype: `../archive/step1-candidate/` `joetoo-kwin-launch-poc` and `../archive/joetoo-kwin-plan-poc/` (reference only; do not restore stale code wholesale).
 - Historical SSH process/rcfile experiments: `../archive/joetoo-kwin-ssh-rcfile-poc/`, `../archive/joetoo-kwin-ssh-nc-poc/` and documented `ssh_wrapper` conventions.
 - Skills relevant to any affected code: discover current `.agents/skills/` first; inspect actual `script_header_joetoo` interfaces rather than assuming names or signatures.
 
@@ -44,13 +46,13 @@
 
 | Control | Initial value / decision pending |
 | --- | --- |
-| Approved branch and base SHA | **Pending maintainer approval** |
-| Agent-authorized write paths | **Pending**; expected to be focused project-root source/tests and assigned handoff sections only |
-| Permitted validation commands | **Pending**; likely `python3 -m unittest ...`, `node --test tests/*.js`, `bash -n`, `validate_scripts` where available |
+| Approved branch and base SHA | **Pending** |
+| Agent-authorized write paths | workspace/projects/joetoo-kwin/ including tests/, tools/, task_step1.5/, archive, project-root source/tests and assigned handoff sections only, and in the curret task/branch only) |
+| Permitted validation commands | `python3 -m unittest ...`, `node --test tests/*.js`, `bash -n`, `shellcheck -x`, `validate_scripts` where available |
 | Native host operations | **Not authorized by this document** |
 | Commit/push/PR creation | **Not authorized by this document** |
 | Merge/deploy/official repository integration | **Separate explicit authorization and applicable repository policies** |
-| Stop conditions | Missing/changed baseline, dirty/untracked files at risk, authority conflict, unexpected host effects, failing or inconclusive tests, request to expand scope |
+| Stop conditions | Missing/changed baseline, dirty/untracked files at risk, authority conflict, unexpected host effects, failing or inconclusive tests, agent request to expand scope |
 
 This handoff is a state/communication record, not an instruction bypass. Proposed details do not confer new permissions merely by being written here.
 
@@ -64,4 +66,4 @@ On subsequent iterations, record only material changes, actual evidence and unre
 
 ## 6. Next decision
 
-**Maintainer:** review this proposed scope, clarify any missing Step 1.5 decisions and authorize the next bounded planning or implementation action. The acceptance criteria and permissions must be approved before another agent treats this document as an executable task.
+**Maintainer:** review branch name recommendation, updated hash, clarify any missing Step 1.5 decisions and authorize steps in initial tranche of task 1.5 to be proposed by agents. The acceptance criteria and permissions must be approved before another agent treats this document as an executable task.
