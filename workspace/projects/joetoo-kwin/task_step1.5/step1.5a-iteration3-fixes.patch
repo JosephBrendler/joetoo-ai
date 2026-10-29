@@ -1,0 +1,543 @@
+--- a/task_step1.5/HANDOFF.md
++++ b/task_step1.5/HANDOFF.md
+@@ -81,6 +81,8 @@
+ 
+ | 2 | Codex (2026-10-29) | Same branch/HEAD `03b3ca493c067f18d434d078fd0c8789de80ca95`; `joetoo-kwin`, new `libexec/joetoo-kwin-plan-functions`, `tests/test_step1_5a_plan.py`, task review/example/test evidence and this record; Iteration 1 preserved | Maintainer verified fetch satisfied, HEAD equals origin/main, no incoming commits; no repeat fetch. 161 Python tests passed (17 new); 2 Node test files passed; Bash syntax, ShellCheck and diff whitespace checks passed. See [review and evidence](step1.5a-review.md). | Step 1.5a candidate ready for maintainer review: defaults/config/CLI precedence, shared geometry and colorized `-c` dry run. No launch/transport calls in headless spies. Explicit configured screen dimensions required; no native validation. Stopped at review/publication boundary; later tranches require maintainer tasking. Both exempted untracked artifacts preserved; no commit, push, deploy or protected-repository changes. |
+ 
++| 3 | Codex (2026-10-29), focused review fixes | Same branch/HEAD `03b3ca493c067f18d434d078fd0c8789de80ca95`; planner `print_plan`, Python planner tests, new portable test-header fixture, task review/diffs/evidence and this agent-owned record | 165 Python tests passed with no skips (including installed-header integration and ordinary tests with header reads blocked); 2 Node test files passed; Bash syntax, ShellCheck and whitespace checks passed. Initial lint style findings corrected; final checks rerun. CLI and planner geometry/defaults/validation byte-compared unchanged against prior bundle. | Addressed all three review findings: portable ordinary tests with separately guarded installed-header coverage; display-width-aware colorized columns tested with long targets; dry-run wording explicitly permits trusted-config side effects. See [Iteration 3 review and complete diff](step1.5a-iteration3-review.md). Earlier bundle/records and maintainer artifacts preserved. No native tests or scope expansion. Maintainer review next; no staging, commit, push, deploy or protected-repository changes. |
++
+ On subsequent iterations, record only material changes, actual evidence and unresolved work. Keep detailed logs, temporary patches, input files and generators alongside this handoff under `task_step1.5/` as appropriate; keep live source/tests in the normal project-root paths.
+ 
+ ## 6. Next decision
+--- a/libexec/joetoo-kwin-plan-functions
++++ b/libexec/joetoo-kwin-plan-functions
+@@ -168,12 +168,40 @@
+ }
+ 
+ print_plan() {
+-    local _pp_i
+-    j_msg "-${notice}" -p "DRY RUN: [${#planned_desktop[@]}] windows; no programs launched"
++    local _pp_i _pp_col _pp_length _pp_padding _pp_line _pp_color
++    local -a _pp_cells=(Desktop Slot Program Mode Target Layer X Y Width Height)
++    local -a _pp_widths=()
++    j_msg "-${notice}" -p "DRY RUN: [${#planned_desktop[@]}] windows; planner launches no applications"
++    j_msg "-${notice}" -p "The sourced trusted Bash configuration may have side effects."
+     j_msg "-${notice}" -p "Configured display: [${screen_width}x${screen_height}] (not autodetected); terminal width budget: [${terminal_width_percent}%]"
+-    j_msg "-${notice}" -m "${BCon}Desktop Slot Program Mode Target Layer X Y Width Height${Boff}"
+     for ((_pp_i=0; _pp_i<${#planned_desktop[@]}; _pp_i++)); do
+-        j_msg "-${notice}" -m "${BGon}${planned_desktop[$_pp_i]} ${planned_slot[$_pp_i]} ${planned_program[$_pp_i]} ${planned_mode[$_pp_i]} ${planned_target[$_pp_i]:--} ${planned_layer[$_pp_i]} ${planned_x[$_pp_i]} ${planned_y[$_pp_i]} ${planned_width[$_pp_i]} ${planned_height[$_pp_i]}${Boff}"
+-    done
+-    return 0
+-}
++        _pp_cells+=("${planned_desktop[$_pp_i]}" "${planned_slot[$_pp_i]}"
++            "${planned_program[$_pp_i]}" "${planned_mode[$_pp_i]}" "${planned_target[$_pp_i]:--}"
++            "${planned_layer[$_pp_i]}" "${planned_x[$_pp_i]}" "${planned_y[$_pp_i]}"
++            "${planned_width[$_pp_i]}" "${planned_height[$_pp_i]}")
++    done
++    # Measure visible columns using the header, including longer targets. Keep
++    # padding plain: pad() adds a color reset, while each row is colored by j_msg.
++    # printf only generates spaces; severity, colors and routing stay with j_msg.
++    for ((_pp_i=0; _pp_i<${#_pp_cells[@]}; _pp_i++)); do
++        _pp_col=$(( _pp_i % 10 ))
++        _pp_length=$(get_msg_len "${_pp_cells[$_pp_i]}") || return 1
++        if (( _pp_length > ${_pp_widths[$_pp_col]:-0} )); then
++            _pp_widths[_pp_col]=$_pp_length
++        fi
++    done
++    _pp_line=""; _pp_color=$BCon
++    for ((_pp_i=0; _pp_i<${#_pp_cells[@]}; _pp_i++)); do
++        _pp_col=$(( _pp_i % 10 ))
++        _pp_line+=${_pp_cells[$_pp_i]}
++        if (( _pp_col == 9 )); then
++            j_msg "-${notice}" -m "${_pp_color}${_pp_line}${Boff}"
++            _pp_line=""; _pp_color=$BGon
++        else
++            _pp_length=$(get_msg_len "${_pp_cells[$_pp_i]}") || return 1
++            printf -v _pp_padding '%*s' "$(( _pp_widths[_pp_col] - _pp_length + 2 ))" ''
++            _pp_line+=$_pp_padding
++        fi
++    done
++    return 0
++}
+--- a/tests/test_step1_5a_plan.py
++++ b/tests/test_step1_5a_plan.py
+@@ -3,9 +3,9 @@
+ # SPDX-License-Identifier: GPL-3.0-or-later
+ """Headless CLI/planner tests: disposable config/header, forbidden-operation spies.
+ 
+-The verbosity helper is read from the installed header, not reimplemented.
+-A separate smoke test exercises the complete installed UI/header with logging
+-and the root gate disabled only in a temporary client copy.
++Ordinary tests use a checked-in header double and need only Bash/Python.
++Separate, availability-guarded integration tests exercise the installed header
++with logging and the root gate disabled only in a temporary client copy.
+ """
+ import os
+ from pathlib import Path
+@@ -14,12 +14,13 @@
+ import subprocess
+ import tempfile
+ import unittest
++from unittest import mock
+ 
+ ROOT = Path(__file__).resolve().parents[1]
+ HEADER = Path('/usr/sbin/script_header_joetoo')
+ 
+ 
+-class PlannerTests(unittest.TestCase):
++class PlannerHarness:
+     def setUp(self):
+         self.tmp = tempfile.TemporaryDirectory()
+         self.addCleanup(self.tmp.cleanup)
+@@ -39,30 +40,9 @@
+             spy.write_text('#!/bin/sh\nprintf "%s\\n" "$0 $*" >> "$TRACE"\nexit 99\n')
+             spy.chmod(0o755)
+         # UI spies verify stage order and effective varlist without depending on
+-        # terminal width or emoji availability. Use the actual verbosity helper.
+-        header_source = HEADER.read_text()
+-        start = header_source.index('_pc_action_verbosity()')
+-        end = header_source.index('\n_pc_action_quiet()', start)
++        # terminal width, emoji availability or an installed joetoo header.
+         self.mock_header = self.folder / 'header'
+-        self.mock_header.write_text(r'''
+-TRUE=0; FALSE=''; notice=5; info=6; debug=7; err=3
+-BCon=''; BGon=''; Boff=''
+-checknotroot() { :; }
+-j_msg() {
+-    local level=5 arg
+-    for arg in "$@"; do [[ $arg =~ ^-([0-7])$ ]] && level=${BASH_REMATCH[1]}; done
+-    if (( verbosity >= level )); then printf '%s\n' "${*: -1}"; fi
+-    return 0
+-}
+-isint() { [[ $1 =~ ^-?[0-9]+$ ]]; }
+-handle_result() { return "${REPORT_RC:-0}"; }
+-decode_right_status() { printf 'DECODE:%s\n' "$1"; }
+-show_config() {
+-    local name
+-    printf 'CONFIG\n'
+-    for name in $varlist; do printf '%s=%s\n' "$name" "${!name}"; done
+-}
+-''' + header_source[start:end])
++        shutil.copyfile(ROOT / 'tests/fixtures/step1_5a_header.bash', self.mock_header)
+         self.client.write_text((ROOT / 'joetoo-kwin').read_text().replace(
+             'source /usr/sbin/script_header_joetoo',
+             'source "' + str(self.mock_header) + '"', 1))
+@@ -91,8 +71,29 @@
+     @staticmethod
+     def rows(output):
+         return [line.split() for line in output.splitlines()
+-                if re.match(r'^\d+ \d+ ', line)]
+-
++                if re.match(r'^\d+\s+\d+\s+', line)]
++
++    def assert_columns_aligned(self, output, target):
++        plain = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', output)
++        lines = plain.splitlines()
++        header = next(line for line in lines if 'Desktop' in line and 'Target' in line)
++        data = [line for line in lines if target in line or 'underlay-proposed' in line]
++        # Ignore diagnostics/config lines; these two rows carry geometry cells.
++        data = [line for line in data if re.search(r'\b(?:terminal|underlay-proposed)\s+\d+', line)]
++        self.assertEqual(len(data), 2)
++        self.assertIn(target, data[0])
++        self.assertEqual(data[0].index(target), header.index('Target'))
++        for line in data:
++            self.assertEqual(line.index('konsole') if 'konsole' in line else line.index('vncviewer'),
++                             header.index('Program'))
++            self.assertEqual(line.index('terminal') if 'underlay-proposed' not in line
++                             else line.index('underlay-proposed'), header.index('Layer'))
++            fields = line[header.index('Layer'):].split()
++            self.assertEqual(len(fields), 5)
++            self.assertEqual(line.index(fields[1], header.index('Layer')), header.index('X'))
++
++
++class PlannerTests(PlannerHarness, unittest.TestCase):
+     def test_default_budget_and_effective_config_before_plan(self):
+         output = self.plan()
+         self.assertLess(output.index('CONFIG'), output.index('DRY RUN'))
+@@ -228,6 +229,57 @@
+             self.assertIn('MOVE:1 -19 -54 816 918', self.run_cli(*args))
+         self.run_cli('-m', '1', '2', '3', expected=2)
+ 
++
++    def test_long_targets_keep_header_and_rows_aligned(self):
++        target = 'long-destination-name.for-headless-review.invalid'
++        self.write_config(['1|konsole|ssh|' + target, '1|vncviewer|via-ssh|short'])
++        self.assert_columns_aligned(self.plan(), target)
++
++    def test_dry_run_explains_trusted_config_side_effects(self):
++        marker = self.folder / 'config-side-effect'
++        self.write_config(extra=f'printf "configured" > "{marker}"')
++        output = self.plan()
++        self.assertEqual(marker.read_text(), 'configured')
++        self.assertIn('planner launches no applications', output)
++        self.assertIn('sourced trusted Bash configuration may have side effects', output)
++        self.assertNotIn('no programs launched', output)
++
++
++class PlannerPortabilityTests(unittest.TestCase):
++    def test_ordinary_tests_do_not_read_installed_header(self):
++        original = Path.read_text
++
++        def without_installed_header(path, *args, **kwargs):
++            if path == HEADER:
++                raise FileNotFoundError('installed header unavailable in portable test')
++            return original(path, *args, **kwargs)
++
++        # Run the ordinary suite under the missing-header condition, including
++        # setup. This protects against reintroducing an unconditional dependency.
++        suite = unittest.defaultTestLoader.loadTestsFromTestCase(PlannerTests)
++        result = unittest.TestResult()
++        with mock.patch.object(Path, 'read_text', without_installed_header):
++            suite.run(result)
++        self.assertEqual(result.errors, [])
++        self.assertEqual(result.failures, [])
++        self.assertFalse(result.skipped)
++
++
++INSTALLED_HEADER_AVAILABLE = all(
++    (HEADER.parent / name).is_file() for name in (
++        'script_header_joetoo', 'script_header_joetoo_uiassets',
++        'script_header_joetoo_unicode', 'script_header_joetoo_registries'))
++
++
++@unittest.skipUnless(INSTALLED_HEADER_AVAILABLE, 'installed joetoo header/modules unavailable')
++class InstalledHeaderPlannerTests(PlannerHarness, unittest.TestCase):
++    def setUp(self):
++        super().setUp()
++        # Only this integration class sources the system header.
++        self.client.write_text((ROOT / 'joetoo-kwin').read_text().replace(
++            'source /usr/sbin/script_header_joetoo',
++            'source /usr/sbin/script_header_joetoo\nchecknotroot() { :; }', 1))
++
+     def test_installed_header_config_and_color_smoke(self):
+         # No host operations: source the real header with logging off, then
+         # override only the root check in this disposable client copy.
+@@ -239,3 +291,20 @@
+         self.assertIn('DRY RUN: [2]', plain)
+         self.assertIn('terminal_width_percent', plain)
+         self.assertIn('816', plain)
++
++    def test_installed_header_long_target_columns_and_verbosity(self):
++        target = 'long-destination-name.for-header-review.invalid'
++        self.write_config(['1|konsole|ssh|' + target, '1|vncviewer|via-ssh|short'])
++        self.assert_columns_aligned(self.plan(), target)
++        for flags, expected in ((('-vv',), 7), (('-v', '-q'), 5), (('-qqqqqqqq',), 0)):
++            # The real header suppresses ordinary output at low verbosity;
++            # append a test-only state probe to the disposable client.
++            original = self.client.read_text()
++            self.client.write_text(original + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
++            try:
++                self.assertIn(f'TEST_VERBOSITY={expected}', self.plan(*flags))
++            finally:
++                self.client.write_text(original)
++        self.env['INTERACTIVE'] = '0'
++        self.client.write_text(original + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
++        self.assertIn('TEST_VERBOSITY=5', self.plan('-qqqqqqqq'))
+diff --git a/tests/fixtures/step1_5a_header.bash b/tests/fixtures/step1_5a_header.bash
+new file mode 100644
+--- /dev/null
++++ b/tests/fixtures/step1_5a_header.bash
+@@ -0,0 +1,38 @@
++#!/bin/bash
++# Copyright 2025-2026 Joseph Brendler
++# SPDX-License-Identifier: GPL-3.0-or-later
++# Portable test double: only the planner's header interface, not production UI.
++# Installed-header tests separately check the real helper and rendering behavior.
++# Globals below form the test header API; other state is supplied by the client.
++# shellcheck disable=SC2034,SC2154
++TRUE=0; FALSE=''; notice=5; info=6; debug=7; err=3
++BCon=''; BGon=''; Boff=''
++checknotroot() { :; }
++j_msg() {
++    local level=5 arg
++    for arg in "$@"; do [[ $arg =~ ^-([0-7])$ ]] && level=${BASH_REMATCH[1]}; done
++    if (( verbosity >= level )); then printf '%s\n' "${*: -1}"; fi
++    return 0
++}
++isint() { [[ $1 =~ ^-?[0-9]+$ ]]; }
++handle_result() { return "${REPORT_RC:-0}"; }
++decode_right_status() { printf 'DECODE:%s\n' "$1"; }
++show_config() {
++    local name
++    printf 'CONFIG\n'
++    for name in $varlist; do printf '%s=%s\n' "$name" "${!name}"; done
++}
++
++# Model the documented verbosity bounds without reading system installations.
++_pc_action_verbosity() {
++    local floor=0
++    [[ ! $INTERACTIVE ]] || floor=$notice
++    case $_pc_operator in
++        +) (( verbosity < 7 )) && verbosity=$((verbosity + 1)) ;;
++        -) (( verbosity > floor )) && verbosity=$((verbosity - 1)) ;;
++        *) return 1 ;;
++    esac
++    return 0
++}
++# Tests use plain ASCII cells; real display-width handling is integration-tested.
++get_msg_len() { printf '%s\n' "${#1}"; }
+diff --git a/task_step1.5/step1.5a-iteration3-review.md b/task_step1.5/step1.5a-iteration3-review.md
+new file mode 100644
+--- /dev/null
++++ b/task_step1.5/step1.5a-iteration3-review.md
+@@ -0,0 +1,59 @@
++# Step 1.5a focused review fixes — Iteration 3
++
++Branch: `task/joetoo-kwin-step1.5-layout-ssh-workflows`.
++HEAD remains `03b3ca493c067f18d434d078fd0c8789de80ca95`.
++The existing review bundle is preserved as the pre-fix snapshot; its source
++and handoff bytes matched the working files before this iteration.
++
++The three findings are addressed:
++
++- Ordinary planner tests now use `tests/fixtures/step1_5a_header.bash`, a small
++  checked-in test double. They no longer extract a function from the installed
++  header during setup. A portability regression reruns the ordinary suite with
++  reads of the installed header blocked. Separate installed-header integration
++  tests retain actual UI and verbosity coverage and skip explicitly when the
++  header or required companion modules are absent. Both integration tests ran
++  here; neither was skipped.
++- Plan columns now measure each cell through the header's `get_msg_len` and
++  grow to fit the longest value. Padding is plain spaces, then whole rows pass
++  through `j_msg` with the existing severity/color policy. `pad` was inspected;
++  it emits color resets, so plain space generation avoids resetting row color
++  between cells. Long-target alignment is checked with the portable double and
++  real installed header. Targets remain complete; very wide tables can still
++  wrap in a narrow terminal.
++- The message now says the planner launches no applications and explicitly says
++  sourced trusted Bash configuration may have side effects. A regression uses
++  a disposable config marker to verify that distinction while retaining the
++  forbidden GUI/D-Bus/transport-operation spies.
++
++Only `print_plan` changed in the planner. Its entire geometry/defaults/validation
++prefix and the CLI were byte-compared against the prior bundle and remain
++unchanged. No Step 1.5b–1.5d functionality was added.
++
++Final validation:
++
++| Check | Actual result | Evidence |
++| --- | --- | --- |
++| `python3 -m unittest discover -s tests -v` | 165 passed, no skips; includes 18 ordinary planner tests, 1 portability check and 2 installed-header tests | [Python log](step1.5a-iteration3-python-tests.log) |
++| `node --test tests/*.js` | Both test files passed | [Node log](step1.5a-iteration3-node-tests.log) |
++| `bash -n` on CLI, planner, new shell fixture and example config | Passed | [Syntax log](step1.5a-iteration3-syntax.log) |
++| `shellcheck -x` on CLI, planner and new shell fixture | Passed, no diagnostics | [ShellCheck log](step1.5a-iteration3-shellcheck.log) (empty) |
++| Whitespace and scope review | Passed; new untracked implementation/test files explicitly included in complete diff | Review patches below |
++
++The first lint pass identified two unnecessary dollar signs in new arithmetic
++array indices; these were corrected and lint, syntax and Python regression were
++rerun successfully. Prior validation logs and the previous bundle remain intact.
++Native X11/Wayland behavior was not tested in this iteration.
++
++Review artifacts:
++
++- [Focused changes against the prior review bundle](step1.5a-iteration3-fixes.patch).
++- [Complete candidate diff against HEAD, including new files](step1.5a-iteration3-complete.patch).
++
++The complete patch includes the CLI, planner, Python tests, new shell fixture,
++example configuration, handoff, review records and validation logs. Historical
++patch/bundle artifacts are preserved separately rather than embedded again.
++Both patches omit the Kate swap, maintainer historical output and unrelated
++files. Only the agent-owned handoff section is updated. Nothing was staged,
++committed, pushed or deployed; protected repositories were not altered.
++Next actor: maintainer review at the existing publication boundary.
+diff --git a/task_step1.5/step1.5a-iteration3-python-tests.log b/task_step1.5/step1.5a-iteration3-python-tests.log
+new file mode 100644
+--- /dev/null
++++ b/task_step1.5/step1.5a-iteration3-python-tests.log
+@@ -0,0 +1,175 @@
++test_global_default (test_config_chain.ConfigChainTests.test_global_default) ... ok
++test_individual_user_overrides_both (test_config_chain.ConfigChainTests.test_individual_user_overrides_both) ... ok
++test_missing_home_refuses_start_without_root_dot_config (test_config_chain.ConfigChainTests.test_missing_home_refuses_start_without_root_dot_config) ... ok
++test_obsolete_bridge_cannot_recurse_forever (test_config_chain.ConfigChainTests.test_obsolete_bridge_cannot_recurse_forever) ... ok
++test_pseudo_boolean_guard_is_canonical_and_reentrant (test_config_chain.ConfigChainTests.test_pseudo_boolean_guard_is_canonical_and_reentrant) ... ok
++test_relative_home_refuses_start (test_config_chain.ConfigChainTests.test_relative_home_refuses_start) ... ok
++test_relative_xdg_config_home_refuses_start (test_config_chain.ConfigChainTests.test_relative_xdg_config_home_refuses_start) ... ok
++test_system_user_service_overrides_global (test_config_chain.ConfigChainTests.test_system_user_service_overrides_global) ... ok
++test_uninstalled_global_uses_openrc_loaded_user_override (test_config_chain.ConfigChainTests.test_uninstalled_global_uses_openrc_loaded_user_override) ... ok
++test_xdg_unset_falls_back_to_home_dot_config (test_config_chain.ConfigChainTests.test_xdg_unset_falls_back_to_home_dot_config) ... ok
++test_literal_assignment_not_shell_case_execution (test_openrc_user_setup.ConfigurationTests.test_literal_assignment_not_shell_case_execution) ... ok
++test_literal_openrc_assignment_from_empty (test_openrc_user_setup.ConfigurationTests.test_literal_openrc_assignment_from_empty) ... ok
++test_migrate_exact_broken_legacy_case_block (test_openrc_user_setup.ConfigurationTests.test_migrate_exact_broken_legacy_case_block) ... ok
++test_preserve_existing_literal_allowlist_and_unrelated_settings (test_openrc_user_setup.ConfigurationTests.test_preserve_existing_literal_allowlist_and_unrelated_settings) ... ok
++test_reject_unknown_or_partial_managed_block (test_openrc_user_setup.ConfigurationTests.test_reject_unknown_or_partial_managed_block) ... ok
++test_check_is_non_mutating (test_openrc_user_setup.InstallerIntegrationTests.test_check_is_non_mutating) ... ok
++test_full_install_makes_both_directories_and_literal_rc_conf (test_openrc_user_setup.InstallerIntegrationTests.test_full_install_makes_both_directories_and_literal_rc_conf) ... ok
++test_override_missing_causes_check_failure (test_openrc_user_setup.InstallerIntegrationTests.test_override_missing_causes_check_failure) ... ok
++test_preserves_existing_rc_conf_settings_and_repair_upgrade (test_openrc_user_setup.InstallerIntegrationTests.test_preserves_existing_rc_conf_settings_and_repair_upgrade) ... ok
++test_refuse_symlink_configuration_without_installing (test_openrc_user_setup.InstallerIntegrationTests.test_refuse_symlink_configuration_without_installing) ... ok
++test_refuses_replacing_running_service (test_openrc_user_setup.InstallerIntegrationTests.test_refuses_replacing_running_service) ... ok
++test_rejects_symlink_user_override (test_openrc_user_setup.InstallerIntegrationTests.test_rejects_symlink_user_override) ... ok
++test_update_backs_up_existing_user_override (test_openrc_user_setup.InstallerIntegrationTests.test_update_backs_up_existing_user_override) ... ok
++test_xdg_config_home_override (test_openrc_user_setup.InstallerIntegrationTests.test_xdg_config_home_override) ... ok
++test_packaged_global_entry_point_and_user_override_contract (test_openrc_user_setup.TemplateTests.test_packaged_global_entry_point_and_user_override_contract) ... ok
++test_poc_override_wins_after_global_value_is_set (test_openrc_user_setup.TemplateTests.test_poc_override_wins_after_global_value_is_set) ... ok
++test_launch_class_and_single_flight (test_step1_2a.BrokerTests.test_launch_class_and_single_flight) ... ok
++test_legacy_protocol_move_and_completion (test_step1_2a.BrokerTests.test_legacy_protocol_move_and_completion) ... ok
++test_no_spawn_and_signal_registration (test_step1_2a.BrokerTests.test_no_spawn_and_signal_registration) ... ok
++test_preflight_rejects_root_and_untrusted_runtime (test_step1_2a.BrokerTests.test_preflight_rejects_root_and_untrusted_runtime) ... ok
++test_load_run_once_and_reuse_existing (test_step1_2a.ResidentTests.test_load_run_once_and_reuse_existing) ... ok
++test_reject_relative_resident_path (test_step1_2a.ResidentTests.test_reject_relative_resident_path) ... ok
++test_shell_parses_and_preserves_default_supervisor (test_step1_2a.ServiceTests.test_shell_parses_and_preserves_default_supervisor) ... ok
++test_start_pre_accepts_owned_runtime_and_never_launches_apps (test_step1_2a.ServiceTests.test_start_pre_accepts_owned_runtime_and_never_launches_apps) ... ok
++test_start_pre_fails_without_runtime_directory (test_step1_2a.ServiceTests.test_start_pre_fails_without_runtime_directory) ... ok
++test_existing_added_and_changed_share_identity (test_step1_3a.ObservationTests.test_existing_added_and_changed_share_identity) ... ok
++test_hundreds_of_drag_updates_do_not_evict_lifecycle (test_step1_3a.ObservationTests.test_hundreds_of_drag_updates_do_not_evict_lifecycle) ... ok
++test_interleaved_windows_coalesce_by_uuid (test_step1_3a.ObservationTests.test_interleaved_windows_coalesce_by_uuid) ... ok
++test_invalid_uuid_and_field_shapes_rejected (test_step1_3a.ObservationTests.test_invalid_uuid_and_field_shapes_rejected) ... ok
++test_lifecycle_history_is_bounded_independently (test_step1_3a.ObservationTests.test_lifecycle_history_is_bounded_independently) ... ok
++test_non_geometry_changes_and_refresh_deduplication (test_step1_3a.ObservationTests.test_non_geometry_changes_and_refresh_deduplication) ... ok
++test_old_move_contract_still_works (test_step1_3a.ObservationTests.test_old_move_contract_still_works) ... ok
++test_removed_deletes_current_but_preserves_last_snapshot (test_step1_3a.ObservationTests.test_removed_deletes_current_but_preserves_last_snapshot) ... ok
++test_uppercase_braced_uuid_normalized (test_step1_3a.ObservationTests.test_uppercase_braced_uuid_normalized) ... ok
++test_bad_snapshot_does_not_partially_mutate_state (test_step1_3a2.InventoryTests.test_bad_snapshot_does_not_partially_mutate_state) ... ok
++test_broker_retries_until_inventory_acknowledged (test_step1_3a2.InventoryTests.test_broker_retries_until_inventory_acknowledged) ... joetoo-kwind: KWin resident reused: joetoo-bridge
++joetoo-kwind: KWin resident reused: joetoo-bridge
++ok
++test_coordinator_refreshes_reused_resident_only (test_step1_3a2.InventoryTests.test_coordinator_refreshes_reused_resident_only) ... joetoo-kwind: KWin resident reused: joetoo-bridge
++joetoo-kwind: KWin resident started: joetoo-bridge
++ok
++test_inventory_replaces_stale_windows_without_fake_removal (test_step1_3a2.InventoryTests.test_inventory_replaces_stale_windows_without_fake_removal) ... ok
++test_later_event_updates_and_older_event_does_not_rollback (test_step1_3a2.InventoryTests.test_later_event_updates_and_older_event_does_not_rollback) ... ok
++test_new_resident_source_replaces_old_without_ownership (test_step1_3a2.InventoryTests.test_new_resident_source_replaces_old_without_ownership) ... ok
++test_bad_pid_and_second_pid_are_rejected (test_step1_3b.CorrelationProbeTests.test_bad_pid_and_second_pid_are_rejected) ... ok
++test_changed_only_event_does_not_produce_class_candidate (test_step1_3b.CorrelationProbeTests.test_changed_only_event_does_not_produce_class_candidate) ... ok
++test_changed_only_is_not_proof_of_new_window (test_step1_3b.CorrelationProbeTests.test_changed_only_is_not_proof_of_new_window) ... ok
++test_class_candidates_include_multiple_new_windows_in_event_order (test_step1_3b.CorrelationProbeTests.test_class_candidates_include_multiple_new_windows_in_event_order) ... ok
++test_closed_window_keeps_addition_identity_as_diagnostic_only (test_step1_3b.CorrelationProbeTests.test_closed_window_keeps_addition_identity_as_diagnostic_only) ... ok
++test_delegated_chrome_timeout_reports_class_candidate (test_step1_3b.CorrelationProbeTests.test_delegated_chrome_timeout_reports_class_candidate) ... ok
++test_evicted_history_is_reported_as_incomplete (test_step1_3b.CorrelationProbeTests.test_evicted_history_is_reported_as_incomplete) ... ok
++test_existing_same_pid_is_not_reused_for_new_launch (test_step1_3b.CorrelationProbeTests.test_existing_same_pid_is_not_reused_for_new_launch) ... ok
++test_incomplete_history_never_declares_single_pid_match (test_step1_3b.CorrelationProbeTests.test_incomplete_history_never_declares_single_pid_match) ... ok
++test_late_class_discovery_is_reported_without_fake_addition (test_step1_3b.CorrelationProbeTests.test_late_class_discovery_is_reported_without_fake_addition) ... ok
++test_new_exact_pid_uuid_is_matched_after_quiet_period (test_step1_3b.CorrelationProbeTests.test_new_exact_pid_uuid_is_matched_after_quiet_period) ... ok
++test_preexisting_and_wrong_class_windows_are_not_candidates (test_step1_3b.CorrelationProbeTests.test_preexisting_and_wrong_class_windows_are_not_candidates) ... ok
++test_requires_synchronized_inventory (test_step1_3b.CorrelationProbeTests.test_requires_synchronized_inventory) ... ok
++test_restarted_resident_invalidates_in_flight_request (test_step1_3b.CorrelationProbeTests.test_restarted_resident_invalidates_in_flight_request) ... ok
++test_same_class_different_pid_cannot_trigger_ambiguous (test_step1_3b.CorrelationProbeTests.test_same_class_different_pid_cannot_trigger_ambiguous) ... ok
++test_same_pid_ambiguity_still_reports_class_candidates (test_step1_3b.CorrelationProbeTests.test_same_pid_ambiguity_still_reports_class_candidates) ... ok
++test_second_active_probe_refused (test_step1_3b.CorrelationProbeTests.test_second_active_probe_refused) ... ok
++test_stale_source_does_not_mix_class_candidates (test_step1_3b.CorrelationProbeTests.test_stale_source_does_not_mix_class_candidates) ... ok
++test_terminal_result_keeps_snapshot_unchanged (test_step1_3b.CorrelationProbeTests.test_terminal_result_keeps_snapshot_unchanged) ... ok
++test_title_token_is_a_hint_not_ownership_evidence (test_step1_3b.CorrelationProbeTests.test_title_token_is_a_hint_not_ownership_evidence) ... ok
++test_title_token_remains_a_hint_in_class_candidates (test_step1_3b.CorrelationProbeTests.test_title_token_remains_a_hint_in_class_candidates) ... ok
++test_two_new_windows_same_pid_are_ambiguous (test_step1_3b.CorrelationProbeTests.test_two_new_windows_same_pid_are_ambiguous) ... ok
++test_unrelated_same_class_pid_not_adopted (test_step1_3b.CorrelationProbeTests.test_unrelated_same_class_pid_not_adopted) ... ok
++test_arms_before_launch_and_passes_shell_pid_to_broker (test_step1_3b_cli.ProbeCLITests.test_arms_before_launch_and_passes_shell_pid_to_broker) ... ok
++test_bounded_completed_results_not_an_unbounded_run_history (test_step1_4a_registry.RegistryTests.test_bounded_completed_results_not_an_unbounded_run_history) ... ok
++test_exact_uuid_presence_changes_do_not_affect_other_windows (test_step1_4a_registry.RegistryTests.test_exact_uuid_presence_changes_do_not_affect_other_windows) ... ok
++test_incomplete_history_or_non_pid_match_is_not_eligible (test_step1_4a_registry.RegistryTests.test_incomplete_history_or_non_pid_match_is_not_eligible) ... ok
++test_intention_is_not_registration (test_step1_4a_registry.RegistryTests.test_intention_is_not_registration) ... ok
++test_invalid_identifiers_and_states (test_step1_4a_registry.RegistryTests.test_invalid_identifiers_and_states) ... ok
++test_mutable_records_do_not_leak_through_lookup (test_step1_4a_registry.RegistryTests.test_mutable_records_do_not_leak_through_lookup) ... ok
++test_one_to_one_alias_and_uuid_and_multiple_windows (test_step1_4a_registry.RegistryTests.test_one_to_one_alias_and_uuid_and_multiple_windows) ... ok
++test_placement_is_not_registration_or_connection (test_step1_4a_registry.RegistryTests.test_placement_is_not_registration_or_connection) ... ok
++test_preexisting_window_is_not_eligible (test_step1_4a_registry.RegistryTests.test_preexisting_window_is_not_eligible) ... ok
++test_registration_rejects_duplicate_uuid_without_mutating (test_step1_4a_registry.RegistryTests.test_registration_rejects_duplicate_uuid_without_mutating) ... ok
++test_serialized_active_request_and_no_implicit_reuse (test_step1_4a_registry.RegistryTests.test_serialized_active_request_and_no_implicit_reuse) ... ok
++test_source_change_and_missing_current_window_fail_closed (test_step1_4a_registry.RegistryTests.test_source_change_and_missing_current_window_fail_closed) ... ok
++test_unmatched_and_ambiguous_requests_never_register (test_step1_4a_registry.RegistryTests.test_unmatched_and_ambiguous_requests_never_register) ... ok
++test_unreachable_ssh_keeps_window_but_not_a_session (test_step1_4a_registry.RegistryTests.test_unreachable_ssh_keeps_window_but_not_a_session) ... ok
++test_class_hint_cannot_register_unrelated_existing_window (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_class_hint_cannot_register_unrelated_existing_window) ... ok
++test_diagnostic_probe_can_begin_after_unpolled_managed_timeout (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_diagnostic_probe_can_begin_after_unpolled_managed_timeout) ... ok
++test_diagnostic_request_blocks_private_launch_until_complete (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_diagnostic_request_blocks_private_launch_until_complete) ... ok
++test_different_source_invalidates_all_registered_windows (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_different_source_invalidates_all_registered_windows) ... ok
++test_duplicate_uuid_cannot_replace_registered_identity (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_duplicate_uuid_cannot_replace_registered_identity) ... ok
++test_expired_unpolled_private_launch_does_not_block_next_launch (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_expired_unpolled_private_launch_does_not_block_next_launch) ... ok
++test_invalid_inventory_is_atomic_for_managed_presence (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_invalid_inventory_is_atomic_for_managed_presence) ... ok
++test_missing_and_changed_uuid_are_reconciled_independently (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_missing_and_changed_uuid_are_reconciled_independently) ... ok
++test_new_broker_does_not_restore_registry_without_checkpoint (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_new_broker_does_not_restore_registry_without_checkpoint) ... ok
++test_no_implicit_ownership_from_sync_and_public_probe (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_no_implicit_ownership_from_sync_and_public_probe) ... ok
++test_pid_change_turns_registration_uncertain (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_pid_change_turns_registration_uncertain) ... ok
++test_private_launch_registers_multiple_windows_without_replacing_history (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_private_launch_registers_multiple_windows_without_replacing_history) ... ok
++test_private_request_does_not_accept_public_pid_or_result (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_private_request_does_not_accept_public_pid_or_result) ... ok
++test_reobserved_uuid_cannot_be_registered_a_second_time (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_reobserved_uuid_cannot_be_registered_a_second_time) ... ok
++test_same_source_inventory_does_not_adopt_missing_windows (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_same_source_inventory_does_not_adopt_missing_windows) ... ok
++test_source_change_cancels_inflight_registration_without_adoption (test_step1_4b_broker.BrokerRegistryIntegrationTests.test_source_change_cancels_inflight_registration_without_adoption) ... ok
++test_poc_installer_manages_registry_module_with_daemon (test_step1_4b_broker.RegistryInstallerContractTests.test_poc_installer_manages_registry_module_with_daemon)
++The user-owned POC must install/check/back up the new dependency. ... ok
++test_dbus_signatures_are_additive_and_read_only (test_step1_4c_queries.ReadOnlyManagedQueryTests.test_dbus_signatures_are_additive_and_read_only) ... ok
++test_empty_and_unsynchronized_queries (test_step1_4c_queries.ReadOnlyManagedQueryTests.test_empty_and_unsynchronized_queries) ... ok
++test_missing_and_uncertain_remain_registered (test_step1_4c_queries.ReadOnlyManagedQueryTests.test_missing_and_uncertain_remain_registered) ... ok
++test_multiple_registrations_and_both_lookup_keys (test_step1_4c_queries.ReadOnlyManagedQueryTests.test_multiple_registrations_and_both_lookup_keys) ... ok
++test_no_arbitrary_recipe_or_extra_observation_fields (test_step1_4c_queries.ReadOnlyManagedQueryTests.test_no_arbitrary_recipe_or_extra_observation_fields) ... ok
++test_observation_does_not_create_managed_entries (test_step1_4c_queries.ReadOnlyManagedQueryTests.test_observation_does_not_create_managed_entries) ... ok
++test_queries_do_not_change_registry_or_observer_state (test_step1_4c_queries.ReadOnlyManagedQueryTests.test_queries_do_not_change_registry_or_observer_state) ... ok
++test_running_request_is_not_a_managed_window (test_step1_4c_queries.ReadOnlyManagedQueryTests.test_running_request_is_not_a_managed_window) ... ok
++test_unknown_and_invalid_identifiers (test_step1_4c_queries.ReadOnlyManagedQueryTests.test_unknown_and_invalid_identifiers) ... ok
++test_failed_launch_returns_failure_without_aborting_other_attempts (test_step1_4d_cli.TestMultiLaunchFixtureTests.test_failed_launch_returns_failure_without_aborting_other_attempts) ... ok
++test_fixture_keeps_ordinary_open_flag_unimplemented (test_step1_4d_cli.TestMultiLaunchFixtureTests.test_fixture_keeps_ordinary_open_flag_unimplemented) ... ok
++test_four_fixed_placements_and_separate_process_requests (test_step1_4d_cli.TestMultiLaunchFixtureTests.test_four_fixed_placements_and_separate_process_requests) ... ok
++test_failed_registration_is_failure (test_step1_4d_managed_cli.ManagedLaunchCLITests.test_failed_registration_is_failure) ... ok
++test_invalid_slot_does_not_arm_request (test_step1_4d_managed_cli.ManagedLaunchCLITests.test_invalid_slot_does_not_arm_request) ... ok
++test_successful_transaction_arms_before_launch_and_hands_off_pid (test_step1_4d_managed_cli.ManagedLaunchCLITests.test_successful_transaction_arms_before_launch_and_hands_off_pid) ... ok
++test_existing_window_cannot_be_claimed (test_step1_4d_managed_ipc.ManagedLaunchWireTests.test_existing_window_cannot_be_claimed) ... ok
++test_failed_second_arm_preserves_previous_request (test_step1_4d_managed_ipc.ManagedLaunchWireTests.test_failed_second_arm_preserves_previous_request) ... ok
++test_four_real_arms_four_positive_registrations (test_step1_4d_managed_ipc.ManagedLaunchWireTests.test_four_real_arms_four_positive_registrations) ... ok
++test_invalid_slot_and_wrong_pid_token_fail_closed (test_step1_4d_managed_ipc.ManagedLaunchWireTests.test_invalid_slot_and_wrong_pid_token_fail_closed) ... ok
++test_no_phantom_placement_after_unsynchronized_refusal (test_step1_4d_managed_ipc.ManagedLaunchWireTests.test_no_phantom_placement_after_unsynchronized_refusal) ... ok
++test_placement_status_is_not_registration_evidence (test_step1_4d_managed_ipc.ManagedLaunchWireTests.test_placement_status_is_not_registration_evidence) ... ok
++test_same_pid_two_new_windows_ambiguous (test_step1_4d_managed_ipc.ManagedLaunchWireTests.test_same_pid_two_new_windows_ambiguous) ... ok
++test_ambiguous_same_pid_cannot_register_a_window (test_step1_4d_multiwindow.FourWindowRegistryTests.test_ambiguous_same_pid_cannot_register_a_window) ... ok
++test_disappearance_is_isolated_from_other_registrations (test_step1_4d_multiwindow.FourWindowRegistryTests.test_disappearance_is_isolated_from_other_registrations) ... ok
++test_failed_correlation_does_not_prevent_subsequent_windows (test_step1_4d_multiwindow.FourWindowRegistryTests.test_failed_correlation_does_not_prevent_subsequent_windows) ... ok
++test_new_resident_invalidates_all_without_re_adoption (test_step1_4d_multiwindow.FourWindowRegistryTests.test_new_resident_invalidates_all_without_re_adoption) ... ok
++test_preexisting_window_does_not_become_managed (test_step1_4d_multiwindow.FourWindowRegistryTests.test_preexisting_window_does_not_become_managed) ... ok
++test_two_desktops_four_independent_registrations (test_step1_4d_multiwindow.FourWindowRegistryTests.test_two_desktops_four_independent_registrations) ... ok
++test_active_verify_blocks_overlapping_move (test_step1_4d_placement.AsyncPlacementTests.test_active_verify_blocks_overlapping_move) ... ok
++test_delayed_success_not_premature_error (test_step1_4d_placement.AsyncPlacementTests.test_delayed_success_not_premature_error) ... ok
++test_disappearance_is_terminal_error (test_step1_4d_placement.AsyncPlacementTests.test_disappearance_is_terminal_error) ... ok
++test_legacy_complete_still_supported (test_step1_4d_placement.AsyncPlacementTests.test_legacy_complete_still_supported) ... ok
++test_malformed_uuid_refused (test_step1_4d_placement.AsyncPlacementTests.test_malformed_uuid_refused) ... ok
++test_managed_placement_before_registration (test_step1_4d_placement.AsyncPlacementTests.test_managed_placement_before_registration) ... ok
++test_managed_registered_before_delayed_placement (test_step1_4d_placement.AsyncPlacementTests.test_managed_registered_before_delayed_placement) ... ok
++test_managed_timeout_reports_failed_not_registration_failure (test_step1_4d_placement.AsyncPlacementTests.test_managed_timeout_reports_failed_not_registration_failure) ... ok
++test_mismatched_placement_uuid_fails_closed (test_step1_4d_placement.AsyncPlacementTests.test_mismatched_placement_uuid_fails_closed) ... ok
++test_stale_size_timeout_is_real_failure (test_step1_4d_placement.AsyncPlacementTests.test_stale_size_timeout_is_real_failure) ... ok
++test_unrelated_window_does_not_satisfy_uuid (test_step1_4d_placement.AsyncPlacementTests.test_unrelated_window_does_not_satisfy_uuid) ... ok
++test_installed_header_config_and_color_smoke (test_step1_5a_plan.InstalledHeaderPlannerTests.test_installed_header_config_and_color_smoke) ... ok
++test_installed_header_long_target_columns_and_verbosity (test_step1_5a_plan.InstalledHeaderPlannerTests.test_installed_header_long_target_columns_and_verbosity) ... ok
++test_ordinary_tests_do_not_read_installed_header (test_step1_5a_plan.PlannerPortabilityTests.test_ordinary_tests_do_not_read_installed_header) ... ok
++test_bad_cli_and_conflicting_operations (test_step1_5a_plan.PlannerTests.test_bad_cli_and_conflicting_operations) ... ok
++test_common_option_order_and_clusters (test_step1_5a_plan.PlannerTests.test_common_option_order_and_clusters) ... ok
++test_config_overrides_defaults_then_cli_overrides_config (test_step1_5a_plan.PlannerTests.test_config_overrides_defaults_then_cli_overrides_config) ... ok
++test_custom_offsets_height_and_row_gutters (test_step1_5a_plan.PlannerTests.test_custom_offsets_height_and_row_gutters) ... ok
++test_default_budget_and_effective_config_before_plan (test_step1_5a_plan.PlannerTests.test_default_budget_and_effective_config_before_plan) ... ok
++test_dry_run_explains_trusted_config_side_effects (test_step1_5a_plan.PlannerTests.test_dry_run_explains_trusted_config_side_effects) ... ok
++test_graphical_windows_do_not_consume_terminal_slots (test_step1_5a_plan.PlannerTests.test_graphical_windows_do_not_consume_terminal_slots) ... ok
++test_invalid_geometry_inputs (test_step1_5a_plan.PlannerTests.test_invalid_geometry_inputs) ... ok
++test_invalid_records_and_terminal_limit (test_step1_5a_plan.PlannerTests.test_invalid_records_and_terminal_limit) ... ok
++test_long_targets_keep_header_and_rows_aligned (test_step1_5a_plan.PlannerTests.test_long_targets_keep_header_and_rows_aligned) ... ok
++test_missing_and_failed_config (test_step1_5a_plan.PlannerTests.test_missing_and_failed_config) ... ok
++test_missing_explicit_dimensions (test_step1_5a_plan.PlannerTests.test_missing_explicit_dimensions) ... ok
++test_move_grammar_preserves_negative_coordinates_without_loading_config (test_step1_5a_plan.PlannerTests.test_move_grammar_preserves_negative_coordinates_without_loading_config) ... ok
++test_one_three_four_and_alternate_display (test_step1_5a_plan.PlannerTests.test_one_three_four_and_alternate_display) ... ok
++test_reporting_fault_is_not_silent_success (test_step1_5a_plan.PlannerTests.test_reporting_fault_is_not_silent_success) ... ok
++test_selected_config_sourced_once_and_default_path_used (test_step1_5a_plan.PlannerTests.test_selected_config_sourced_once_and_default_path_used) ... ok
++test_verbosity_clamps_and_interactive_floor (test_step1_5a_plan.PlannerTests.test_verbosity_clamps_and_interactive_floor) ... ok
++test_wrong_array_types (test_step1_5a_plan.PlannerTests.test_wrong_array_types) ... ok
++
++----------------------------------------------------------------------
++Ran 165 tests in 5.779s
++
++OK
+diff --git a/task_step1.5/step1.5a-iteration3-node-tests.log b/task_step1.5/step1.5a-iteration3-node-tests.log
+new file mode 100644
+--- /dev/null
++++ b/task_step1.5/step1.5a-iteration3-node-tests.log
+@@ -0,0 +1,10 @@
++✔ tests/test_step1_3a.js (52.192202ms)
++✔ tests/test_step1_4d_placement.js (47.635947ms)
++ℹ tests 2
++ℹ suites 0
++ℹ pass 2
++ℹ fail 0
++ℹ cancelled 0
++ℹ skipped 0
++ℹ todo 0
++ℹ duration_ms 61.333827
+diff --git a/task_step1.5/step1.5a-iteration3-syntax.log b/task_step1.5/step1.5a-iteration3-syntax.log
+new file mode 100644
+--- /dev/null
++++ b/task_step1.5/step1.5a-iteration3-syntax.log
+@@ -0,0 +1 @@
++bash -n exit status: 0

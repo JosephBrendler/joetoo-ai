@@ -1,0 +1,10 @@
+✔ tests/test_step1_3a.js (52.192202ms)
+✔ tests/test_step1_4d_placement.js (47.635947ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 61.333827

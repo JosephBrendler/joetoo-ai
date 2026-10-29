@@ -27,12 +27,112 @@ iface=org.joetoo.KWinBridge
 #-----[ functions ]-------------------------------------------------------------------------------------
 
 usage() {
+    j_msg "-${notice}" -p "Usage: ${PN} [-v|-q ...] -c [-f CONFIG]  (dry run; trusted Bash config)"
+    j_msg "-${notice}" -p "       CONFIG defaults to /etc/joetoo-kwin/joetoo-kwin.conf; set screen_width/screen_height explicitly"
     j_msg "-${notice}" -p "Usage: ${PN} -m DESKTOP X Y WIDTH HEIGHT"
     j_msg "-${notice}" -p "       ${PN} move DESKTOP X Y WIDTH HEIGHT  (compatibility)"
     j_msg "-${notice}" -p "       ${PN} test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]"
     j_msg "-${notice}" -p "       ${PN} test-multi-launch  (TEST ONLY: register 4 local Konsoles)"
     j_msg "-${notice}" -p "       ${PN} -h"
-    j_msg "-${notice}" -p "       ${PN} -c/-o (not yet integrated)"
+    j_msg "-${notice}" -p "       ${PN} -o (not yet integrated)"
+}
+
+# Retain the positional move/test grammar. getopts handles common options and
+# clusters, stopping at -m so negative coordinates remain positional values.
+parse_cmdline() {
+    local _pc_opt
+    OPTIND=1
+    cli_operation=""
+    config=/etc/joetoo-kwin/joetoo-kwin.conf
+    CONFIG_SELECTED=$FALSE
+    cli_verbosity=()
+    case ${1:-} in
+        move|test-launch|test-multi-launch|--help)
+            cli_operation=$1; shift; cli_args=("$@"); return 0 ;;
+    esac
+    while getopts ':cmof:vqhLxdsSli' _pc_opt; do
+        case $_pc_opt in
+            v|q) cli_verbosity+=("$_pc_opt") ;;
+            f) config=$OPTARG; CONFIG_SELECTED=$TRUE ;;
+            c|m|o|h|L|x|d|s|S|l|i)
+                [[ -z $cli_operation ]] || { bad_args 'select exactly one operation'; return 2; }
+                cli_operation=-$_pc_opt
+                [[ $_pc_opt != m ]] || break ;;
+            :) bad_args "option -${OPTARG} requires a value"; return 2 ;;
+            *) bad_args "unknown option -${OPTARG}"; return 2 ;;
+        esac
+    done
+    shift "$((OPTIND - 1))"
+    cli_args=("$@")
+    [[ -n $cli_operation ]] || { bad_args 'select an operation'; return 2; }
+    if [[ $CONFIG_SELECTED && $cli_operation != -c && $cli_operation != -o ]]; then
+        bad_args '-f is supported only with -c or -o'; return 2
+    fi
+    if [[ $cli_operation != -m && $# != 0 ]]; then
+        bad_args 'unexpected operands'; return 2
+    fi
+    return 0
+}
+
+apply_cli_verbosity() {
+    local _acv_opt
+    if [[ ! $verbosity =~ ^[0-7]$ ]]; then
+        j_msg "-${err}" -p "${PN}: verbosity must be between 0 and 7"; return 2
+    fi
+    # The header supplies the helper; its macro is normally set by process_cmdline.
+    _pc_adjust_verbosity="verbosity=\$(( verbosity \${_pc_operator} 1 ))"
+    for _acv_opt in "${cli_verbosity[@]}"; do
+        case $_acv_opt in v) _pc_operator=+ ;; q) _pc_operator=- ;; esac
+        _pc_action_verbosity || return $?
+    done
+    unset -v _pc_adjust_verbosity _pc_operator
+    return 0
+}
+
+# Keep the supervised action's status distinct from the reporting bitmask.
+plan_stage() {
+    local _ps_level=$1 _ps_label=$2 _ps_action_rc _ps_report_rc
+    shift 2
+    j_msg "-${_ps_level}" -pn "${_ps_label} ..."
+    if "$@"; then _ps_action_rc=0; else _ps_action_rc=$?; fi
+    if handle_result "$_ps_action_rc" completed failed "$_ps_level"; then
+        _ps_report_rc=0
+    else
+        _ps_report_rc=$?
+    fi
+    if (( _ps_report_rc & ~1 )); then
+        j_msg "-${err}" -p "${PN}: result reporting failed [${_ps_report_rc}]"
+        decode_right_status "$_ps_report_rc"
+    fi
+    (( _ps_action_rc == 0 )) || return "$_ps_action_rc"
+    (( _ps_report_rc == 0 )) || return 1
+    return 0
+}
+
+check_plan() {
+    local _cp_script_dir
+    _cp_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+    # Candidate helper is colocated under libexec; no installed-file changes.
+    source "${_cp_script_dir}/libexec/joetoo-kwin-plan-functions" || return 1
+    plan_defaults
+    if [[ ! -f $config || ! -r $config ]]; then
+        j_msg "-${err}" -p "${PN}: configuration unreadable [${config}]"; return 2
+    fi
+    # This is executable, trusted Bash, as in the legacy tool. It is not a sandbox.
+    # Defaults precede config; CLI verbosity overrides are deliberately applied last.
+    # shellcheck source=/dev/null
+    source "$config" || return 2
+    apply_cli_verbosity || return $?
+    plan_stage "$notice" 'Validating configured launch intent' validate_plan || return $?
+    plan_stage "$info" 'Calculating shared geometry' calculate_plan || return $?
+    # Explicit varlist avoids unrelated workflow/status-file initialization.
+    local varlist="PN BUILD config verbosity screen_width screen_height desktop_limit"
+    varlist+=" terminal_width_percent terminal_gap_percent terminal_height_percent"
+    varlist+=" terminal_left_percent terminal_top_percent terminal_row_gap_percent"
+    varlist+=" graphical_left_percent graphical_top_percent graphical_width_percent graphical_height_percent"
+    show_config || return $?
+    print_plan
+    # -c ends here. Confirmation and launch belong to the later -o tranche.
 }
 
 bad_args() {
@@ -227,6 +327,11 @@ test_multi_launch() {
 checknotroot
 
 # parse cmdline - this block and usage above must grow as options are implemented
+parse_cmdline "$@" || exit $?
+# -c loads configuration before applying these overrides; other operations do
+# not need layout configuration and retain their existing operational behavior.
+if [[ $cli_operation != -c ]]; then apply_cli_verbosity || exit $?; fi
+set -- "$cli_operation" "${cli_args[@]}"
 case ${1:-} in
     -m|move)
         shift
@@ -257,8 +362,7 @@ case ${1:-} in
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
         exit 2 ;;
     -c) action="check";   # validate configuration
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
+        check_plan ;;
     -s) action="status";   # status of broker
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
         exit 2 ;;
@@ -269,12 +373,6 @@ case ${1:-} in
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
         exit 2 ;;
     -i) action="info";   # info on one window
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
-    -v) action="increase verbisity";
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
-    -q) action="decrease verbisity";
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
         exit 2 ;;
     *) bad_args 'unrecognized operation'; exit 2 ;;
