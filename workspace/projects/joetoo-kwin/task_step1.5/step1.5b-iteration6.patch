@@ -1,0 +1,318 @@
+diff --git a/workspace/projects/joetoo-kwin/joetoo-kwin b/workspace/projects/joetoo-kwin/joetoo-kwin
+index 70ccc0a..40e1570 100755
+--- a/workspace/projects/joetoo-kwin/joetoo-kwin
++++ b/workspace/projects/joetoo-kwin/joetoo-kwin
+@@ -197,15 +197,41 @@ wait_for_request() {
+         _wr_status="${PN}: ${_wr_label} timed out (request [${_wr_request}])"
+     fi
+     if [[ $_wr_label == optional-move ]]; then
++        # Historical output convention, superseded by the verbosity refinement below:
+         # The full broker detail owns this result line; no preceding open announcement.
+-        j_msg "-${_wr_level}" -pn "$_wr_status"
+-        report_action "$_wr_rc" "$_wr_level"
++        # Detail now follows the concise verification result at info/error severity.
++        local _wr_report_rc
++        if report_action "$_wr_rc" "$notice"; then _wr_report_rc=0; else _wr_report_rc=$?; fi
++        if (( _wr_rc == 0 )); then
++            j_msg "-${info}" -p "$_wr_status"
++        else
++            j_msg "-${err}" -p "$_wr_status"
++        fi
++        j_msg "-${debug}" -p "Request [${_wr_request}]: status after [$((_wr_attempt + 1))] polls"
++        return "$_wr_report_rc"
+     else
+         j_msg "-${_wr_level}" -p "$_wr_status"
+         return "$_wr_rc"
+     fi
+ }
+ 
++# qdbus6 exposes error names as a first diagnostic line, not a structured
++# exception API. Match only exact known names; always retain the original text.
++report_move_submission_failure() {
++    local _msf_detail=$1 _msf_name=${1%%$'\n'*}
++    case $_msf_name in
++        "Error: ${iface}.Busy")
++            j_msg "-${err}" -p 'Move busy: previous placement request has not completed' ;;
++        "Error: ${iface}.Unsupported"|'Error: org.freedesktop.DBus.Error.UnknownMethod'|'Error: org.freedesktop.DBus.Error.UnknownInterface'|\
++        "Cannot find '${iface}.SubmitMove' in object ${path} at ${bus}")
++            j_msg "-${err}" -p 'Optional moves require compatible broker and resident support' ;;
++        "Error: ${iface}.BadArguments"|"Error: ${iface}.InvalidRequest"|'Error: org.freedesktop.DBus.Error.InvalidArgs')
++            j_msg "-${err}" -p 'Move rejected: invalid request' ;;
++        *) j_msg "-${err}" -p 'Move submission failed' ;;
++    esac
++    [[ -z $_msf_detail ]] || j_msg "-${err}" -p "$_msf_detail"
++}
++
+ move_active_window() {
+     local _ma_request
+     validate_geometry "$@" || return $?
+@@ -291,8 +317,7 @@ move_window() {
+     fi
+     if ! report_action "$_mw_action_rc" "$notice"; then
+         if (( _mw_action_rc != 0 )); then
+-            [[ -z $_mw_request ]] || j_msg "-${err}" -p "$_mw_request"
+-            j_msg "-${err}" -p 'Move rejected; optional moves require compatible broker and resident support'
++            report_move_submission_failure "$_mw_request"
+         fi
+         return 1
+     fi
+@@ -307,7 +332,8 @@ move_window() {
+         [[ $_mw_action_rc == 0 || -z $_mw_detail ]] || j_msg "-${err}" -p "$_mw_detail"
+         return 1
+     fi
+-    j_msg "-${notice}" -p 'Verifying active-window move ...'
++    j_msg "-${debug}" -p "Request [${_mw_request}]: preserveDesktop=${_mw_pd} preservePosition=${_mw_pp} preserveSize=${_mw_ps}"
++    j_msg "-${notice}" -pn 'Verifying active-window move ...'
+     wait_for_request "$_mw_request" optional-move
+ }
+ 
+diff --git a/workspace/projects/joetoo-kwin/libexec/joetoo-kwind b/workspace/projects/joetoo-kwin/libexec/joetoo-kwind
+index 2f61f05..4b67eac 100755
+--- a/workspace/projects/joetoo-kwin/libexec/joetoo-kwind
++++ b/workspace/projects/joetoo-kwin/libexec/joetoo-kwind
+@@ -371,10 +371,16 @@ class Broker(dbus.service.Object):
+                                   and observed["on_all_desktops"] == r["expected_sticky"])
+                 if desired and desktop_ok:
+                     r["state"] = "OK"
++                    # Optional moves report verified membership, not the zero
++                    # request placeholder. Keep legacy Submit's format intact.
++                    after = f'[{r["desktop"]}]'
++                    if r["kind"] == "move_optional":
++                        after = ('[all desktops]' if observed["on_all_desktops"] else
++                                 '[' + ','.join(map(str, sorted(observed["desktops"]))) + ']')
+                     r["detail"] = (f'{r["kind"]}: {observed["caption"]} '
+                                    f'(pid={observed["pid"]}) '
+                                    f'before={r["placement_before"]} '
+-                                   f'after=[{r["desktop"]}] '
++                                   f'after={after} '
+                                    f'({geo["x"]},{geo["y"]}) '
+                                    f'{geo["width"]}x{geo["height"]} '
+                                    f'tiled={str(r["placement_tiled"]).lower()} '
+diff --git a/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md b/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md
+index 3fe0650..e95fca4 100644
+--- a/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md
++++ b/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md
+@@ -94,6 +94,8 @@ This handoff is a state/communication record, not an instruction bypass. Propose
+ 
+ | 5 | Codex (2026-10-29), announce–act–report follow-up | Same Step 1.5b branch and HEAD `9ea76c6491e1fe2815bea514c6891dc7d5460433`; preserved existing candidate and maintainer skill edits. Changed CLI messaging, relevant CLI tests and agent-owned evidence only | Reviewed updated skill/demonstration and installed header. Demonstration at verbosity 7 reached its intentional simulated failure (exit 1). 190 Python tests passed, including installed-header integration; 3 Node test files passed; Bash syntax, ShellCheck and whitespace checks passed. See [focused patch](step1.5b-iteration5.patch) and iteration5 validation logs. | Submission and shortcut dispatch now finish their announced lines immediately; verification detail and completion share a result line. Original action failures and auxiliary reporting faults remain distinct. Demo review finding: timestamp example captures `result` but passes the later `j_msg` status to `handle_result`; maintainer skill left untouched. Native formatting review remains with maintainer; no native operations, staging, commit, push, deployment or protected writes. |
+ 
++| 6 | Codex (2026-10-29), focused native-feedback corrections | Clean existing task branch at `22e93f21e27c38f28e60fd3c2fa4f99523f13d68`; CLI, bounded broker success reporting, two Step 1.5b Python test files, agent evidence and this record | 197 Python tests passed without skips, including real installed-header integration; 3 Node test files passed; Bash syntax, ShellCheck and whitespace checks passed. See [Iteration 6 review](step1.5b-iteration6-review.md) and [complete patch](step1.5b-iteration6.patch). | Verified desktop membership replaces optional-move placeholder zero; submission errors classified by exact known D-Bus names with original diagnostics retained; notice/info/debug reporting refined. Exact geometry comparison unchanged: regression demonstrates roundoff sensitivity, but native timeout also had displaced position, so its cause remains unproven. Maintainer reviews and validates corrections natively next; publication remains gated. No fetch, native operations, staging, commit, push, deploy, skill or protected-repository edits. |
++
+ On subsequent iterations, record only material changes, actual evidence and unresolved work. Keep detailed logs, temporary patches, input files and generators alongside this handoff under `task_step1.5/` as appropriate; keep live source/tests in the normal project-root paths.
+ 
+ ## 6. Next gate — Step 1.5a candidate review
+diff --git a/workspace/projects/joetoo-kwin/tests/test_step1_5b_broker.py b/workspace/projects/joetoo-kwin/tests/test_step1_5b_broker.py
+index e5aad0c..a8a1975 100644
+--- a/workspace/projects/joetoo-kwin/tests/test_step1_5b_broker.py
++++ b/workspace/projects/joetoo-kwin/tests/test_step1_5b_broker.py
+@@ -141,3 +141,49 @@ class OptionalBrokerTests(unittest.TestCase):
+         self.broker.Complete(rid, 'VERIFY', json.dumps(self.details()))
+         self.sync(source='new-observer')
+         self.assertTrue(self.broker.Status(rid).startswith('ERROR'))
++
++    def test_verified_membership_report_never_uses_placeholder(self):
++        for desktops, sticky, expected in [([2], False, '[2]'),
++                                           ([2, 1], False, '[1,2]'),
++                                           ([], True, '[all desktops]')]:
++            with self.subTest(desktops=desktops, sticky=sticky):
++                self.broker.request = None
++                self.window.update(desktops=desktops, on_all_desktops=sticky)
++                self.sync()
++                rid = self.arm((0, 19, 54, 816, 918, True, False, False))
++                value = self.details()
++                self.broker.Complete(rid, 'VERIFY', json.dumps(value))
++                self.window.update(value['resolved']); self.sync()
++                status = self.broker.Status(rid)
++                self.assertTrue(status.startswith('OK'), status)
++                self.assertIn('after=' + expected + ' ', status)
++                self.assertNotIn('after=[0]', status)
++
++    def test_exact_geometry_rejects_roundoff_and_real_displacement(self):
++        # Document current exact comparison without changing its contract.
++        for actual in ({'width': 816.0000000000002},
++                       {'x': 921.7951127814015, 'y': 76.30364413909359}):
++            with self.subTest(actual=actual):
++                self.broker.request = None
++                rid = self.arm((0, 19, 54, 816, 918, True, False, False))
++                value = self.details()
++                self.broker.Complete(rid, 'VERIFY', json.dumps(value))
++                self.window.update(value['resolved'])
++                self.window['geometry'].update(actual)
++                self.sync()
++                self.assertEqual(self.broker.Status(rid), 'VERIFYING')
++                self.now += 16
++                self.assertIn('ERROR placement confirmation timed out', self.broker.Status(rid))
++
++    def test_legacy_verified_desktop_report_unchanged(self):
++        rid = self.broker.Submit(2, 19, 54, 816, 918)
++        self.broker.Take()
++        self.broker.Complete(rid, 'VERIFY', json.dumps({
++            'window_uuid': WINDOW_ID, 'before': '[1] old frame',
++            'tiled': False, 'fullscreen': False}))
++        self.window.update(desktops=[2], on_all_desktops=False)
++        self.window['geometry'].update(x=19, y=54, width=816, height=918)
++        self.sync()
++        status = self.broker.Status(rid)
++        self.assertTrue(status.startswith('OK move:'), status)
++        self.assertIn('after=[2] (19,54) 816x918', status)
+diff --git a/workspace/projects/joetoo-kwin/tests/test_step1_5b_cli.py b/workspace/projects/joetoo-kwin/tests/test_step1_5b_cli.py
+index bcaa347..dfa606d 100644
+--- a/workspace/projects/joetoo-kwin/tests/test_step1_5b_cli.py
++++ b/workspace/projects/joetoo-kwin/tests/test_step1_5b_cli.py
+@@ -16,7 +16,10 @@ qdbus6() {
+     case $3 in
+         *.SubmitMove|*.Submit)
+             printf 'CALL:%s\\n' "$*" >> "$TRACE"
+-            [[ ${REJECT_MOVE:-} != yes ]] || return 1
++            if [[ ${REJECT_MOVE:-} == yes ]]; then
++                printf '%s\\n' "${MOVE_ERROR:-Error: org.joetoo.KWinBridge.Unsupported}" >&2
++                return 1
++            fi
+             printf 'request-1\\n' ;;
+         *.Status) printf '%s\\n' "${MOVE_STATUS:-OK verified}" ;;
+         *invokeShortcut)
+@@ -93,6 +96,41 @@ qdbus6() {
+         self.assertIn('result reporting failed [32]', self.result.stdout + self.result.stderr)
+         self.assertNotIn('Move rejected', self.result.stdout + self.result.stderr)
+ 
++    def test_submission_error_names_and_diagnostics(self):
++        self.env['REJECT_MOVE'] = 'yes'
++        cases = [
++            ('Error: org.joetoo.KWinBridge.Busy\nPrevious request has not completed', 'Move busy:'),
++            ('Error: org.joetoo.KWinBridge.Unsupported\nResident lacks protocol 1', 'compatible broker'),
++            ('Error: org.freedesktop.DBus.Error.UnknownMethod\nNo method', 'compatible broker'),
++            ("Cannot find 'org.joetoo.KWinBridge.SubmitMove' in object /org/joetoo/KWinBridge at org.joetoo.KWinBridge", 'compatible broker'),
++            ('Error: org.joetoo.KWinBridge.BadArguments\nInvalid preservation flags', 'invalid request'),
++            ('Error: org.freedesktop.DBus.Error.InvalidArgs\nWrong signature', 'invalid request'),
++            ('Error: org.freedesktop.DBus.Error.NoReply\nConnection timed out', 'Move submission failed'),
++            ('Transport failed with text mentioning org.joetoo.KWinBridge.Busy', 'Move submission failed')]
++        for diagnostic, label in cases:
++            with self.subTest(diagnostic=diagnostic):
++                self.env['MOVE_ERROR'] = diagnostic
++                self.assertEqual(len(self.run_move(['-m', '2'], 1)), 1)
++                output = self.result.stdout + self.result.stderr
++                self.assertIn(label, output)
++                # The installed header may wrap long diagnostics.
++                self.assertIn(diagnostic.splitlines()[-1].split()[-1], output)
++                if label != 'compatible broker':
++                    self.assertNotIn('compatible broker', output)
++
++    def test_success_verbosity_and_failure_detail(self):
++        self.env['MOVE_STATUS'] = 'OK window-identity before=[1] after=[1] geometry-details'
++        for switches, detail, protocol in [([], False, False), (['-v'], True, False),
++                                            (['-vv'], True, True)]:
++            self.run_move([*switches, '-m', '2'])
++            output = self.result.stdout + self.result.stderr
++            self.assertEqual('window-identity' in output, detail)
++            self.assertEqual('preserveDesktop=' in output, protocol)
++            self.assertIn('Verifying active-window move', output)
++        self.env['MOVE_STATUS'] = 'ERROR placement confirmation timed out: geometry-details'
++        self.run_move(['-m', '2'], 1)
++        self.assertIn('geometry-details', self.result.stdout + self.result.stderr)
++
+ 
+ @unittest.skipUnless(INSTALLED_HEADER_AVAILABLE, 'installed joetoo header/modules unavailable')
+ class InstalledHeaderMoveTests(MoveTests):
+@@ -109,6 +147,6 @@ class InstalledHeaderMoveTests(MoveTests):
+         # Check descriptive completion precedes that cursor movement on each line.
+         text = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', self.result.stdout)
+         for label in ('Submitting active-window move ...',
+-                      'Invoking active-window move shortcut ...', 'OK verified'):
++                      'Invoking active-window move shortcut ...', 'Verifying active-window move ...'):
+             self.assertRegex(text, re.escape(label) + r'[^\n]*\(completed\)')
+         self.assertNotRegex(text, r'Verifying active-window move[^\n]*OK verified')
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/task_step1.5/step1.5b-iteration6-node.log
+@@ -0,0 +1,11 @@
++✔ tests/test_step1_3a.js (54.940118ms)
++✔ tests/test_step1_4d_placement.js (39.675931ms)
++✔ tests/test_step1_5b_move.js (52.140147ms)
++ℹ tests 3
++ℹ suites 0
++ℹ pass 3
++ℹ fail 0
++ℹ cancelled 0
++ℹ skipped 0
++ℹ todo 0
++ℹ duration_ms 65.390417
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/task_step1.5/step1.5b-iteration6-python.log
+@@ -0,0 +1,9 @@
++.............................................joetoo-kwind: KWin resident reused: joetoo-bridge
++joetoo-kwind: KWin resident reused: joetoo-bridge
++.joetoo-kwind: KWin resident reused: joetoo-bridge
++joetoo-kwind: KWin resident started: joetoo-bridge
++.......................................................................................................................................................
++----------------------------------------------------------------------
++Ran 197 tests in 8.178s
++
++OK
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/task_step1.5/step1.5b-iteration6-review.md
+@@ -0,0 +1,62 @@
++# Step 1.5b focused native-feedback corrections
++
++Baseline: clean `task/joetoo-kwin-step1.5b-interactive-move` at
++`22e93f21e27c38f28e60fd3c2fa4f99523f13d68`. No fetch performed.
++Current Section 4 permits these bounded CLI/broker/test/evidence edits.
++Maintainer skill and demonstration remained read-only.
++
++## Changes
++
++- Broker optional-move success uses verified observed membership: `after=[2]`,
++  `after=[1,2]`, or `after=[all desktops]`. Legacy Submit reporting is unchanged.
++- CLI recognizes exact qdbus6 error-name lines for Busy, Unsupported,
++  UnknownMethod/UnknownInterface, BadArguments/InvalidRequest/InvalidArgs.
++  It also recognizes the exact missing-SubmitMove diagnostic previously observed.
++  Unknown failures get a generic submission failure label. Original diagnostics
++  are retained in every case. qdbus6 exposes text rather than structured exceptions;
++  no arbitrary message-body keyword matching or new IPC dependency was added.
++- Notice verification now closes its concise announcement with a result. Info
++  (`-v`) shows the full verified window/desktop/geometry detail; debug (`-vv`)
++  adds request identity, preservation flags and polling count. Failures retain
++  details at error severity. Action status remains separate from reporting status.
++- No signature, grammar, geometry policy, capture, ownership, concurrency,
++  resident or Step 1.5c changes.
++
++## Precision finding and separate proposal
++
++The broker compares each observed x/y/width/height with the resolved request
++using Python `==`. Numerically equal integer/float values match, and preserved
++fractional values can match exactly. A new test demonstrates that width
++816.0000000000002 alone, against 816, keeps verification pending and ultimately
++fails. A separate displaced-position case also fails. No tolerance was added.
++
++This demonstrates numeric sensitivity in a controlled regression, not the cause
++of the native timeout: that native observation also had a substantially wrong
++position. Manual dragging remains plausible but unproven.
++
++For separate maintainer review, a possible narrowly bounded contract is absolute
++error <= 0.000001 logical pixel independently for each finite geometry component,
++with no relative tolerance, rounding, or change to UUID/desktop/source checks.
++This would accept the shown width roundoff while rejecting the displaced native
++position. Validate native roundoff without dragging and test the threshold on
++both sides before approving any change; this iteration deliberately keeps exact
++comparison intact.
++
++## Evidence and remaining gate
++
++197 Python tests passed without skips (portable and real installed-header tests);
++3 Node test files passed; Bash syntax, ShellCheck and whitespace checks passed.
++Logs are `step1.5b-iteration6-{python,node,syntax,shellcheck}.log`.
++The complete iteration diff is `step1.5b-iteration6.patch`, including new evidence.
++
++User-reported native evidence before these corrections covers all six forms on
++X11 and Wayland and successful basic placement/preservation. The overlapping
++Wayland run showed Busy rejection and nonconvergence, not proof of a targeting
++or roundoff defect. The previously supplied q552u01 transcript explicitly ran
++only the inventory JS file; this iteration's agent run covers all three files.
++
++Maintainer next: review this diff, validate corrected desktop membership/status
++and notice/info/debug output natively, and confirm Busy is no longer labeled
++as incompatibility. Sticky/multiple membership and post-capture focus changes
++still need native evidence if required for acceptance. No native operations,
++staging, commit, push, installation or protected writes were performed.
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/task_step1.5/step1.5b-iteration6-syntax.log
+@@ -0,0 +1 @@
++bash -n joetoo-kwin: PASS

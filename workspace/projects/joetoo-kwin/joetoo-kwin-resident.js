@@ -112,6 +112,81 @@ function moveFromBroker() {
     });
 }
 
+// Optional moves have a distinct claim path: an old resident must never
+// interpret zero placeholders as real coordinates, sizes or desktop numbers.
+function moveOptionalFromBroker() {
+    const win = workspace.activeWindow;
+    const started = Date.now();
+    const identifier = windowUUID(win);
+    callDBus(BRIDGE, PATH, BRIDGE, "TakeMove", observerSource, identifier, function(payload) {
+        if (!payload) return;
+        let request;
+        try { request = JSON.parse(payload); }
+        catch (err) { console.warn("joetoo: malformed optional move payload"); return; }
+        if (!win || win.deleted || windowUUID(win) !== identifier) {
+            finish(request, "ERROR", "Captured window disappeared"); return;
+        }
+        // Starting the local timer before TakeMove is conservative about bus
+        // latency; never apply a callback after its remaining request lifetime.
+        const elapsed = Date.now() - started;
+        if (!Number.isFinite(request.remaining_ms) || elapsed < 0 || elapsed >= request.remaining_ms) {
+            finish(request, "ERROR", "Optional move request expired"); return;
+        }
+        placeOptionalWindow(win, request);
+    });
+}
+
+function placeOptionalWindow(win, request) {
+    try {
+        const uuid = windowUUID(win);
+        if (!uuid || win.deleted) throw new Error("Captured window disappeared");
+        const captured = {
+            geometry: {x: win.frameGeometry.x, y: win.frameGeometry.y,
+                       width: win.frameGeometry.width, height: win.frameGeometry.height},
+            desktops: (win.desktops || []).map(d => Number(d.x11DesktopNumber)).sort((a, b) => a - b),
+            on_all_desktops: Boolean(win.onAllDesktops)
+        };
+        const resolved = JSON.parse(JSON.stringify(captured));
+        const desktop = request.preserve_desktop ? null : workspace.desktops[request.desktop - 1];
+        if (!request.preserve_desktop && (!Number.isInteger(request.desktop) || request.desktop < 1 || !desktop)) {
+            throw new Error("Virtual desktop does not exist");
+        }
+        for (const key of ["x", "y", "width", "height"]) {
+            const preserve = key === "x" || key === "y" ? request.preserve_position : request.preserve_size;
+            if (!preserve) resolved.geometry[key] = request[key];
+            const value = resolved.geometry[key];
+            if (!Number.isFinite(value) || value > 32768 || value < (key === "x" || key === "y" ? -32768 : 1)) {
+                throw new Error("Resolved geometry out of range");
+            }
+        }
+        if (!request.preserve_desktop) {
+            resolved.desktops = [request.desktop];
+            resolved.on_all_desktops = false;
+        }
+        const tiled = win.tile != null;
+        const fullscreen = Boolean(win.fullScreen);
+        const changesGeometry = !request.preserve_position || !request.preserve_size;
+        // Installed KWin window.h exposes maximizeMode; MaximizeRestore is 0
+        // in effect/globals.h. Unknown mode support also fails closed here.
+        if (changesGeometry && (tiled || fullscreen || win.maximizeMode !== 0)) {
+            throw new Error("Refusing geometry change on tiled/fullscreen/maximized or unknown-mode window");
+        }
+        const before = geometryText(win);
+        // Resolve all omitted fields immediately before assignment, without
+        // an intervening D-Bus round trip or a second active-window lookup.
+        if (!request.preserve_desktop) win.desktops = [desktop];
+        if (changesGeometry) win.frameGeometry = resolved.geometry;
+        finish(request, "VERIFY", JSON.stringify({
+            window_uuid: uuid, source: observerSource, before: before,
+            tiled: tiled, fullscreen: fullscreen, captured: captured, resolved: resolved
+        }));
+    } catch (err) {
+        finish(request, "ERROR", "Optional move failed: " + err);
+    }
+}
+
+registerShortcut("joetoo_bridge_move_optional", "Joetoo optional active-window move", "", moveOptionalFromBroker);
+
 // New-window path: KWin emits the `windowAdded` signal with the specific
 // window object it just created. `.connect(function(win) { ... })` registers
 // a callback; it does not call that function immediately.
@@ -296,7 +371,7 @@ function reportExistingWindows() {
     // the broker validates it first, then atomically replaces its current map.
     // KWin runs this enumeration synchronously on its scripting thread.
     callDBus(BRIDGE, PATH, BRIDGE, "SyncInventory", JSON.stringify({
-        source: observerSource, revision: ++observerRevision, windows: snapshots
+        source: observerSource, revision: ++observerRevision, windows: snapshots, move_protocol: 1
     }));
 }
 

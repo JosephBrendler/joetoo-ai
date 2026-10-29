@@ -1,0 +1,172 @@
+--- a/joetoo-kwin
++++ b/joetoo-kwin
+@@ -92,10 +92,16 @@
+ 
+ # Keep the supervised action's status distinct from the reporting bitmask.
+ plan_stage() {
+-    local _ps_level=$1 _ps_label=$2 _ps_action_rc _ps_report_rc
++    local _ps_level=$1 _ps_label=$2 _ps_action_rc
+     shift 2
+     j_msg "-${_ps_level}" -pn "${_ps_label} ..."
+     if "$@"; then _ps_action_rc=0; else _ps_action_rc=$?; fi
++    report_action "$_ps_action_rc" "$_ps_level"
++}
++
++# Report the captured action status; reporting faults must not mask action failure.
++report_action() {
++    local _ps_action_rc=$1 _ps_level=$2 _ps_report_rc
+     if handle_result "$_ps_action_rc" completed failed "$_ps_level"; then
+         _ps_report_rc=0
+     else
+@@ -169,7 +175,7 @@
+ }
+ 
+ wait_for_request() {
+-    local _wr_request=$1 _wr_label=$2 _wr_attempt _wr_status
++    local _wr_request=$1 _wr_label=$2 _wr_attempt _wr_status _wr_rc=1 _wr_level=$err
+     # wait up to 5 sec, in 100ms increments
+     local _wr_limit="50" _wr_increment="0.1"
+     # extend wait to 15 sec if for launch
+@@ -177,15 +183,27 @@
+     for ((_wr_attempt=0; _wr_attempt<_wr_limit; _wr_attempt++)); do
+          # kwin bus/svc, obj/path, inteface identifiers.method (together = address)
+          # (call Status method with requested action as arg)
+-        _wr_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$_wr_request") || return 1
++        if ! _wr_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$_wr_request"); then
++            _wr_status="${PN}: could not query request [${_wr_request}]"
++            break
++        fi
+         case $_wr_status in
+-            OK*) j_msg "-${notice}" -p "$_wr_status"; return 0 ;;
+-            ERROR*|UNKNOWN*) j_msg "-${err}" -p "$_wr_status"; return 1 ;;
++            OK*) _wr_rc=0; _wr_level=$notice; break ;;
++            ERROR*|UNKNOWN*) break ;;
+         esac
+         sleep "$_wr_increment"
+     done
+-    j_msg "-${err}" -p "${PN}: ${_wr_label} timed out (request [${_wr_request}])"
+-    return 1
++    if (( _wr_attempt == _wr_limit )); then
++        _wr_status="${PN}: ${_wr_label} timed out (request [${_wr_request}])"
++    fi
++    if [[ $_wr_label == optional-move ]]; then
++        # The full broker detail owns this result line; no preceding open announcement.
++        j_msg "-${_wr_level}" -pn "$_wr_status"
++        report_action "$_wr_rc" "$_wr_level"
++    else
++        j_msg "-${_wr_level}" -p "$_wr_status"
++        return "$_wr_rc"
++    fi
+ }
+ 
+ move_active_window() {
+@@ -260,19 +278,37 @@
+         move_active_window "$_mw_desktop" "$_mw_x" "$_mw_y" "$_mw_width" "$_mw_height"
+         return $?
+     fi
+-    local _mw_pd=false _mw_pp=false _mw_ps=false
++    local _mw_pd=false _mw_pp=false _mw_ps=false _mw_action_rc _mw_detail
+     [[ ! $_mw_PD ]] || _mw_pd=true
+     [[ ! $_mw_PP ]] || _mw_pp=true
+     [[ ! $_mw_PS ]] || _mw_ps=true
+-    j_msg "-${notice}" -p 'Submitting active-window move'
+-    if ! _mw_request=$(qdbus6 "$bus" "$path" "$iface.SubmitMove" \
+-        "$_mw_desktop" "$_mw_x" "$_mw_y" "$_mw_width" "$_mw_height" "$_mw_pd" "$_mw_pp" "$_mw_ps"); then
+-        j_msg "-${err}" -p 'Move rejected; optional moves require compatible broker and resident support'
+-        return 1
+-    fi
+-    qdbus6 org.kde.kglobalaccel /component/kwin \
+-        org.kde.kglobalaccel.Component.invokeShortcut joetoo_bridge_move_optional >/dev/null || return 1
+-    plan_stage "$notice" 'Verifying active-window move' wait_for_request "$_mw_request" optional-move
++    j_msg "-${notice}" -pn 'Submitting active-window move ...'
++    if _mw_request=$(qdbus6 "$bus" "$path" "$iface.SubmitMove" \
++        "$_mw_desktop" "$_mw_x" "$_mw_y" "$_mw_width" "$_mw_height" "$_mw_pd" "$_mw_pp" "$_mw_ps" 2>&1); then
++        _mw_action_rc=0
++    else
++        _mw_action_rc=$?
++    fi
++    if ! report_action "$_mw_action_rc" "$notice"; then
++        if (( _mw_action_rc != 0 )); then
++            [[ -z $_mw_request ]] || j_msg "-${err}" -p "$_mw_request"
++            j_msg "-${err}" -p 'Move rejected; optional moves require compatible broker and resident support'
++        fi
++        return 1
++    fi
++    j_msg "-${notice}" -pn 'Invoking active-window move shortcut ...'
++    if _mw_detail=$(qdbus6 org.kde.kglobalaccel /component/kwin \
++        org.kde.kglobalaccel.Component.invokeShortcut joetoo_bridge_move_optional 2>&1); then
++        _mw_action_rc=0
++    else
++        _mw_action_rc=$?
++    fi
++    if ! report_action "$_mw_action_rc" "$notice"; then
++        [[ $_mw_action_rc == 0 || -z $_mw_detail ]] || j_msg "-${err}" -p "$_mw_detail"
++        return 1
++    fi
++    j_msg "-${notice}" -p 'Verifying active-window move ...'
++    wait_for_request "$_mw_request" optional-move
+ }
+ 
+ launch_one_window() {
+--- a/tests/test_step1_5b_cli.py
++++ b/tests/test_step1_5b_cli.py
+@@ -18,7 +18,10 @@
+             printf 'CALL:%s\\n' "$*" >> "$TRACE"
+             [[ ${REJECT_MOVE:-} != yes ]] || return 1
+             printf 'request-1\\n' ;;
+-        *.Status) printf 'OK verified\\n' ;;
++        *.Status) printf '%s\\n' "${MOVE_STATUS:-OK verified}" ;;
++        *invokeShortcut)
++            printf 'CALL:%s\\n' "$*" >> "$TRACE"
++            return "${SHORTCUT_RC:-0}" ;;
+         *) printf 'CALL:%s\\n' "$*" >> "$TRACE" ;;
+     esac
+ }
+@@ -29,6 +32,7 @@
+         self.calls.unlink(missing_ok=True)
+         result = subprocess.run(['bash', str(self.client), *args], env=self.env,
+                                 capture_output=True, text=True, timeout=20)
++        self.result = result
+         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+         return self.calls.read_text().splitlines() if self.calls.exists() else []
+ 
+@@ -70,6 +74,25 @@
+         self.assertEqual(len(calls), 1)
+         self.assertIn('SubmitMove', calls[0])
+ 
++    def test_failed_shortcut_is_reported(self):
++        self.env['SHORTCUT_RC'] = '7'
++        self.run_move(['-m', '2'], 1)
++        self.assertNotIn('Verifying active-window', self.result.stdout)
++
++    def test_failed_verification_keeps_error(self):
++        self.env['MOVE_STATUS'] = 'ERROR exact UUID did not converge'
++        self.run_move(['-m', '2'], 1)
++        self.assertIn('ERROR exact UUID did not converge', self.result.stdout + self.result.stderr)
++
++    def test_auxiliary_reporting_fault_stops_before_shortcut(self):
++        # Inject only the reporting fault; other tests use the real installed helper.
++        self.client.write_text(self.client.read_text().replace(
++            '#-----[ main script ]', 'handle_result() { return 32; }\n#-----[ main script ]'))
++        calls = self.run_move(['-m', '2'], 1)
++        self.assertEqual(len(calls), 1)
++        self.assertIn('result reporting failed [32]', self.result.stdout + self.result.stderr)
++        self.assertNotIn('Move rejected', self.result.stdout + self.result.stderr)
++
+ 
+ @unittest.skipUnless(INSTALLED_HEADER_AVAILABLE, 'installed joetoo header/modules unavailable')
+ class InstalledHeaderMoveTests(MoveTests):
+@@ -79,3 +102,13 @@
+         self.client.write_text(self.client.read_text().replace(
+             'source "' + str(self.mock_header) + '"',
+             'source /usr/sbin/script_header_joetoo\nchecknotroot() { :; }', 1))
++
++    def test_result_lines_with_real_header(self):
++        self.run_move(['-m', '2'])
++        # Universal-newline conversion turns the status cursor's CR into LF.
++        # Check descriptive completion precedes that cursor movement on each line.
++        text = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', self.result.stdout)
++        for label in ('Submitting active-window move ...',
++                      'Invoking active-window move shortcut ...', 'OK verified'):
++            self.assertRegex(text, re.escape(label) + r'[^\n]*\(completed\)')
++        self.assertNotRegex(text, r'Verifying active-window move[^\n]*OK verified')
