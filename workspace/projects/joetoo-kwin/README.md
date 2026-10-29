@@ -7,29 +7,38 @@ for version 1 requirements, design contracts, and acceptance gates.
 
 ## Current status
 
-**Completed through Step 1.4d** (October 2026). T
+**Completed through Step 1.4d** (October 2026). Step 1.4 established
+broker-private managed-window registration, independent presence and placement
+states, UUID-based observation reconciliation, read-only registry queries, and
+bounded asynchronous placement confirmation. The four-window managed-launch
+fixture passed native X11 and Wayland validation. These are collaboration
+candidates in `joetoo-ai`, not yet the complete version 1 application.
 
 | Increment | Status and scope | Evidence |
 | --- | --- | --- |
-| 1.4a | Complete: registry model, identities and headless contract tests | [PR #19](https://github.com/JosephBrendler/joetoo-ai/pull/19) |
-| 1.4b | Complete: broker-private registration, multiple records, UUID-based observation reconciliation | [PR #20](https://github.com/JosephBrendler/joetoo-ai/pull/20) |
-| 1.4c | Complete: read-only managed list/detail/status D-Bus interfaces | [PR #21](https://github.com/JosephBrendler/joetoo-ai/pull/21) |
-| 1.4d | Complete: multiwindow scenarios and X11/Wayland native validation | [PR #22] |
+| 1.4a | Complete: registry identity, state, and headless contracts | [PR #19](https://github.com/JosephBrendler/joetoo-ai/pull/19) |
+| 1.4b | Complete: broker-private correlation and multiwindow UUID reconciliation | [PR #20](https://github.com/JosephBrendler/joetoo-ai/pull/20) |
+| 1.4c | Complete: read-only `ListManaged`, `GetManaged`, `RegistryStatus` | [PR #21](https://github.com/JosephBrendler/joetoo-ai/pull/21) |
+| 1.4d | Complete: managed multiwindow launches, asynchronous placement confirmation and native validation | [PR #22](https://github.com/JosephBrendler/joetoo-ai/pull/22) |
 
-On `gmki91`, the maintainer reported **114 Python and 4 JavaScript tests
-passing** for the merged Step 1.4c candidate. These are headless regression
-results, **not** native proof that a CLI launch results in managed registration.
+For Step 1.4d, the maintainer reported **144 Python and 8 JavaScript tests
+passing on each development machine**. Native tests on `gmki91` (Plasma X11)
+and `q552u01` (Plasma Wayland) each registered four separate Konsole windows,
+confirmed all four placements, verified exact desktop/geometry and no adoption
+of preexisting KWin UUIDs, and preserved placement history when a window was
+closed (presence became `missing`). These results do not establish completion
+of the general `-o` SSH/configuration workflow, destructive managed close,
+checkpointing or reboot restoration.
 
-A proposed Step 1.4d diagnostic `test-multi-launch` fixture reuses the existing
-placement-only `launch_one_window` to open four independent local Konsole
-windows over two desktops, with fixed test geometry for 1920x1080 displays.
-It deliberately ignores configuration recipes, SSH and VNC, and does **not**
-register windows. The full `-o` launcher, managed launch authorization/IPC,
-managed close, and checkpoint recovery remain future work under Steps
-1.5–1.7. Neither observation nor placement confers managed ownership.
+For the completed milestone, its validation boundaries and deferred issues, see
+[Step 1.4 closure handoff](task_step1.4/HANDOFF.md). The proposed next milestone,
+including its authorization and validation plan, is in the
+[Step 1.5 task handoff](task_step1.5/HANDOFF.md).
 
-Native X11 and Wayland results will be added after the maintainer runs the
-corresponding tests; do not treat this proposal as verification of them.
+Step 1.5 addresses the shared geometry policy, `mw l/r`, colorized `-c`,
+configuration-driven `-o` with SSH placeholders and `-v/-q`. Steps 1.6–1.9
+remain planned according to [ARCHITECTURE.md](ARCHITECTURE.md). Phase 2
+reserves measured optimization/refinement work after the core prototype.
 
 ## Development and validation platforms
 
@@ -70,19 +79,22 @@ instructions and protocol details.
 
 - `libexec/joetoo-kwind` — Python session D-Bus broker and observational data.
 - `joetoo-kwin-resident.js` — KWin resident observation/placement interface.
-- `joetoo-kwin` — current Bash client for active-window movement and legacy
-  single-launch POC. The richer Step 1 planner is still archived.
+- `joetoo-kwin` — current Bash CLI for active-window placement and the
+  Step 1.4d managed test-launch fixture; generalized configuration-driven
+  layouts and SSH placeholders are Step 1.5 work.
 - `tools/joetoo-kwin-correlation-probe` — read-only launch correlation probe.
 - `user-init.d/`, `conf.d/`, `user-conf.d/`, `poc-user-conf.d/` — OpenRC
   service and executable configuration.
 - `tools/joetoo-kwind-install-poc` — user-owned POC installation/checking tool.
-- `tests/` — headless regression tests; `archive/` — historical references.
+- `tests/` — headless regressions; `archive/` — historical POCs;
+  `task_step1.4/` and `task_step1.5/` — milestone evidence and current-task
+  handoffs, not runtime source.
 
 Run these checks from `workspace/projects/joetoo-kwin/`:
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py' -v
-node --test tests/test_step1_3a.js
+node --test tests/*.js
 bash -n joetoo-kwin tools/joetoo-kwin-correlation-probe
 ./tools/joetoo-kwind-install-poc --check
 ```
@@ -101,7 +113,9 @@ window-launching experiments are separate, explicit maintainer operations.
 - [PR #16](https://github.com/JosephBrendler/joetoo-ai/pull/16) and
   [PR #17](https://github.com/JosephBrendler/joetoo-ai/pull/17) — signed
   implementation history and milestone-level test evidence.
-
+- [Step 1.4 closure](task_step1.4/HANDOFF.md) and
+  [Step 1.5 active-task proposal](task_step1.5/HANDOFF.md) — milestone
+  completion evidence and maintained task state, respectively.
 Do not treat historical examples or evidence as newly accepted design
 requirements. Architectural choices are discussed with the maintainer before
 they are incorporated into `ARCHITECTURE.md`.
