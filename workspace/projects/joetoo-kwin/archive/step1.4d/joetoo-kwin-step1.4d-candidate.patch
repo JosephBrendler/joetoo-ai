@@ -1,0 +1,274 @@
+diff --git a/workspace/projects/joetoo-kwin/joetoo-kwin b/workspace/projects/joetoo-kwin/joetoo-kwin
+index 8f78f60..13143ce 100755
+--- a/workspace/projects/joetoo-kwin/joetoo-kwin
++++ b/workspace/projects/joetoo-kwin/joetoo-kwin
+@@ -30,6 +30,7 @@ usage() {
+     j_msg "-${notice}" -p "Usage: ${PN} -m DESKTOP X Y WIDTH HEIGHT"
+     j_msg "-${notice}" -p "       ${PN} move DESKTOP X Y WIDTH HEIGHT  (compatibility)"
+     j_msg "-${notice}" -p "       ${PN} test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]"
++    j_msg "-${notice}" -p "       ${PN} test-multi-launch  (TEST ONLY: 4 local Konsoles, fixed 1920x1080)"
+     j_msg "-${notice}" -p "       ${PN} -h"
+     j_msg "-${notice}" -p "       ${PN} -c/-o (not yet integrated)"
+ }
+@@ -130,6 +131,31 @@ launch_one_window() {
+     wait_for_request "$_lw_request" launch
+ }
+ 
++# Step 1.4d native placement fixture, not the configured -o launcher.
++# The four coordinates deliberately describe one 1920x1080 test display.
++# These are fixed TEST VALUES; the shared geometry policy belongs to Step 1.5.
++# This exercises SubmitLaunch/Status and does NOT enroll managed windows.
++test_multi_launch() {
++    local _tml_desktop _tml_x _tml_failed=0
++    j_msg "-${notice}" -p "${PN}: TEST ONLY: four local Konsole windows on desktops 1 and 2"
++    for _tml_desktop in 1 2; do
++        for _tml_x in 19 873; do
++            if launch_one_window konsole "$_tml_desktop" "$_tml_x" 54 816 918 -- konsole --separate; then
++                :
++            else
++                _tml_failed=$((_tml_failed + 1))
++                j_msg "-${err}" -p "${PN}: test launch failed (desktop [${_tml_desktop}], x [${_tml_x}])"
++            fi
++        done
++    done
++    if (( _tml_failed > 0 )); then
++        j_msg "-${err}" -p "${PN}: [${_tml_failed}] of four test launches failed"
++        return 1
++    fi
++    j_msg "-${notice}" -p "${PN}: four placement requests completed; managed registration was NOT tested"
++    return 0
++}
++
+ #-----[ main script ]----------------------------------------------------------------------------------
+ 
+ # run as regular user, not root
+@@ -145,6 +171,10 @@ case ${1:-} in
+         shift
+         if (( $# < 8 )); then bad_args 'test-launch requires a class, geometry and program'; exit 2; fi
+         launch_one_window "$@" ;;
++    test-multi-launch)
++        shift
++        if (( $# != 0 )); then bad_args 'test-multi-launch accepts no operands'; exit 2; fi
++        test_multi_launch ;;
+     -h|--help) usage ;;
+     -o) action="open";   # open multiple windows
+         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
+diff --git a/workspace/projects/joetoo-kwin/tests/test_step1_4d_cli.py b/workspace/projects/joetoo-kwin/tests/test_step1_4d_cli.py
+new file mode 100644
+index 0000000..51fb045
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/tests/test_step1_4d_cli.py
+@@ -0,0 +1,64 @@
++#!/usr/bin/env python3
++# Copyright 2025-2026 Joseph Brendler
++# SPDX-License-Identifier: GPL-3.0-or-later
++"""Headless tests for the deliberately non-managed 1.4d launch fixture."""
++
++from pathlib import Path
++import os
++import subprocess
++from tempfile import TemporaryDirectory
++from unittest import TestCase
++
++CLIENT = Path(__file__).resolve().parents[1] / 'joetoo-kwin'
++
++
++class TestMultiLaunchFixtureTests(TestCase):
++    @staticmethod
++    def run_fixture(fail=False):
++        source = CLIENT.read_text()
++        start = source.index('test_multi_launch() {')
++        end = source.index('\n}\n', start) + 2
++        implementation = source[start:end]
++        with TemporaryDirectory() as tmp:
++            trace = Path(tmp) / 'launches.txt'
++            script = """
++                PN=joetoo-kwin
++                notice=5
++                err=3
++                j_msg() { :; }
++                launch_one_window() {
++                    printf '%s\n' "$*" >> "$TRACE"
++                    if [[ ${FAIL_LAUNCH:-0} == 1 && $2 == 2 && $3 == 873 ]]; then
++                        return 1
++                    fi
++                    return 0
++                }
++            """ + implementation + '\ntest_multi_launch\n'
++            run = subprocess.run(['bash', '-c', script], capture_output=True,
++                                 text=True, check=False, env={**os.environ,
++                                     'TRACE': str(trace),
++                                     'FAIL_LAUNCH': '1' if fail else '0'})
++            return run.returncode, trace.read_text().splitlines()
++
++    def test_four_fixed_placements_and_separate_process_requests(self):
++        code, calls = self.run_fixture()
++        self.assertEqual(code, 0)
++        self.assertEqual(calls, [
++            'konsole 1 19 54 816 918 -- konsole --separate',
++            'konsole 1 873 54 816 918 -- konsole --separate',
++            'konsole 2 19 54 816 918 -- konsole --separate',
++            'konsole 2 873 54 816 918 -- konsole --separate'])
++
++    def test_failed_launch_returns_failure_without_aborting_other_attempts(self):
++        code, calls = self.run_fixture(fail=True)
++        self.assertEqual(code, 1)
++        self.assertEqual(len(calls), 4)
++
++    def test_fixture_keeps_ordinary_open_flag_unimplemented(self):
++        source = CLIENT.read_text()
++        self.assertIn('    test-multi-launch)', source)
++        self.assertIn('    -o) action="open"', source)
++        self.assertIn('not yet integrated', source)
++        fixture = source[source.index('test_multi_launch() {'):source.index('#-----[ main script ]')]
++        self.assertNotIn('Register', fixture)
++        self.assertNotIn('BeginManaged', fixture)
+diff --git a/workspace/projects/joetoo-kwin/tests/test_step1_4d_multiwindow.py b/workspace/projects/joetoo-kwin/tests/test_step1_4d_multiwindow.py
+new file mode 100644
+index 0000000..bbd693e
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/tests/test_step1_4d_multiwindow.py
+@@ -0,0 +1,143 @@
++#!/usr/bin/env python3
++# Copyright 2025-2026 Joseph Brendler
++# SPDX-License-Identifier: GPL-3.0-or-later
++"""Step 1.4d: four-window broker registration and failure isolation (headless).
++
++Simulated KWin events use real broker/registry implementations; no graphical
++session, root privileges, OpenRC service or applications are started.
++"""
++
++import json
++from unittest import TestCase
++from unittest.mock import patch
++
++from test_step1_3a import load_broker_without_real_dbus, observation
++
++WINDOWS = tuple(f'd848c4c9-64ed-48bf-b083-40230314d5a{suffix}'
++                for suffix in 'bcde')
++SOURCE = 'step1-4d-resident'
++
++
++class FourWindowRegistryTests(TestCase):
++    def setUp(self):
++        self.module = load_broker_without_real_dbus()
++        self.broker = self.module.Broker(object())
++        self.clock = [100.0]
++        fake_time = patch.object(self.module.time, 'monotonic',
++                                 side_effect=lambda: self.clock[0])
++        fake_time.start()
++        self.addCleanup(fake_time.stop)
++        self.revision = 1
++        self.sync()
++
++    @staticmethod
++    def window(identifier, pid=42, desktop=1):
++        item = json.loads(observation(uuid=identifier, desktops=[desktop]))['window']
++        item['pid'] = pid
++        return item
++
++    def sync(self, windows=(), source=SOURCE):
++        self.revision += 1
++        self.broker.SyncInventory(json.dumps({
++            'source': source, 'revision': self.revision,
++            'windows': list(windows)}))
++
++    def event(self, event, identifier, pid, desktop=1):
++        self.revision += 1
++        self.broker.ObserveWindow(json.dumps({
++            'event': event, 'source': SOURCE, 'revision': self.revision,
++            'window': self.window(identifier, pid, desktop)}))
++
++    def arm(self, pid, desktop, slot):
++        request_id = self.broker._begin_managed_launch(
++            expected_class='konsole', run_id='run-four',
++            recipe={'desktop': desktop, 'slot': slot,
++                    'program': 'konsole', 'mode': 'local', 'target': ''})
++        self.broker._set_managed_launch_pid(request_id, pid)
++        return request_id
++
++    def register(self, identifier, pid, desktop, slot):
++        request_id = self.arm(pid, desktop, slot)
++        self.event('added', identifier, pid, desktop)
++        self.assertEqual(self.broker._poll_managed_launch(request_id)['state'],
++                         'pending')
++        self.clock[0] += 0.6
++        result = self.broker._poll_managed_launch(request_id)
++        self.assertEqual(result['state'], 'registered')
++        return result
++
++    def four_windows(self):
++        return [self.register(identifier, pid, desktop, slot)
++                for identifier, pid, desktop, slot in zip(
++                    WINDOWS, (101, 102, 103, 104), (1, 1, 2, 2), (1, 2, 1, 2))]
++
++    def test_two_desktops_four_independent_registrations(self):
++        results = self.four_windows()
++        self.assertEqual([r['managed_id'] for r in results],
++                         ['win-001', 'win-002', 'win-003', 'win-004'])
++        listing = json.loads(self.broker.ListManaged())
++        self.assertEqual(listing['count'], 4)
++        self.assertEqual([w['window_uuid'] for w in listing['windows']],
++                         list(WINDOWS))
++        for index, result in enumerate(results):
++            by_alias = json.loads(self.broker.GetManaged(result['managed_id']))
++            by_uuid = json.loads(self.broker.GetManaged(WINDOWS[index]))
++            self.assertEqual(by_alias, by_uuid)
++            self.assertEqual(by_alias['window']['observation']['desktops'],
++                             [1, 1, 2, 2][index:index + 1])
++            self.assertEqual(by_alias['window']['presence'], 'present')
++        self.assertEqual(json.loads(self.broker.RegistryStatus())
++                         ['request_counts']['succeeded'], 4)
++
++    def test_disappearance_is_isolated_from_other_registrations(self):
++        self.four_windows()
++        self.event('removed', WINDOWS[1], 102)
++        self.event('changed', WINDOWS[2], 999, desktop=2)
++        states = [w['presence'] for w in
++                  json.loads(self.broker.ListManaged())['windows']]
++        self.assertEqual(states, ['present', 'missing', 'uncertain', 'present'])
++        self.assertEqual(json.loads(self.broker.RegistryStatus())
++                         ['presence_counts'],
++                         {'present': 2, 'missing': 1, 'uncertain': 1})
++        self.assertEqual(json.loads(self.broker.ListManaged())['count'], 4)
++
++    def test_new_resident_invalidates_all_without_re_adoption(self):
++        self.four_windows()
++        self.sync([self.window(WINDOWS[0], 101)], source='new-resident')
++        self.assertEqual(json.loads(self.broker.RegistryStatus())
++                         ['presence_counts']['uncertain'], 4)
++        self.assertEqual(json.loads(self.broker.ListManaged())['count'], 4)
++
++    def test_ambiguous_same_pid_cannot_register_a_window(self):
++        request_id = self.arm(101, 1, 1)
++        self.event('added', WINDOWS[0], 101)
++        self.event('added', WINDOWS[1], 101)
++        self.clock[0] += 0.6
++        result = self.broker._poll_managed_launch(request_id)
++        self.assertEqual(result['state'], 'ambiguous')
++        self.assertEqual(json.loads(self.broker.ListManaged())['count'], 0)
++        self.assertEqual(json.loads(self.broker.RegistryStatus())
++                         ['request_counts']['ambiguous'], 1)
++
++    def test_failed_correlation_does_not_prevent_subsequent_windows(self):
++        self.register(WINDOWS[0], 101, 1, 1)
++        bad_id = self.arm(202, 1, 2)
++        self.event('added', WINDOWS[1], 999)
++        self.clock[0] += 15.1
++        self.assertEqual(self.broker._poll_managed_launch(bad_id)['state'],
++                         'timeout')
++        self.register(WINDOWS[2], 103, 2, 1)
++        listing = json.loads(self.broker.ListManaged())
++        self.assertEqual([item['managed_id'] for item in listing['windows']],
++                         ['win-001', 'win-002'])
++        self.assertEqual([item['window_uuid'] for item in listing['windows']],
++                         [WINDOWS[0], WINDOWS[2]])
++
++    def test_preexisting_window_does_not_become_managed(self):
++        self.sync([self.window(WINDOWS[0], 101)])
++        request_id = self.arm(101, 1, 1)
++        self.event('changed', WINDOWS[0], 101)
++        self.clock[0] += 15.1
++        self.assertEqual(self.broker._poll_managed_launch(request_id)['state'],
++                         'timeout')
++        self.assertEqual(json.loads(self.broker.ListManaged())['count'], 0)

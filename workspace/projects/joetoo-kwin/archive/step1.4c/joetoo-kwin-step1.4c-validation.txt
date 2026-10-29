@@ -1,0 +1,10 @@
+test_empty (__main__.IsolatedMethods.test_empty) ... ok
+test_exact_lookup (__main__.IsolatedMethods.test_exact_lookup) ... ok
+test_invalid (__main__.IsolatedMethods.test_invalid) ... ok
+test_mixed_presence (__main__.IsolatedMethods.test_mixed_presence) ... ok
+test_requests_and_observer (__main__.IsolatedMethods.test_requests_and_observer) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
