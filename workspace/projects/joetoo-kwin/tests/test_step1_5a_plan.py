@@ -227,7 +227,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
                      ('-v', '-m', '1', '-19', '-54', '816', '918'),
                      ('move', '1', '-19', '-54', '816', '918')):
             self.assertIn('MOVE:1 -19 -54 816 918', self.run_cli(*args))
-        self.run_cli('-m', '1', '2', '3', expected=2)
+        self.run_cli('-m', '1', '2', '3', '4', '5', '6', expected=2)
 
 
     def test_long_targets_keep_header_and_rows_aligned(self):

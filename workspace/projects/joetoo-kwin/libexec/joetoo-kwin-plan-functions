@@ -30,14 +30,9 @@ plan_error() {
     return 2
 }
 
-validate_plan() {
-    local _vp_name _vp_value _vp_record _vp_delimiters _vp_declaration
-    local _vp_desktop _vp_program _vp_mode _vp_target
-    # Reset all derived state so rebuilding a plan cannot accumulate old entries.
-    declare -ga planned_desktop=() planned_slot=() planned_program=() planned_mode=() planned_target=()
-    declare -ga planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
-    declare -gA terminal_counts=() terminal_slots=() next_slot=()
-
+# Geometry is also used by interactive moves, without a session recipe list.
+validate_layout_geometry() {
+    local _vp_name _vp_value
     for _vp_name in screen_width screen_height desktop_limit terminal_width_percent \
         terminal_gap_percent terminal_height_percent terminal_left_percent terminal_top_percent \
         terminal_row_gap_percent graphical_left_percent graphical_top_percent \
@@ -72,6 +67,18 @@ validate_plan() {
         graphical_top_percent + graphical_height_percent > 100 )); then
         plan_error 'configured regions extend beyond the display'; return 2
     fi
+    return 0
+}
+
+validate_plan() {
+    local _vp_name _vp_value _vp_record _vp_delimiters _vp_declaration
+    local _vp_desktop _vp_program _vp_mode _vp_target
+    # Reset all derived state so rebuilding a plan cannot accumulate old entries.
+    declare -ga planned_desktop=() planned_slot=() planned_program=() planned_mode=() planned_target=()
+    declare -ga planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
+    declare -gA terminal_counts=() terminal_slots=() next_slot=()
+
+    validate_layout_geometry || return $?
     _vp_declaration=$(declare -p desktop_session_list 2>/dev/null) || return 2
     if [[ $_vp_declaration != 'declare -a '* || ${#desktop_session_list[@]} == 0 ]]; then
         plan_error 'desktop_session_list must be a nonempty indexed Bash array'; return 2

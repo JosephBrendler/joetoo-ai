@@ -11,6 +11,7 @@ application process supervision and window persistence are not yet implemented.
 # POSIX signals and file metadata, elapsed time, and unique request tokens.
 # No window-launching or SSH process control modules are needed here.
 import json
+import math
 from copy import deepcopy
 import os
 import signal
@@ -126,6 +127,7 @@ class Broker(dbus.service.Object):
         self.observation_source = None
         self.observation_revision = -1
         self.observation_synced = False
+        self.move_protocol = 0  # Advertised by the synchronized resident, not inferred.
         # Step 1.3b diagnostic-only: one pending correlation probe. This is
         # deliberately NOT the managed-window registry of Step 1.4.
         self.correlation = None
@@ -198,6 +200,94 @@ class Broker(dbus.service.Object):
     def Submit(self, desktop, x, y, width, height):
         # CLI arms a move and receives the request ID as a string.
         return self._submit("move", desktop, x, y, width, height)
+
+    @dbus.service.method(IFACE, in_signature="iiiiibbb", out_signature="s")
+    def SubmitMove(self, desktop, x, y, width, height,
+                   preserve_desktop, preserve_position, preserve_size):
+        """Additive move intent; legacy Submit/launch validation stays unchanged."""
+        if not self.observation_synced or self.move_protocol != 1:
+            raise dbus.DBusException("Resident lacks optional-move protocol 1",
+                                     name=IFACE + ".Unsupported")
+        flags = (preserve_desktop, preserve_position, preserve_size)
+        # dbus.Boolean is integer-like; accept only the boolean wire domain.
+        if any(value not in (False, True) for value in flags):
+            raise dbus.DBusException("Invalid preservation flags", name=IFACE + ".BadArguments")
+        pd, pp, ps = map(bool, flags)
+        if ((pd and desktop != 0) or (pp and (x != 0 or y != 0))
+                or (ps and (width != 0 or height != 0))):
+            raise dbus.DBusException("Preserved fields require zero placeholders",
+                                     name=IFACE + ".BadArguments")
+        rid = self._submit("move_optional", 1 if pd else desktop,
+                           0 if pp else x, 0 if pp else y,
+                           1 if ps else width, 1 if ps else height)
+        self.request.update(desktop=int(desktop), x=int(x), y=int(y),
+                            width=int(width), height=int(height),
+                            preserve_desktop=pd, preserve_position=pp, preserve_size=ps,
+                            move_source=self.observation_source)
+        return rid
+
+    @dbus.service.method(IFACE, in_signature="ss", out_signature="s")
+    def TakeMove(self, source, window_uuid):
+        """Bind to the window captured by the new shortcut; old Take cannot claim it."""
+        r = self.request
+        if r is None or r["kind"] != "move_optional" or r["state"] != "PENDING":
+            return ""
+        try:
+            identifier = str(uuid.UUID(window_uuid))
+        except (ValueError, TypeError, AttributeError):
+            identifier = None
+        if (source != r["move_source"] or source != self.observation_source
+                or not self.observation_synced or identifier not in self.observed_windows
+                or time.monotonic() >= r["created"] + 15):
+            r.update(state="ERROR", detail="Optional move target/source missing or request stale")
+            return ""
+        r.update(state="RUNNING", placement_uuid=identifier)
+        payload = {key: r[key] for key in (
+            "id", "desktop", "x", "y", "width", "height", "preserve_desktop",
+            "preserve_position", "preserve_size")}
+        payload["remaining_ms"] = max(0, int((r["created"] + 15 - time.monotonic()) * 1000))
+        return json.dumps(payload)
+
+    @staticmethod
+    def _move_snapshot(value):
+        """Bound resolved frame/membership values before installing expectations."""
+        geometry = value["geometry"]
+        for key in ("x", "y", "width", "height"):
+            number = geometry[key]
+            if (isinstance(number, bool) or not isinstance(number, (int, float))
+                    or number > 32768
+                    or number < (-32768 if key in ("x", "y") else 1)
+                    or not math.isfinite(number)):
+                raise ValueError("invalid resolved geometry")
+        desktops = value["desktops"]
+        sticky = value["on_all_desktops"]
+        if (not isinstance(sticky, bool) or not isinstance(desktops, list)
+                or len(desktops) > 256 or (not sticky and not desktops)
+                or any(type(d) is not int or not 1 <= d <= 256 for d in desktops)
+                or len(set(desktops)) != len(desktops)):
+            raise ValueError("invalid resolved desktop membership")
+        return {"geometry": {key: geometry[key] for key in ("x", "y", "width", "height")},
+                "desktops": sorted(desktops), "on_all_desktops": sticky}
+
+    def _resolve_move(self, r, payload, identifier):
+        # The resident resolves live values at application time. It may fill only
+        # omitted fields, never replace explicit intent or the captured UUID.
+        if (identifier != r["placement_uuid"] or payload["source"] != r["move_source"]
+                or self.observation_source != r["move_source"]
+                or time.monotonic() >= r["created"] + 15):
+            raise ValueError("stale or mismatched move resolution")
+        before = self._move_snapshot(payload["captured"])
+        resolved = self._move_snapshot(payload["resolved"])
+        expected = dict(before["geometry"])
+        for key in ("x", "y", "width", "height"):
+            preserve = r["preserve_position"] if key in ("x", "y") else r["preserve_size"]
+            if not preserve:
+                expected[key] = r[key]
+        desktops = before["desktops"] if r["preserve_desktop"] else [r["desktop"]]
+        sticky = before["on_all_desktops"] if r["preserve_desktop"] else False
+        if resolved != {"geometry": expected, "desktops": desktops, "on_all_desktops": sticky}:
+            raise ValueError("resolution changed explicit intent or preserved values")
+        return expected, desktops, sticky
 
     @dbus.service.method(IFACE, in_signature="", out_signature="s")
     def Take(self):
@@ -276,6 +366,9 @@ class Broker(dbus.service.Object):
                               for key in ("x", "y", "width", "height"))
                 desktop_ok = (observed["desktops"] == [r["desktop"]]
                               and not observed["on_all_desktops"])
+                if r["kind"] == "move_optional":
+                    desktop_ok = (sorted(observed["desktops"]) == r["expected_desktops"]
+                                  and observed["on_all_desktops"] == r["expected_sticky"])
                 if desired and desktop_ok:
                     r["state"] = "OK"
                     r["detail"] = (f'{r["kind"]}: {observed["caption"]} '
@@ -309,6 +402,8 @@ class Broker(dbus.service.Object):
         if r is None or r["id"] != request_id or r["state"] != "RUNNING":
             raise dbus.DBusException("Unknown or inactive request",
                                      name=IFACE + ".InvalidRequest")
+        if r["kind"] == "move_optional" and result == "OK":
+            raise dbus.DBusException("Optional moves require UUID verification", name=IFACE + ".BadArguments")
         if result not in ("OK", "ERROR", "VERIFY"):
             raise dbus.DBusException("Invalid completion result",
                                      name=IFACE + ".BadArguments")
@@ -321,6 +416,8 @@ class Broker(dbus.service.Object):
                         or not isinstance(payload["tiled"], bool)
                         or not isinstance(payload["fullscreen"], bool)):
                     raise ValueError("invalid placement detail")
+                if r["kind"] == "move_optional":
+                    resolved_geometry, resolved_desktops, resolved_sticky = self._resolve_move(r, payload, identifier)
             except (KeyError, TypeError, ValueError, AttributeError) as exc:
                 raise dbus.DBusException("Invalid placement verification",
                                          name=IFACE + ".BadArguments") from exc
@@ -328,6 +425,10 @@ class Broker(dbus.service.Object):
                 r["state"] = "ERROR"
                 r["detail"] = "KWin observation is not synchronized"
             else:
+                if r["kind"] == "move_optional":
+                    r.update(resolved_geometry)
+                    r["expected_desktops"] = resolved_desktops
+                    r["expected_sticky"] = resolved_sticky
                 r["state"] = "VERIFYING"
                 r["placement_uuid"] = identifier
                 r["placement_before"] = before
@@ -812,6 +913,9 @@ class Broker(dbus.service.Object):
             if source_revision is None:
                 raise ValueError("inventory requires source/revision")
             source, revision = source_revision
+            move_protocol = message.get("move_protocol", 0)
+            if type(move_protocol) is not int or move_protocol not in (0, 1):
+                raise ValueError("invalid move protocol")
             windows = message["windows"]
             if not isinstance(windows, list) or len(windows) > 512:
                 raise ValueError("invalid inventory length")
@@ -839,6 +943,7 @@ class Broker(dbus.service.Object):
         self.observation_source = source
         self.observation_revision = revision
         self.observation_synced = True
+        self.move_protocol = move_protocol
         # Do not invent "removed" events for entries absent in the snapshot:
         # such entries could predate a broker restart or a missed notification.
         previous = set(self.observed_windows)

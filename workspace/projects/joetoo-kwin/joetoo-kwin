@@ -29,7 +29,8 @@ iface=org.joetoo.KWinBridge
 usage() {
     j_msg "-${notice}" -p "Usage: ${PN} [-v|-q ...] -c [-f CONFIG]  (dry run; trusted Bash config)"
     j_msg "-${notice}" -p "       CONFIG defaults to /etc/joetoo-kwin/joetoo-kwin.conf; set screen_width/screen_height explicitly"
-    j_msg "-${notice}" -p "Usage: ${PN} -m DESKTOP X Y WIDTH HEIGHT"
+    j_msg "-${notice}" -p "Usage: ${PN} [-f CONFIG] -m [DESKTOP] l|r"
+    j_msg "-${notice}" -p "       ${PN} -m DESKTOP | DESKTOP X Y | [DESKTOP] X Y WIDTH HEIGHT"
     j_msg "-${notice}" -p "       ${PN} move DESKTOP X Y WIDTH HEIGHT  (compatibility)"
     j_msg "-${notice}" -p "       ${PN} test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]"
     j_msg "-${notice}" -p "       ${PN} test-multi-launch  (TEST ONLY: register 4 local Konsoles)"
@@ -65,8 +66,8 @@ parse_cmdline() {
     shift "$((OPTIND - 1))"
     cli_args=("$@")
     [[ -n $cli_operation ]] || { bad_args 'select an operation'; return 2; }
-    if [[ $CONFIG_SELECTED && $cli_operation != -c && $cli_operation != -o ]]; then
-        bad_args '-f is supported only with -c or -o'; return 2
+    if [[ $CONFIG_SELECTED && $cli_operation != -c && $cli_operation != -o && $cli_operation != -m ]]; then
+        bad_args '-f is supported only with -c, -o or layout movement'; return 2
     fi
     if [[ $cli_operation != -m && $# != 0 ]]; then
         bad_args 'unexpected operands'; return 2
@@ -91,10 +92,16 @@ apply_cli_verbosity() {
 
 # Keep the supervised action's status distinct from the reporting bitmask.
 plan_stage() {
-    local _ps_level=$1 _ps_label=$2 _ps_action_rc _ps_report_rc
+    local _ps_level=$1 _ps_label=$2 _ps_action_rc
     shift 2
     j_msg "-${_ps_level}" -pn "${_ps_label} ..."
     if "$@"; then _ps_action_rc=0; else _ps_action_rc=$?; fi
+    report_action "$_ps_action_rc" "$_ps_level"
+}
+
+# Report the captured action status; reporting faults must not mask action failure.
+report_action() {
+    local _ps_action_rc=$1 _ps_level=$2 _ps_report_rc
     if handle_result "$_ps_action_rc" completed failed "$_ps_level"; then
         _ps_report_rc=0
     else
@@ -168,23 +175,35 @@ validate_geometry() {
 }
 
 wait_for_request() {
-    local _wr_request=$1 _wr_label=$2 _wr_attempt _wr_status
+    local _wr_request=$1 _wr_label=$2 _wr_attempt _wr_status _wr_rc=1 _wr_level=$err
     # wait up to 5 sec, in 100ms increments
     local _wr_limit="50" _wr_increment="0.1"
     # extend wait to 15 sec if for launch
-    [ "$_wr_label" = launch ] && _wr_limit=150
+    [[ $_wr_label == launch || $_wr_label == optional-move ]] && _wr_limit=150
     for ((_wr_attempt=0; _wr_attempt<_wr_limit; _wr_attempt++)); do
          # kwin bus/svc, obj/path, inteface identifiers.method (together = address)
          # (call Status method with requested action as arg)
-        _wr_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$_wr_request") || return 1
+        if ! _wr_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$_wr_request"); then
+            _wr_status="${PN}: could not query request [${_wr_request}]"
+            break
+        fi
         case $_wr_status in
-            OK*) j_msg "-${notice}" -p "$_wr_status"; return 0 ;;
-            ERROR*|UNKNOWN*) j_msg "-${err}" -p "$_wr_status"; return 1 ;;
+            OK*) _wr_rc=0; _wr_level=$notice; break ;;
+            ERROR*|UNKNOWN*) break ;;
         esac
         sleep "$_wr_increment"
     done
-    j_msg "-${err}" -p "${PN}: ${_wr_label} timed out (request [${_wr_request}])"
-    return 1
+    if (( _wr_attempt == _wr_limit )); then
+        _wr_status="${PN}: ${_wr_label} timed out (request [${_wr_request}])"
+    fi
+    if [[ $_wr_label == optional-move ]]; then
+        # The full broker detail owns this result line; no preceding open announcement.
+        j_msg "-${_wr_level}" -pn "$_wr_status"
+        report_action "$_wr_rc" "$_wr_level"
+    else
+        j_msg "-${_wr_level}" -p "$_wr_status"
+        return "$_wr_rc"
+    fi
 }
 
 move_active_window() {
@@ -200,6 +219,96 @@ move_active_window() {
         org.kde.kglobalaccel.Component.invokeShortcut \
         joetoo_bridge_move >/dev/null || return 1
     wait_for_request "$_ma_request" move
+}
+
+# Normalize the six approved move forms before any D-Bus call. Omitted values
+# use zero placeholders only with independent preservation flags on SubmitMove.
+move_window() {
+    local _mw_desktop=0 _mw_x=0 _mw_y=0 _mw_width=0 _mw_height=0 _mw_side=""
+    local _mw_PD=$FALSE _mw_PP=$FALSE _mw_PS=$FALSE _mw_value _mw_abs _mw_dir _mw_request
+    case $# in
+        1) case $1 in
+               l|r) _mw_side=$1; _mw_PD=$TRUE ;;
+               *) _mw_desktop=$1; _mw_PP=$TRUE; _mw_PS=$TRUE ;;
+           esac ;;
+        2) _mw_desktop=$1; _mw_side=$2
+           [[ $_mw_side == l || $_mw_side == r ]] || { bad_args 'expected DESKTOP l|r'; return 2; } ;;
+        3) _mw_desktop=$1; _mw_x=$2; _mw_y=$3; _mw_PS=$TRUE ;;
+        4) _mw_PD=$TRUE; _mw_x=$1; _mw_y=$2; _mw_width=$3; _mw_height=$4 ;;
+        5) _mw_desktop=$1; _mw_x=$2; _mw_y=$3; _mw_width=$4; _mw_height=$5 ;;
+        *) bad_args 'invalid move operand count'; return 2 ;;
+    esac
+    for _mw_value in "$_mw_desktop" "$_mw_x" "$_mw_y" "$_mw_width" "$_mw_height"; do
+        _mw_abs=${_mw_value#-}
+        if ! isint "$_mw_value" || (( ${#_mw_abs} > 5 )); then
+            bad_args 'move operands must be bounded decimal integers'; return 2
+        fi
+    done
+    # Explicit decimal conversion preserves signed coordinates without octal parsing.
+    for _mw_value in _mw_desktop _mw_x _mw_y _mw_width _mw_height; do
+        _mw_abs=${!_mw_value}
+        if [[ $_mw_abs == -* ]]; then printf -v "$_mw_value" '%d' "$((-10#${_mw_abs#-}))"
+        else printf -v "$_mw_value" '%d' "$((10#$_mw_abs))"; fi
+    done
+    if [[ ! $_mw_PD ]] && (( _mw_desktop < 1 || _mw_desktop > 256 )); then
+        bad_args 'desktop must be between 1 and the available desktop count'; return 2
+    fi
+    if [[ $_mw_side ]]; then
+        _mw_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+        source "${_mw_dir}/libexec/joetoo-kwin-plan-functions" || return 1
+        plan_defaults
+        [[ -f $config && -r $config ]] || { bad_args 'layout configuration unreadable'; return 2; }
+        # Trusted Bash config; CLI verbosity takes precedence after sourcing.
+        # shellcheck source=/dev/null
+        source "$config" || return 2
+        apply_cli_verbosity || return $?
+        plan_stage "$info" 'Validating layout geometry' validate_layout_geometry || return $?
+        if [[ $_mw_side == l ]]; then terminal_geometry 2 1 || return $?
+        else terminal_geometry 2 2 || return $?; fi
+        _mw_x=$geometry_x; _mw_y=$geometry_y; _mw_width=$geometry_width; _mw_height=$geometry_height
+    else
+        [[ ! $CONFIG_SELECTED ]] || { bad_args '-f requires a layout move (l/r)'; return 2; }
+        apply_cli_verbosity || return $?
+    fi
+    if (( _mw_x < -32768 || _mw_x > 32768 || _mw_y < -32768 || _mw_y > 32768 )) ||
+        { [[ ! $_mw_PS ]] && (( _mw_width < 1 || _mw_width > 32768 || _mw_height < 1 || _mw_height > 32768 )); }; then
+        bad_args 'move position or size out of range'; return 2
+    fi
+    if (( $# == 5 )); then
+        move_active_window "$_mw_desktop" "$_mw_x" "$_mw_y" "$_mw_width" "$_mw_height"
+        return $?
+    fi
+    local _mw_pd=false _mw_pp=false _mw_ps=false _mw_action_rc _mw_detail
+    [[ ! $_mw_PD ]] || _mw_pd=true
+    [[ ! $_mw_PP ]] || _mw_pp=true
+    [[ ! $_mw_PS ]] || _mw_ps=true
+    j_msg "-${notice}" -pn 'Submitting active-window move ...'
+    if _mw_request=$(qdbus6 "$bus" "$path" "$iface.SubmitMove" \
+        "$_mw_desktop" "$_mw_x" "$_mw_y" "$_mw_width" "$_mw_height" "$_mw_pd" "$_mw_pp" "$_mw_ps" 2>&1); then
+        _mw_action_rc=0
+    else
+        _mw_action_rc=$?
+    fi
+    if ! report_action "$_mw_action_rc" "$notice"; then
+        if (( _mw_action_rc != 0 )); then
+            [[ -z $_mw_request ]] || j_msg "-${err}" -p "$_mw_request"
+            j_msg "-${err}" -p 'Move rejected; optional moves require compatible broker and resident support'
+        fi
+        return 1
+    fi
+    j_msg "-${notice}" -pn 'Invoking active-window move shortcut ...'
+    if _mw_detail=$(qdbus6 org.kde.kglobalaccel /component/kwin \
+        org.kde.kglobalaccel.Component.invokeShortcut joetoo_bridge_move_optional 2>&1); then
+        _mw_action_rc=0
+    else
+        _mw_action_rc=$?
+    fi
+    if ! report_action "$_mw_action_rc" "$notice"; then
+        [[ $_mw_action_rc == 0 || -z $_mw_detail ]] || j_msg "-${err}" -p "$_mw_detail"
+        return 1
+    fi
+    j_msg "-${notice}" -p 'Verifying active-window move ...'
+    wait_for_request "$_mw_request" optional-move
 }
 
 launch_one_window() {
@@ -330,13 +439,12 @@ checknotroot
 parse_cmdline "$@" || exit $?
 # -c loads configuration before applying these overrides; other operations do
 # not need layout configuration and retain their existing operational behavior.
-if [[ $cli_operation != -c ]]; then apply_cli_verbosity || exit $?; fi
+if [[ $cli_operation != -c && $cli_operation != -m && $cli_operation != move ]]; then apply_cli_verbosity || exit $?; fi
 set -- "$cli_operation" "${cli_args[@]}"
 case ${1:-} in
     -m|move)
         shift
-        if (( $# != 5 )); then bad_args 'move requires five geometry values'; exit 2; fi
-        move_active_window "$@" ;;
+        move_window "$@" ;;
     test-launch)
         shift
         if (( $# < 8 )); then bad_args 'test-launch requires a class, geometry and program'; exit 2; fi

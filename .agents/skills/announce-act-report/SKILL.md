@@ -17,7 +17,10 @@ This skill complements the `script-header-joetoo` and `pseudo-boolean-framework`
 2. Consult `summarize_header -f j_msg`, `summarize_header -f handle_result`, `summarize_header -f right_status`, and `summarize_header -f decode_right_status` where available. Use `j_msg -h` for its public switches.
 3. Inspect real uses in `joetoo_cli_example` (simple idiom) and `joetoolkit/tmux-workflow` (`cmd_attach`, rigorous idiom) if available.
 4. Confirm positional arguments and the bitmask definitions **from the selected header revision** before interpreting anything beyond the documented action-failed bit. Do not invent a bit layout.
-5. `demonstrate_header` can create or alter logs/status files and ask to change ownership: inspect effects before running. Do not run test/demo commands merely to document their output.
+5. Read and run ./demonstration.sh - understand its forms
+- Run this script with cmdline override prefix to exercise severity/verbosity<br>
+- ( either DEBUG=$TRUE  or verbosity=$iinfo or verbosity=$debug )<br>
+6. `demonstrate_header` shows how to create or alter logs/status files and ask to change ownership: inspect effects before running. Do not run test/demo commands merely to document their output.
 
 ## Core concepts — never conflate these values
 
