@@ -3,8 +3,8 @@
 **Status:** Step 1.5a is complete. 1.5b is maintainer-approved for development.<br>
 **Canonical location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`<br>
 **Original task-branch baseline:** `efb8b2059a7d069043bc0506d3386599be58c17` (historical starting commit).<br>
-**Step 1.5b implementation starting HEAD:** `55f4e31aafc8ba9cadb8e73daae385f7b4ad0522` (included authorization updates).<br>
-**Task branch:** `task/joetoo-kwin-step1.5-layout-ssh-workflows` (created; active).<br>
+**Step 1.5b implementation starting HEAD:** `b2ff35de6eac2a76558c2c4611f3a82bd1d21b24` (included authorization updates).<br>
+**Task branch:** `task/joetoo-kwin-step1.5b-interactive-move` (created; active).<br>
 **Current HEAD:** determine dynamically with `git rev-parse HEAD`; do not store a self-referential commit ID here.<br>
 **Product authority:** `../ARCHITECTURE.md` (especially §§3–9 and implementation gate 1.5).<br>
 **Governing rules:** repository-root, workspace and project `AGENTS.md`; supplemental role instructions remain draft where their approval caveats have not been removed.<br>
@@ -48,9 +48,9 @@
 
 | Control | Approved scope / retained restrictions |
 | --- | --- |
-| Agent-authorized write paths | `joetoo-kwin` CLI; new Step 1.5a planning helpers under `libexec/` if necessary; relevant `tests/`; new task-support artifacts under `task_step1.5/`; and the agent-owned iteration section of `task_step1.5/HANDOFF.md`. |
+| Agent-authorized write paths | joetoo-kwin, libexec/joetoo-kwin-plan-functions, libexec/joetoo-kwind, joetoo-kwin-resident.js, relevant tests, and the agent-owned task evidence and iteration record. If necessary; relevant `tests/`; new task-support artifacts under `task_step1.5/`; and the agent-owned iteration section of `task_step1.5/HANDOFF.md`. |
 | Read-only reference paths | `archive/`, including historical planner and SSH POCs; existing configuration examples; installed `/usr/sbin/script_header_joetoo`; relevant `joetoo` and `joetoo-upstream` sources, subject to their policies. |
-| Explicit exclusions | No edits to `archive/`, `AGENTS.md`, `README.md`, `ARCHITECTURE.md`, KWin resident JavaScript, existing broker/registry implementation, installed system files, or protected repositories. |
+| Explicit exclusions | No edits to `archive/`, `AGENTS.md`, `README.md`, `ARCHITECTURE.md`, installed system files, or protected repositories. |
 | Preexisting local artifacts | `.HANDOFF.md.kate-swp` and `codex_step1.5_first_run_output` are maintainer-owned, untracked files. Preserve them; do not modify, delete, stage, or treat their known presence alone as a blocking dirty-tree condition. |
 | Scope expansion | If implementation requires changing a file outside the approved paths, stop and request maintainer authorization. |
 | Permitted validation commands | `python3 -m unittest ...`, `node --test tests/*.js`, `bash -n`, `shellcheck -x`, `validate_scripts` where available |
