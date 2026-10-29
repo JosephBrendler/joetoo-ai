@@ -1,6 +1,6 @@
 # Step 1.5 — active task handoff
 
-**Status:** Step 1.5a is complete. 1.5b is maintainer-approved for development.<br>
+**Status:** Step 1.5a and 1.5b are complete. Maintainer awaits agent recommendations for refined 1.5c objectives, before maintainer-approval for development.<br>
 **Canonical location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`<br>
 **Original task-branch baseline:** `efb8b2059a7d069043bc0506d3386599be58c17` (historical starting commit).<br>
 **Step 1.5b implementation starting HEAD:** `b2ff35de6eac2a76558c2c4611f3a82bd1d21b24` (included authorization updates).<br>
@@ -100,11 +100,14 @@ This handoff is a state/communication record, not an instruction bypass. Propose
 
 | 8 | Codex (2026-10-29), info-detail formatting | Existing candidate preserved; optional-move success detail in CLI, installed-header formatting assertions and agent evidence | 22 focused CLI tests passed, including actual header asterisk prefixes and split after PID with environment info/debug controls; Bash syntax, ShellCheck and whitespace checks passed | Success detail now uses two info-level j_msg -m calls: identity through PID, then before/after frame and tiled/fullscreen data. Other notice/debug/error messages unchanged. Unknown status formats retain all text. Maintainer native review next; no live operations, staging, commit, push or deploy. |
 
+| 9 | Codex (2026-10-29), native acceptance evidence | Clean existing task branch at `de79be3ef14665c0510162f0e72a8352827641b8`; agent-owned validation/evidence documents and this record only | Reviewed maintainer transcripts/screenshots: latest X11 198 Python / 14 JS tests passing; native basic forms, reporting, sticky preservation and expected rejections demonstrated on X11/Wayland. No tests or native operations rerun by agent for this documentation-only iteration; whitespace checked | [Native acceptance record](step1.5b-native-validation.md) distinguishes PASS, FAIL and NOT TESTED, with sanitized evidence links. Recommend proceeding to final review/PR preparation with explicit coverage gaps and no precision-contract change. Maintainer owns acceptance/publication; no staging, commit, push, deploy or protected writes. |
+
 On subsequent iterations, record only material changes, actual evidence and unresolved work. Keep detailed logs, temporary patches, input files and generators alongside this handoff under `task_step1.5/` as appropriate; keep live source/tests in the normal project-root paths.
 
 ## 6. Next gate — Step 1.5a candidate review
 
-**Maintainer:** ReviewStep 1.5a candidate implementation, [review report](step1.5a-review.md), [review patch](step1.5a-review.patch), and validation evidence. The Step 1.5a authorization was granted and acted upon; it is **not** awaiting initial task approval. Decide whether to request focused corrections or authorize publication of a reviewed candidate. No commit, push, merge, deployment, or changes to protected repositories are authorized by this handoff alone.
-maintainer decision: [20261029-01:37:01] review complete. Generating commit/push. Will open PR and merge.  Agents are requested to recommend implementation detail for 1.5a.2 for maintainer approval
-
+**Local and Cloud Agents:** Advise on where to insert in development plan the step1.5 "still outstanding" observations made by cloud agent.  Present recommendation for decision about hether to include these things in scope of 1.5c or later 
+maintainer decision: [20261029-01:37:01] step 1.5a review complete. Generating commit/push. Will open PR and merge.  Agents are requested to recommend implementation detail for 1.5a.2 for maintainer approval
+maintainer decision: [20261029-19:41:00] step 1.5b review complete. Generating commit/push. Will open PR and merge.  Agents are requested to recommend implementation detail for 1.5c for maintainer approval
+**maintainer:** Review, edit draft step1.5c scope and detailed implementation plan
 **Agents:** Preserve the maintainer-owned authorization and task-definition sections. Record subsequent implementation or review iterations in the assigned handoff section. Work under Steps 1.5b–1.5d requires subsequent maintainer tasking and scope decisions.
