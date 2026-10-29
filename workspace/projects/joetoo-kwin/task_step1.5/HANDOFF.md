@@ -46,13 +46,26 @@
 
 | Control | Initial value / decision pending |
 | --- | --- |
-| Approved branch and base SHA | **Pending** |
+| Approved branch and base SHA | **Approved** |
 | Agent-authorized write paths | workspace/projects/joetoo-kwin/ including tests/, tools/, task_step1.5/, archive, project-root source/tests and assigned handoff sections only, and in the curret task/branch only) |
 | Permitted validation commands | `python3 -m unittest ...`, `node --test tests/*.js`, `bash -n`, `shellcheck -x`, `validate_scripts` where available |
 | Native host operations | **Not authorized by this document** |
 | Commit/push/PR creation | **Not authorized by this document** |
 | Merge/deploy/official repository integration | **Separate explicit authorization and applicable repository policies** |
 | Stop conditions | Missing/changed baseline, dirty/untracked files at risk, authority conflict, unexpected host effects, failing or inconclusive tests, agent request to expand scope |
+
+Maintainer authorization granted [20261028-23:49:38] to proceed with codex's proposed first tranch of step 1.5 (step1.5a) --<br>
+- 1.5a.1 Implement the configuration and CLI parsing foundation, including -f, -v, -q, and defaults → config → future CLI overrides.<br>
+- 1.5a.2 Adapt the archived planner's geometry logic into one shared implementation, preserving the 87% terminal-width policy and configurable gutters.<br>
+- 1.5a.3 Implement -c with effective configuration display, colorized launch plan, and no application launches.<br>
+- 1.5a.4 Add focused headless tests for configuration precedence, geometry, invalid inputs, and absence of launch operations.<br>
+
+Proposed 4-trance implementation plan for step 1.5 follows and will be updated in project ARCHITECTURE.md, as gets approved.<br>
+Increment	Scope<br>
+1.5a	Configuration, shared geometry planner, CLI options, -c dry run and headless tests<br>
+1.5b	Interactive -m l/r, preserve-size semantics and shared geometry integration<br>
+1.5c	Configuration-driven -o managed launch and SSH placeholder integration<br>
+1.5d	Native X11/Wayland validation and final integration<br>
 
 This handoff is a state/communication record, not an instruction bypass. Proposed details do not confer new permissions merely by being written here.
 
