@@ -4,29 +4,44 @@
 
 ## Agent roles and active-task discovery
 
-Caveat: this "Agent roles and active-task discovery" and following text up through the end of the table on "Division of responsibility in multi-agent-human collaborative workflow" is to be considered draft and with no instructive authority until maintainer finalizes and approves it and removes this caveat.
+Caveat: this "Agent roles and active-task discovery" and following text up through the end of the table on "Division of responsibility in multi-agent-human collaborative workflow" is to be considered draft and with no instructive authority until maintainer finalizes and approves it and removes this caveat. The supplemental role files remain independently inactive while carrying their own draft notices.
 
-All agents must follow the governing AGENTS.md hierarchy.
+All agents must follow the governing repository-root, workspace, and applicable project `AGENTS.md` instructions.
 
-Local implementation agents, including Codex CLI, must read, and also re-read at the beginning of every task and turn, and follow workspace/LOCAL_AGENTS.md.
+Local implementation agents (also referred to as local collaborators, local agents, or local ai), including Codex CLI, must additionally consult `workspace/LOCAL_AGENTS.md`.
 
-Cloud collaboration agents, including ChatGPT, must read, and also re-read at the beginning of every task and turn, and follow workspace/CLOUD_AGENTS.md.
+Cloud collaboration agents (also referred to as cloud implementation agents, cloud agents, or cloud ai), including ChatGPT, must additionally consult `workspace/CLOUD_AGENTS.md`.
 
-Before beginning task-specific work, identify the active task
-handoff document and read its objectives, scope, authorization,
-current state, validation evidence, and next action.
+These role documents supplement but do not override governing policies, project requirements, or maintainer authorization. An agent operating in both roles must observe all applicable restrictions.
 
-Role-specific guidance must not override repository policies
-or the maintainer's authorization boundaries.
+At the beginning of each substantive actionable turn or resumed task iteration, verify the current governing instructions, active role guidance, and task handoff. Re-read material that has changed or whose current version cannot be established. Do not substitute remembered context for unavailable source.
 
-### Division of responsibility in multi-agent-human collaborative workflow
-| Step | Lead actor | Other participants |
-| --- | --- | --- |
-| Review operational requirement described by maintainer and prepare outline of task-step candidate software change requirements | Cloud agent (e.g. ChatGPT) | local agemt (e.g. codes CLI) can produce a local diff and test evidence; maintainer evaluates results and findings and articulates updates to operational requirement specifications |
-| Prepare validation/handoff record following completion of each task |	All | Cloud agent uses handoff record to translate maintainer's operational requirement into an outline of software development tasks to be performed by local agent. Local agent supplies implementation evidence, state of local repository not otherwise visible to cloud agent; maintainer reviews handoff file in all exchangesor and either approves or expresses modification requirements either in the handoff file itself, or in prompts to cloud and local agent |
-| Commit, push, open draft PR | Maintainer may perform or authorize	local or cloud agent | Local and cloud agent can perform explicitly authorized joetoo-ai publication actionsv |
-| Add cross-agent workflow convention |	ChatGPT drafts; Maintainer approves | appropriate authorized actor updates policy files |
-| Pilot Codex, MCP, and GitHub Actions | Codex for local implementation; ChatGPT for design/review |Maintainer authorizes tool installation and CI publication, and reviews results |
+Before executing task-specific work, establish the designated task, approved scope, source baseline, authorized operations, acceptance criteria, and next responsible actor.
+
+A missing, ambiguous, inactive, or conflicting handoff does not authorize implementation. In such circumstances, restrict activity to inspection and recommendations until the uncertainty is resolved.
+
+### Human–AI collaboration
+
+The **maintainer owns task designation and authorization**. Each active task must identify its canonical handoff location (for example, a task-specific file under the relevant project), target branch/base, permitted file edits and tool operations, acceptance tests, prohibited actions, stop conditions and next responsible actor. Do not infer that a draft task handoff or role document grants permission. Where a task identifier resolves ambiguously or to no approved handoff, request clarification , and perform only read-only orientation pending clarification.
+
+The normal relay is **cloud collaborator → maintainer authorization → local collaborator**, and **local collaborator → maintainer review → cloud collaborator**. A maintainer may explicitly authorize bounded multi-iteration agent-to-agent exchanges with per-iteration progress reports, while reserving publication, deployment, protected-repository and scope-expansion decisions. A handoff file stores state; an authorized orchestration tool or the maintainer must actually initiate each subsequent agent invocation.
+
+
+The maintainer retains authority over objectives, delegation, acceptance, publication, and protected-repository integration.
+
+The normal workflow is:
+
+**Cloud agent → Maintainer → Local agent**
+
+**Local agent → Maintainer → Cloud agent**
+
+A maintainer may authorize multiple bounded cloud/local iterations without requiring approval of every individual implementation change. The agents must remain within the approved scope and provide progress information at each material handoff.
+
+Each task or iteration must identify its next responsible actor and any outstanding approval requirement.
+
+A handoff document records state and proposed actions. It does not independently grant authorization or trigger another agent's execution.
+
+The collaboration lifecycle and handoff format are specified in `workspace/README.md`. Role-specific requirements belong in the respective supplemental role files.
 
 ## General start-of-assignment discovery
 
