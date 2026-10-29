@@ -46,8 +46,11 @@
 
 | Control | Initial value / decision pending |
 | --- | --- |
-| Approved branch and base SHA | **Approved** |
-| Agent-authorized write paths | workspace/projects/joetoo-kwin/ including tests/, tools/, task_step1.5/, archive, project-root source/tests and assigned handoff sections only, and in the curret task/branch only) |
+| Agent-authorized write paths | `joetoo-kwin` CLI; new Step 1.5a planning helpers under `libexec/` if necessary; relevant `tests/`; new task-support artifacts under `task_step1.5/`; and the agent-owned iteration section of `task_step1.5/HANDOFF.md`. |
+| Read-only reference paths | `archive/`, including historical planner and SSH POCs; existing configuration examples; installed `/usr/sbin/script_header_joetoo`; relevant `joetoo` and `joetoo-upstream` sources, subject to their policies. |
+| Explicit exclusions | No edits to `archive/`, `AGENTS.md`, `README.md`, `ARCHITECTURE.md`, KWin resident JavaScript, existing broker/registry implementation, installed system files, or protected repositories. |
+| Preexisting local artifacts | `.HANDOFF.md.kate-swp` and `codex_step1.5_first_run_output` are maintainer-owned, untracked files. Preserve them; do not modify, delete, stage, or treat their known presence alone as a blocking dirty-tree condition. |
+| Scope expansion | If implementation requires changing a file outside the approved paths, stop and request maintainer authorization. |
 | Permitted validation commands | `python3 -m unittest ...`, `node --test tests/*.js`, `bash -n`, `shellcheck -x`, `validate_scripts` where available |
 | Native host operations | **Not authorized by this document** |
 | Commit/push/PR creation | **Not authorized by this document** |
