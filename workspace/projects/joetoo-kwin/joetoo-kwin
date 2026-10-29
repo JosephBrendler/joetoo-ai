@@ -197,13 +197,48 @@ wait_for_request() {
         _wr_status="${PN}: ${_wr_label} timed out (request [${_wr_request}])"
     fi
     if [[ $_wr_label == optional-move ]]; then
+        # Historical output convention, superseded by the verbosity refinement below:
         # The full broker detail owns this result line; no preceding open announcement.
-        j_msg "-${_wr_level}" -pn "$_wr_status"
-        report_action "$_wr_rc" "$_wr_level"
+        # Detail now follows the concise verification result at info/error severity.
+        local _wr_report_rc
+        if report_action "$_wr_rc" "$notice"; then _wr_report_rc=0; else _wr_report_rc=$?; fi
+        if (( _wr_rc == 0 )); then
+            # Split the broker's identity from its frame detail; keep unfamiliar
+            # status formats intact. Save captures before header helpers run.
+            local _wr_identity _wr_frame
+            if [[ $_wr_status =~ ^(.*[[:space:]]\(pid=[0-9]+\))[[:space:]](before=.*)$ ]]; then
+                _wr_identity=${BASH_REMATCH[1]}; _wr_frame=${BASH_REMATCH[2]}
+                j_msg "-${info}" -m "$_wr_identity"
+                j_msg "-${info}" -m "$_wr_frame"
+            else
+                j_msg "-${info}" -m "$_wr_status"
+            fi
+        else
+            j_msg "-${err}" -p "$_wr_status"
+        fi
+        j_msg "-${debug}" -p "Request [${_wr_request}]: status after [$((_wr_attempt + 1))] polls"
+        return "$_wr_report_rc"
     else
         j_msg "-${_wr_level}" -p "$_wr_status"
         return "$_wr_rc"
     fi
+}
+
+# qdbus6 exposes error names as a first diagnostic line, not a structured
+# exception API. Match only exact known names; always retain the original text.
+report_move_submission_failure() {
+    local _msf_detail=$1 _msf_name=${1%%$'\n'*}
+    case $_msf_name in
+        "Error: ${iface}.Busy")
+            j_msg "-${err}" -p 'Move busy: previous placement request has not completed' ;;
+        "Error: ${iface}.Unsupported"|'Error: org.freedesktop.DBus.Error.UnknownMethod'|'Error: org.freedesktop.DBus.Error.UnknownInterface'|\
+        "Cannot find '${iface}.SubmitMove' in object ${path} at ${bus}")
+            j_msg "-${err}" -p 'Optional moves require compatible broker and resident support' ;;
+        "Error: ${iface}.BadArguments"|"Error: ${iface}.InvalidRequest"|'Error: org.freedesktop.DBus.Error.InvalidArgs')
+            j_msg "-${err}" -p 'Move rejected: invalid request' ;;
+        *) j_msg "-${err}" -p 'Move submission failed' ;;
+    esac
+    [[ -z $_msf_detail ]] || j_msg "-${err}" -p "$_msf_detail"
 }
 
 move_active_window() {
@@ -291,8 +326,7 @@ move_window() {
     fi
     if ! report_action "$_mw_action_rc" "$notice"; then
         if (( _mw_action_rc != 0 )); then
-            [[ -z $_mw_request ]] || j_msg "-${err}" -p "$_mw_request"
-            j_msg "-${err}" -p 'Move rejected; optional moves require compatible broker and resident support'
+            report_move_submission_failure "$_mw_request"
         fi
         return 1
     fi
@@ -307,7 +341,8 @@ move_window() {
         [[ $_mw_action_rc == 0 || -z $_mw_detail ]] || j_msg "-${err}" -p "$_mw_detail"
         return 1
     fi
-    j_msg "-${notice}" -p 'Verifying active-window move ...'
+    j_msg "-${debug}" -p "Request [${_mw_request}]: preserveDesktop=${_mw_pd} preservePosition=${_mw_pp} preserveSize=${_mw_ps}"
+    j_msg "-${notice}" -pn 'Verifying active-window move ...'
     wait_for_request "$_mw_request" optional-move
 }
 

@@ -141,3 +141,49 @@ class OptionalBrokerTests(unittest.TestCase):
         self.broker.Complete(rid, 'VERIFY', json.dumps(self.details()))
         self.sync(source='new-observer')
         self.assertTrue(self.broker.Status(rid).startswith('ERROR'))
+
+    def test_verified_membership_report_never_uses_placeholder(self):
+        for desktops, sticky, expected in [([2], False, '[2]'),
+                                           ([2, 1], False, '[1,2]'),
+                                           ([], True, '[all desktops]')]:
+            with self.subTest(desktops=desktops, sticky=sticky):
+                self.broker.request = None
+                self.window.update(desktops=desktops, on_all_desktops=sticky)
+                self.sync()
+                rid = self.arm((0, 19, 54, 816, 918, True, False, False))
+                value = self.details()
+                self.broker.Complete(rid, 'VERIFY', json.dumps(value))
+                self.window.update(value['resolved']); self.sync()
+                status = self.broker.Status(rid)
+                self.assertTrue(status.startswith('OK'), status)
+                self.assertIn('after=' + expected + ' ', status)
+                self.assertNotIn('after=[0]', status)
+
+    def test_exact_geometry_rejects_roundoff_and_real_displacement(self):
+        # Document current exact comparison without changing its contract.
+        for actual in ({'width': 816.0000000000002},
+                       {'x': 921.7951127814015, 'y': 76.30364413909359}):
+            with self.subTest(actual=actual):
+                self.broker.request = None
+                rid = self.arm((0, 19, 54, 816, 918, True, False, False))
+                value = self.details()
+                self.broker.Complete(rid, 'VERIFY', json.dumps(value))
+                self.window.update(value['resolved'])
+                self.window['geometry'].update(actual)
+                self.sync()
+                self.assertEqual(self.broker.Status(rid), 'VERIFYING')
+                self.now += 16
+                self.assertIn('ERROR placement confirmation timed out', self.broker.Status(rid))
+
+    def test_legacy_verified_desktop_report_unchanged(self):
+        rid = self.broker.Submit(2, 19, 54, 816, 918)
+        self.broker.Take()
+        self.broker.Complete(rid, 'VERIFY', json.dumps({
+            'window_uuid': WINDOW_ID, 'before': '[1] old frame',
+            'tiled': False, 'fullscreen': False}))
+        self.window.update(desktops=[2], on_all_desktops=False)
+        self.window['geometry'].update(x=19, y=54, width=816, height=918)
+        self.sync()
+        status = self.broker.Status(rid)
+        self.assertTrue(status.startswith('OK move:'), status)
+        self.assertIn('after=[2] (19,54) 816x918', status)

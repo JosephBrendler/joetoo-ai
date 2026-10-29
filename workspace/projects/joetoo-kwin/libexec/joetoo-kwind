@@ -371,10 +371,16 @@ class Broker(dbus.service.Object):
                                   and observed["on_all_desktops"] == r["expected_sticky"])
                 if desired and desktop_ok:
                     r["state"] = "OK"
+                    # Optional moves report verified membership, not the zero
+                    # request placeholder. Keep legacy Submit's format intact.
+                    after = f'[{r["desktop"]}]'
+                    if r["kind"] == "move_optional":
+                        after = ('[all desktops]' if observed["on_all_desktops"] else
+                                 '[' + ','.join(map(str, sorted(observed["desktops"]))) + ']')
                     r["detail"] = (f'{r["kind"]}: {observed["caption"]} '
                                    f'(pid={observed["pid"]}) '
                                    f'before={r["placement_before"]} '
-                                   f'after=[{r["desktop"]}] '
+                                   f'after={after} '
                                    f'({geo["x"]},{geo["y"]}) '
                                    f'{geo["width"]}x{geo["height"]} '
                                    f'tiled={str(r["placement_tiled"]).lower()} '

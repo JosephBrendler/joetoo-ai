@@ -1,0 +1,69 @@
+--- a/workspace/projects/joetoo-kwin/tests/test_step1_5b_cli.py
++++ b/workspace/projects/joetoo-kwin/tests/test_step1_5b_cli.py
+@@ -150,3 +150,23 @@
+                       'Invoking active-window move shortcut ...', 'Verifying active-window move ...'):
+             self.assertRegex(text, re.escape(label) + r'[^\n]*\(completed\)')
+         self.assertNotRegex(text, r'Verifying active-window move[^\n]*OK verified')
++
++    def test_environment_info_detail_follows_completed_notice_block(self):
++        # Real header coverage: environment verbosity and pseudo-boolean DEBUG
++        # must expose full detail without reopening the notice result line.
++        detail = 'OK move_optional: window-A before=[1] (19,54) 816x918 after=[2] (19,54) 816x918'
++        self.env['MOVE_STATUS'] = detail
++        for verbosity, debug, visible in [('5', '', False), ('6', '', True), ('5', '0', True)]:
++            with self.subTest(verbosity=verbosity, debug=debug):
++                self.env.update(verbosity=verbosity, DEBUG=debug)
++                self.run_move(['-m', '2'])
++                text = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', self.result.stdout)
++                self.assertEqual('before=[1]' in text, visible)
++                self.assertEqual('after=[2]' in text, visible)
++                if visible:
++                    verification = text.index('Verifying active-window move')
++                    completion = text.index('(completed)', verification)
++                    details = text.index('OK move_optional:', completion)
++                    self.assertIn('\n', text[completion:details])
++                    self.assertIn('window-A', text[details:])
++                    self.assertIn('816x918', text[details:])
+--- a/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md
++++ b/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md
+@@ -96,6 +96,8 @@
+ 
+ | 6 | Codex (2026-10-29), focused native-feedback corrections | Clean existing task branch at `22e93f21e27c38f28e60fd3c2fa4f99523f13d68`; CLI, bounded broker success reporting, two Step 1.5b Python test files, agent evidence and this record | 197 Python tests passed without skips, including real installed-header integration; 3 Node test files passed; Bash syntax, ShellCheck and whitespace checks passed. See [Iteration 6 review](step1.5b-iteration6-review.md) and [complete patch](step1.5b-iteration6.patch). | Verified desktop membership replaces optional-move placeholder zero; submission errors classified by exact known D-Bus names with original diagnostics retained; notice/info/debug reporting refined. Exact geometry comparison unchanged: regression demonstrates roundoff sensitivity, but native timeout also had displaced position, so its cause remains unproven. Maintainer reviews and validates corrections natively next; publication remains gated. No fetch, native operations, staging, commit, push, deploy, skill or protected-repository edits. |
+ 
++| 7 | Codex (2026-10-29), info-detail clarification | Existing task branch and Iteration 6 candidate preserved; installed-header CLI regression and agent evidence only | 22 focused CLI tests passed, including actual installed-header checks for notice suppression, environment verbosity=6, DEBUG=0, and before/after details following the completed notice block; Bash syntax and diff whitespace checks passed | Confirmed Iteration 6 already implements the requested separate info-level j_msg after handle_result; no redundant production edit or grammar change. Full before/after detail is retained. Existing -v/-q precede -m; trailing -v remains an operand. See [Iteration 7 review](step1.5b-iteration7-review.md). Maintainer native/review gates remain; no commit, push, deploy or live operations. |
++
+ On subsequent iterations, record only material changes, actual evidence and unresolved work. Keep detailed logs, temporary patches, input files and generators alongside this handoff under `task_step1.5/` as appropriate; keep live source/tests in the normal project-root paths.
+ 
+ ## 6. Next gate — Step 1.5a candidate review
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/task_step1.5/step1.5b-iteration7-review.md
+@@ -0,0 +1,21 @@
++# Iteration 7: retain before/after detail after the notice result
++
++The Iteration 6 CLI already calls report_action (which calls handle_result) to
++finish the notice-level verification announcement, then calls a separate
++`j_msg "-${info}" -p "$_wr_status"` with the complete successful broker result.
++This retains window identity and before/after desktop/geometry data. The installed
++header wraps long detail to the terminal width. Failures remain at error severity.
++No further production-code edit was needed for this clarification.
++
++Added an installed-header regression confirming that the detail follows the
++completed notice block, is hidden at ordinary verbosity, and is visible with
++environment verbosity=6 or DEBUG=0 (the joetoo TRUE value). The environment forms
++using $info/$TRUE require those variables to be defined in the invoking shell.
++Existing -v/-q work before -m, e.g. `./joetoo-kwin -v -m 2`; trailing options are
++still move operands. No grammar extension was made.
++
++22 focused CLI tests passed, including real installed-header integration.
++Bash syntax and whitespace checks passed. The full regression from Iteration 6
++was not repeated because this iteration changes tests and evidence only.
++The focused patch is relative to Iteration 6, whose source/evidence are preserved.
++No native operations, staging, commit, push, deployment or protected writes.
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/task_step1.5/step1.5b-iteration7-python.log
+@@ -0,0 +1,5 @@
++......................
++----------------------------------------------------------------------
++Ran 22 tests in 4.031s
++
++OK

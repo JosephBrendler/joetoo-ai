@@ -16,7 +16,10 @@ qdbus6() {
     case $3 in
         *.SubmitMove|*.Submit)
             printf 'CALL:%s\\n' "$*" >> "$TRACE"
-            [[ ${REJECT_MOVE:-} != yes ]] || return 1
+            if [[ ${REJECT_MOVE:-} == yes ]]; then
+                printf '%s\\n' "${MOVE_ERROR:-Error: org.joetoo.KWinBridge.Unsupported}" >&2
+                return 1
+            fi
             printf 'request-1\\n' ;;
         *.Status) printf '%s\\n' "${MOVE_STATUS:-OK verified}" ;;
         *invokeShortcut)
@@ -93,6 +96,41 @@ qdbus6() {
         self.assertIn('result reporting failed [32]', self.result.stdout + self.result.stderr)
         self.assertNotIn('Move rejected', self.result.stdout + self.result.stderr)
 
+    def test_submission_error_names_and_diagnostics(self):
+        self.env['REJECT_MOVE'] = 'yes'
+        cases = [
+            ('Error: org.joetoo.KWinBridge.Busy\nPrevious request has not completed', 'Move busy:'),
+            ('Error: org.joetoo.KWinBridge.Unsupported\nResident lacks protocol 1', 'compatible broker'),
+            ('Error: org.freedesktop.DBus.Error.UnknownMethod\nNo method', 'compatible broker'),
+            ("Cannot find 'org.joetoo.KWinBridge.SubmitMove' in object /org/joetoo/KWinBridge at org.joetoo.KWinBridge", 'compatible broker'),
+            ('Error: org.joetoo.KWinBridge.BadArguments\nInvalid preservation flags', 'invalid request'),
+            ('Error: org.freedesktop.DBus.Error.InvalidArgs\nWrong signature', 'invalid request'),
+            ('Error: org.freedesktop.DBus.Error.NoReply\nConnection timed out', 'Move submission failed'),
+            ('Transport failed with text mentioning org.joetoo.KWinBridge.Busy', 'Move submission failed')]
+        for diagnostic, label in cases:
+            with self.subTest(diagnostic=diagnostic):
+                self.env['MOVE_ERROR'] = diagnostic
+                self.assertEqual(len(self.run_move(['-m', '2'], 1)), 1)
+                output = self.result.stdout + self.result.stderr
+                self.assertIn(label, output)
+                # The installed header may wrap long diagnostics.
+                self.assertIn(diagnostic.splitlines()[-1].split()[-1], output)
+                if label != 'compatible broker':
+                    self.assertNotIn('compatible broker', output)
+
+    def test_success_verbosity_and_failure_detail(self):
+        self.env['MOVE_STATUS'] = 'OK window-identity before=[1] after=[1] geometry-details'
+        for switches, detail, protocol in [([], False, False), (['-v'], True, False),
+                                            (['-vv'], True, True)]:
+            self.run_move([*switches, '-m', '2'])
+            output = self.result.stdout + self.result.stderr
+            self.assertEqual('window-identity' in output, detail)
+            self.assertEqual('preserveDesktop=' in output, protocol)
+            self.assertIn('Verifying active-window move', output)
+        self.env['MOVE_STATUS'] = 'ERROR placement confirmation timed out: geometry-details'
+        self.run_move(['-m', '2'], 1)
+        self.assertIn('geometry-details', self.result.stdout + self.result.stderr)
+
 
 @unittest.skipUnless(INSTALLED_HEADER_AVAILABLE, 'installed joetoo header/modules unavailable')
 class InstalledHeaderMoveTests(MoveTests):
@@ -109,6 +147,29 @@ class InstalledHeaderMoveTests(MoveTests):
         # Check descriptive completion precedes that cursor movement on each line.
         text = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', self.result.stdout)
         for label in ('Submitting active-window move ...',
-                      'Invoking active-window move shortcut ...', 'OK verified'):
+                      'Invoking active-window move shortcut ...', 'Verifying active-window move ...'):
             self.assertRegex(text, re.escape(label) + r'[^\n]*\(completed\)')
         self.assertNotRegex(text, r'Verifying active-window move[^\n]*OK verified')
+
+    def test_environment_info_detail_follows_completed_notice_block(self):
+        # Real header coverage: environment verbosity and pseudo-boolean DEBUG
+        # must expose full detail without reopening the notice result line.
+        detail = 'OK move_optional: window-A (pid=123) before=[1] (19,54) 816x918 after=[2] (19,54) 816x918 tiled=false fullscreen=false'
+        self.env['MOVE_STATUS'] = detail
+        for verbosity, debug, visible in [('5', '', False), ('6', '', True), ('5', '0', True)]:
+            with self.subTest(verbosity=verbosity, debug=debug):
+                self.env.update(verbosity=verbosity, DEBUG=debug)
+                self.run_move(['-m', '2'])
+                text = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', self.result.stdout)
+                self.assertEqual('before=[1]' in text, visible)
+                self.assertEqual('after=[2]' in text, visible)
+                if visible:
+                    verification = text.index('Verifying active-window move')
+                    completion = text.index('(completed)', verification)
+                    details = text.index('OK move_optional:', completion)
+                    self.assertIn('\n', text[completion:details])
+                    self.assertIn('window-A', text[details:])
+                    self.assertIn('816x918', text[details:])
+                    self.assertRegex(text, r'(?m)^.*\* OK move_optional: window-A \(pid=123\)\n')
+                    self.assertRegex(text, r'(?m)^.*\* before=\[1\]')
+                    self.assertIn('fullscreen=false', text[details:])
