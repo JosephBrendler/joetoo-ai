@@ -1,11 +1,10 @@
 # Step 1.5 — active task handoff
 
-**Status:** Step 1.5a and 1.5b are complete. Maintainer awaits agent recommendations for refined 1.5c objectives, before maintainer-approval for development.<br>
-**Canonical location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`<br>
-**Original task-branch baseline:** `efb8b2059a7d069043bc0506d3386599be58c17` (historical starting commit).<br>
-**Step 1.5b implementation starting HEAD:** `b2ff35de6eac2a76558c2c4611f3a82bd1d21b24` (included authorization updates).<br>
-**Task branch:** `task/joetoo-kwin-step1.5b-interactive-move` (created; active).<br>
-**Current HEAD:** determine dynamically with `git rev-parse HEAD`; do not store a self-referential commit ID here.<br>
+**Status:** Steps 1.5a and 1.5b completed and merged through PRs #23 and #24. Step 1.5c scope is under maintainer refinement; implementation begins only upon explicit authorization recorded in Section 4.
+**Step 1.5c starting baseline:** `54f2ef6895f02dc198c79a821f76ef8343e5e701`
+**Proposed task branch:** `task/joetoo-kwin-step1.5c-configured-launch`
+**Detailed implementation scope:** [Step 1.5c implementation scope and outline] step1.5c%20%20implementation%20scope%20and%20outline.md)
+**Current HEAD:** Determine dynamically; do not store a self-referential commit ID. Retain the existing historical baseline and completed task-branch records.
 **Product authority:** `../ARCHITECTURE.md` (especially §§3–9 and implementation gate 1.5).<br>
 **Governing rules:** repository-root, workspace and project `AGENTS.md`; supplemental role instructions remain draft where their approval caveats have not been removed.<br>
 
@@ -33,6 +32,15 @@
 - Historical planning prototype: `../archive/step1-candidate/` `joetoo-kwin-launch-poc` and `../archive/joetoo-kwin-plan-poc/` (reference only; do not restore stale code wholesale).
 - Historical SSH process/rcfile experiments: `../archive/joetoo-kwin-ssh-rcfile-poc/`, `../archive/joetoo-kwin-ssh-nc-poc/` and documented `ssh_wrapper` conventions.
 - Skills relevant to any affected code: discover current `.agents/skills/` first; inspect actual `script_header_joetoo` interfaces rather than assuming names or signatures.
+Before any Step 1.5c implementation, agents must read the complete `task_step1.5/step1.5c  implementation scope and outline.md`, this HANDOFF.md, governing AGENTS.md files, applicable SKILL.md files, current implementation sources, and relevant archived POCs.
+- Inspect the actual installed `script_header_joetoo` functions, especially `ssh_wrapper`, `swr`, `pur`, `varlist`, `show_config`, `confirm_continue_or_exit`, and announce–act–report facilities. Do not infer function behavior from names or historical descriptions.
+- The detailed scope document contains the maintainer-approved functional requirements. This HANDOFF.md records execution authorization, permitted paths, task state, and review gates.
+
+- **1.5c.1 — Configuration and launch preparation:** Integrate `-o` with the existing planner. Present effective configuration using joetoo `varlist`/`show_config`, display the launch plan and applicable warnings, then invoke `confirm_continue_or_exit` before launching anything. Preflight must reject invalid or unsupported executable plans before creating windows. Keep `-c` capable of describing the complete configuration, including not-yet-executable entries. Document both indexed-array and per-entry `desktop_session_list+=(...)` assignment styles.<br>
+- **1.5c.2 — Managed local launching:** Sequentially launch supported Konsole and local application sessions, using existing positive PID/UUID correlation, managed registration and asynchronous placement verification. Preserve the shared geometry policy. Reject conflicts with existing active managed windows having the same intended desktop/slot identity. Repeated SSH targets and unrelated unmanaged windows are not inherently conflicts.<br>
+- **1.5c.3 — SSH launching and placeholders:** Use the proven `bash --rcfile` startup design and installed `ssh_wrapper` function. The original interactive local Bash must survive SSH logout, connection failure or an unreachable target. The established short `nc` probe may distinguish an initially reachable SSH port from an unavailable one, without using the extended `swr`/`pur` waiting workflow. A correctly registered and placed Konsole remains a successful window-management result even when SSH is unavailable.<br>
+- **1.5c.4 — Graphical applications and additional transports:** Separate implementation approval required. TigerVNC-over-SSH, graphical launch modes, possible RDP support, and underlay/stacking behavior need explicit execution contracts before implementation. Do not infer these contracts from historical labels such as `direct` or `via-ssh`.<br>
+- 1.5d	Native X11/Wayland validation and final integration<br>
 
 ## 3. Task workflow — authorization boundaries are in Section 4
 
@@ -59,8 +67,19 @@
 | Merge/deploy/official repository integration | **Separate explicit authorization and applicable repository policies** |
 | Stop conditions | Missing/changed baseline, dirty/untracked files at risk, authority conflict, unexpected host effects, failing or inconclusive tests, agent request to expand scope |
 
+Permitted initial write paths: joetoo-kwin, libexec/joetoo-kwin-plan-functions, new narrowly scoped launch/SSH startup helpers under libexec/, relevant tests, task evidence and the agent-owned HANDOFF iteration record.
+
+Read-only/excluded: Archived POCs, the detailed maintainer-owned implementation outline, AGENTS.md, ARCHITECTURE.md, README.md, installed files, broker/resident/registry sources unless separately authorized, and protected joetoo and joetoo-upstream repositories.
+
+Permitted validation: Headless Python and JavaScript regressions, actual installed-header integration tests, Bash syntax, ShellCheck and approved mock launch/SSH tests.
+
+Separate approval required: Native KWin/SSH operations, installation, service changes, commit, push, PR, merge, deployment or protected-repository integration.
+
+**Separate approval required:** Native KWin/SSH operations, installation, service changes, commit, push, PR, merge, deployment or protected-repository integration.
 Maintainer authorized [20261028-23:49:38] codex to proceed with its proposed first tranche of step 1.5 (step1.5a below)<br>
 Maintainer authorized [20261029-02:10:04] codex to proceed with second tranche of step 1.5 (step1.5b below)<br>
+Maintainer authorized [20261029-21:46:16] codex to proceed with third tranche of step 1.5 (step1.5c below)<br>
+**Initial authorized scope:** Steps 1.5c.1 through 1.5c.3, subject to the detailed scope document and approved execution boundaries. Step 1.5c.4 requires separate authorization.
 
 Proposed 4-trance implementation plan for step 1.5 follows and will be updated in project ARCHITECTURE.md, as gets approved.<br>
 Increment	Scope<br>
@@ -74,8 +93,25 @@ Increment	Scope<br>
 - 1.5b.2	Reuse Step 1.5a's terminal_geometry 2 1 and terminal_geometry 2 2 calculations; no duplicated geometry formulas
 - 1.5b.3	Support -m DESKTOP [X Y] [WIDTH HEIGHT], preserving the window's dimensions when width and height are omitted and/or position when X, Y are omitted
 - 1.5b.4	Add regression tests covering both movement modes, preservation of dimensions, current-desktop selection, negative coordinates, validation, and existing launch behavior
-- 1.5c	Configuration-driven -o managed launch and SSH placeholder integration<br>
-- 1.5d	Native X11/Wayland validation and final integration<br>
+- **1.5c** — Configuration-driven `-o`, managed local and SSH launching
+- **1.5c.1** — Effective configuration, complete plan display, warnings, confirmation and safe preflight
+- **1.5c.2** — Sequential managed Konsole/local launching, unique registration and placement, concurrency safety, independent failure handling
+- **1.5c.3** — Interactive SSH through `ssh_wrapper`, short connectivity probe, original-Bash preservation and unreachable-host placeholders
+- **1.5c.4** — Graphical applications and additional transports, subject to separate approval
+- **1.5d** — Integrated X11/Wayland native validation, including remaining Step 1.5b edge cases
+
+**Approved operating policies:**
+
+1. Preflight failure or declined confirmation must launch no windows.
+2. Only one launch transaction may be active until its registration/placement outcome is definitively known. Preserve existing broker concurrency protections.
+3. A known, isolated failure of one window should be reported conspicuously, but should not automatically prevent launching subsequent independent windows. Retain already-created windows and report the final layout as incomplete when appropriate.
+4. If broker state, window ownership, or previous-request completion cannot be established reliably, stop launching rather than bypassing safety checks.
+5. Conflicts with already managed desktop/slot identities must be rejected. Unmanaged windows must never be silently adopted or replaced. Where reliable observations indicate possible visual overlap, present a warning before confirmation.
+6. Repeated connections to the same SSH target are valid and must be independently registered.
+7. Unsupported execution modes must be rejected during preflight. The planner may continue to describe them for `-c`.
+8. `ssh_wrapper` is the initial multi-window SSH mechanism. `swr` remains distinct and is not automatically substituted. Single-window launch syntax and retry behavior remain open for later design.
+9. Preserve existing broker/resident interfaces unless a demonstrated limitation requires separately authorized changes.
+10. Continue using established `script_header_joetoo` facilities and announce–act–report conventions, including established norms for categorization of severity level in messaging.
 
 This handoff is a state/communication record, not an instruction bypass. Proposed details do not confer new permissions merely by being written here.
 
@@ -106,8 +142,14 @@ On subsequent iterations, record only material changes, actual evidence and unre
 
 ## 6. Next gate — Step 1.5a candidate review
 
-**Local and Cloud Agents:** Advise on where to insert in development plan the step1.5 "still outstanding" observations made by cloud agent.  Present recommendation for decision about hether to include these things in scope of 1.5c or later 
-maintainer decision: [20261029-01:37:01] step 1.5a review complete. Generating commit/push. Will open PR and merge.  Agents are requested to recommend implementation detail for 1.5a.2 for maintainer approval
-maintainer decision: [20261029-19:41:00] step 1.5b review complete. Generating commit/push. Will open PR and merge.  Agents are requested to recommend implementation detail for 1.5c for maintainer approval
-**maintainer:** Review, edit draft step1.5c scope and detailed implementation plan
 **Agents:** Preserve the maintainer-owned authorization and task-definition sections. Record subsequent implementation or review iterations in the assigned handoff section. Work under Steps 1.5b–1.5d requires subsequent maintainer tasking and scope decisions.
+
+Local agent (Codex): After authorization, verify the accepted baseline, create or use the authorized isolated task branch, read the complete detailed outline and applicable instructions, then implement the approved increments. Preserve maintainer-owned sections and record material implementation/test outcomes in the agent-owned iteration record.
+
+Cloud agent (ChatGPT): Review implementation proposals, source-grounded findings, diffs, validation results and unresolved design issues; recommend focused corrections or subsequent authorization decisions.
+
+Outstanding validation: Carry post-capture focus races, multiple-specific-desktop membership, tiled/fullscreen refusal and controlled concurrency checks into Step 1.5d, except where Step 1.5c correctness requires earlier testing. Preserve exact geometry verification unless separately authorized to change it.
+
+Future design: Single-window launch and retry policy, graphical/VNC/RDP integration, and possible non-KWin desktop-environment support require separate design decisions. Do not treat these possibilities as authorization for current implementation.
+
+Publication: Maintainer retains acceptance, native testing, commit/push/PR, merge and official integration decisions. Completion of a coding iteration does not itself authorize publication.
