@@ -1,12 +1,13 @@
 # Step 1.5 — active task handoff
 
-**Status:** Steps 1.5a and 1.5b completed and merged through PRs #23 and #24. Step 1.5c scope is under maintainer refinement; implementation begins only upon explicit authorization recorded in Section 4.
-**Step 1.5c starting baseline:** `54f2ef6895f02dc198c79a821f76ef8343e5e701`
-**Proposed task branch:** `task/joetoo-kwin-step1.5c-configured-launch`
-**Detailed implementation scope:** [Step 1.5c implementation scope and outline] step1.5c%20%20implementation%20scope%20and%20outline.md)
-**Current HEAD:** Determine dynamically; do not store a self-referential commit ID. Retain the existing historical baseline and completed task-branch records.
-**Product authority:** `../ARCHITECTURE.md` (especially §§3–9 and implementation gate 1.5).<br>
-**Governing rules:** repository-root, workspace and project `AGENTS.md`; supplemental role instructions remain draft where their approval caveats have not been removed.<br>
+**Status:** Steps 1.5a and 1.5b are complete (PRs #23 and #24). The maintainer recorded Step 1.5c.1–1.5c.3 authorization on 2026-10-29 at 21:46:16. The detailed scope remains marked as a draft and contains a conflicting fail-fast policy; reconcile that document before implementation.<br>
+**Canonical location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`<br>
+**Step 1.5c starting baseline:** the accepted `main` including the finalized scope and authorization; at this review `06ab98ca4d5b34eb2adf73557559bd5be522f4a6`. The prior PR #24 merge is `54f2ef6895f02dc198c79a821f76ef8343e5e701`. Verify the actual task-branch parent before coding.<br>
+**Proposed task branch:** `task/joetoo-kwin-step1.5c-configured-launch` (verify actual branch and HEAD).<br>
+**Required detailed scope:** [Step 1.5c implementation scope and outline](Step1.5c_implementation_scope.md)<br>
+**Current HEAD:** determine dynamically with `git rev-parse HEAD`.<br>
+**Product authority:** `../ARCHITECTURE.md` (especially §§3–9 and gate 1.5).<br>
+**Governing rules:** repository-root, workspace and project `AGENTS.md`; draft role guidance has no independent authority.<br>
 
 ## 1. Maintainer-approved task definition
 
@@ -28,19 +29,10 @@
 
 ## 2. Sources to inspect before coding
 
-- Current project root: `joetoo-kwin`, `joetoo-kwin-resident.js`, `libexec/joetoo-kwind`, `libexec/joetoo_kwin_registry.py`, config and related tests; legacy xdotool_open_windows; script_header_joetoo.
-- Historical planning prototype: `../archive/step1-candidate/` `joetoo-kwin-launch-poc` and `../archive/joetoo-kwin-plan-poc/` (reference only; do not restore stale code wholesale).
-- Historical SSH process/rcfile experiments: `../archive/joetoo-kwin-ssh-rcfile-poc/`, `../archive/joetoo-kwin-ssh-nc-poc/` and documented `ssh_wrapper` conventions.
-- Skills relevant to any affected code: discover current `.agents/skills/` first; inspect actual `script_header_joetoo` interfaces rather than assuming names or signatures.
-Before any Step 1.5c implementation, agents must read the complete `task_step1.5/step1.5c  implementation scope and outline.md`, this HANDOFF.md, governing AGENTS.md files, applicable SKILL.md files, current implementation sources, and relevant archived POCs.
-- Inspect the actual installed `script_header_joetoo` functions, especially `ssh_wrapper`, `swr`, `pur`, `varlist`, `show_config`, `confirm_continue_or_exit`, and announce–act–report facilities. Do not infer function behavior from names or historical descriptions.
-- The detailed scope document contains the maintainer-approved functional requirements. This HANDOFF.md records execution authorization, permitted paths, task state, and review gates.
-
-- **1.5c.1 — Configuration and launch preparation:** Integrate `-o` with the existing planner. Present effective configuration using joetoo `varlist`/`show_config`, display the launch plan and applicable warnings, then invoke `confirm_continue_or_exit` before launching anything. Preflight must reject invalid or unsupported executable plans before creating windows. Keep `-c` capable of describing the complete configuration, including not-yet-executable entries. Document both indexed-array and per-entry `desktop_session_list+=(...)` assignment styles.<br>
-- **1.5c.2 — Managed local launching:** Sequentially launch supported Konsole and local application sessions, using existing positive PID/UUID correlation, managed registration and asynchronous placement verification. Preserve the shared geometry policy. Reject conflicts with existing active managed windows having the same intended desktop/slot identity. Repeated SSH targets and unrelated unmanaged windows are not inherently conflicts.<br>
-- **1.5c.3 — SSH launching and placeholders:** Use the proven `bash --rcfile` startup design and installed `ssh_wrapper` function. The original interactive local Bash must survive SSH logout, connection failure or an unreachable target. The established short `nc` probe may distinguish an initially reachable SSH port from an unavailable one, without using the extended `swr`/`pur` waiting workflow. A correctly registered and placed Konsole remains a successful window-management result even when SSH is unavailable.<br>
-- **1.5c.4 — Graphical applications and additional transports:** Separate implementation approval required. TigerVNC-over-SSH, graphical launch modes, possible RDP support, and underlay/stacking behavior need explicit execution contracts before implementation. Do not infer these contracts from historical labels such as `direct` or `via-ssh`.<br>
-- 1.5d	Native X11/Wayland validation and final integration<br>
+- **Mandatory for 1.5c:** Read the complete [implementation scope and outline](Step1.5c_implementation_scope.md), this handoff and applicable `AGENTS.md` files. The outline specifies detailed functionality; Section 4 here is the **single current agent write/operation authorization**. Flag contradictions before coding.
+- Inspect `joetoo-kwin`, `libexec/joetoo-kwin-plan-functions`, broker, resident, registry, configurations and relevant tests.
+- Read-only historical references: `archive/step1-candidate/`, `archive/joetoo-kwin-launch-poc/`, `archive/joetoo-kwin-plan-poc/`, `archive/joetoo-kwin-ssh-nc-poc/`, `archive/joetoo-kwin-ssh-rcfile-poc/`, and legacy `xdotool_open_windows`. Do not copy POCs wholesale.
+- Discover relevant `.agents/skills/` and inspect the **actual** installed `script_header_joetoo` functions, particularly `ssh_wrapper`, `swr`, `pur`, `varlist`, `show_config`, `confirm_continue_or_exit`, and announce–act–report. `ssh_wrapper` is intended for initial multi-window SSH; `swr` is a separate waiting/retry-oriented helper. Do not infer behavior from names.
 
 ## 3. Task workflow — authorization boundaries are in Section 4
 
@@ -50,106 +42,55 @@ Before any Step 1.5c implementation, agents must read the complete `task_step1.5
 
 **Local implementation agent (e.g., Codex CLI):** only after authorization, inspect the actual working tree and handoff; prepare focused candidate changes on the approved task branch, run explicitly permitted headless checks and report diffs, tests, failures and untracked files. Do not independently install/restart services, modify protected repositories, or commit/push without the relevant approval.
 
-**Native validation:** maintainer performs or separately authorizes X11 on `gmki91` and Wayland on `q552u01`, including SSH reachable/unreachable cases as relevant. No native Step 1.5 results exist yet.
+**Native validation:** Step 1.5b maintainer-run X11/Wayland evidence is in `step1.5b-native-validation.md`. Step 1.5c native launches and SSH connections remain maintainer-operated or separately authorized.
 
-## 4. Authorization and execution controls — Step 1.5a
+## 4. Authorization and execution controls — Step 1.5c
 
-| Control | Approved scope / retained restrictions |
+**Approval history:** Step 1.5a authorized 2026-10-28 23:49:38; Step 1.5b authorized 2026-10-29 02:10:04; initial Step 1.5c.1–1.5c.3 authorized 2026-10-29 21:46:16. Completed increments are documented in Section 5 and PRs #23/#24.
+
+**Active implementation increments:**
+- **1.5c.1:** `-o` preflight, effective configuration, plan and warnings, then confirmation before any launch; `-c` remains a complete descriptive dry run.
+- **1.5c.2:** Sequential positive registration and placement of supported local Konsole sessions, using shared geometry and existing managed-launch interfaces.
+- **1.5c.3:** Single-Bash `--rcfile` SSH startup through `ssh_wrapper`, short TCP probe and usable unreachable-target placeholders.
+- **1.5c.4:** Graphical/VNC/RDP execution and underlay/stacking policy **not authorized**; separate design and approval required. Step 1.5d integrated native regression remains separately gated.
+
+**Current maintainer decisions requiring consistency in the scope document:** Preflight failure or declined confirmation launches nothing. A known, isolated individual window failure is reported and **does not ordinarily abort other independent launch entries**; retain created windows and report partial completion. Never bypass unresolved Busy/ownership uncertainty. Reject active managed desktop/slot conflicts, not mere unmanaged visual overlap; repeated SSH targets are valid. Warn at confirmation about reliably observed unmanaged overlap. SSH connectivity does not determine registration/placement success. Do not substitute `swr` for `ssh_wrapper`.
+
+| Control | Current Step 1.5c rule |
 | --- | --- |
-| Agent-authorized write paths | joetoo-kwin, libexec/joetoo-kwin-plan-functions, libexec/joetoo-kwind, joetoo-kwin-resident.js, relevant tests, and the agent-owned task evidence and iteration record. If necessary; relevant `tests/`; new task-support artifacts under `task_step1.5/`; and the agent-owned iteration section of `task_step1.5/HANDOFF.md`. |
-| Read-only reference paths | `archive/`, including historical planner and SSH POCs; existing configuration examples; installed `/usr/sbin/script_header_joetoo`; relevant `joetoo` and `joetoo-upstream` sources, subject to their policies. |
-| Explicit exclusions | No edits to `archive/`, `AGENTS.md`, `README.md`, `ARCHITECTURE.md`, installed system files, or protected repositories. |
-| Preexisting local artifacts | `.HANDOFF.md.kate-swp` and `codex_step1.5_first_run_output` are maintainer-owned, untracked files. Preserve them; do not modify, delete, stage, or treat their known presence alone as a blocking dirty-tree condition. |
-| Scope expansion | If implementation requires changing a file outside the approved paths, stop and request maintainer authorization. |
-| Permitted validation commands | `python3 -m unittest ...`, `node --test tests/*.js`, `bash -n`, `shellcheck -x`, `validate_scripts` where available |
-| Native host operations | **Not authorized by this document** |
-| Commit/push/PR creation | **Not authorized by this document** |
-| Merge/deploy/official repository integration | **Separate explicit authorization and applicable repository policies** |
-| Stop conditions | Missing/changed baseline, dirty/untracked files at risk, authority conflict, unexpected host effects, failing or inconclusive tests, agent request to expand scope |
+| Agent-permitted candidate write paths | `joetoo-kwin`; `libexec/joetoo-kwin-plan-functions`; narrowly scoped **new** launch/session startup helpers under `libexec/`; relevant tests and fixtures; agent-created evidence under `task_step1.5/`; and **only Section 5** of this handoff. |
+| Read-only references and write exclusions | `archive/`, installed headers, existing examples, maintainer-owned `Step1.5c_implementation_scope.md`, `AGENTS.md`, `README.md`, `ARCHITECTURE.md`, existing broker/resident/registry sources, installed system files, and protected `joetoo`/`joetoo-upstream` repositories. No edits to these without separate approval. |
+| Local artifacts | Preserve maintainer-owned editor swaps, historical output and unrelated untracked work. Inspect before overwriting or staging. |
+| Permitted headless validation | Python/Node regressions, real installed-header integration tests, Bash syntax, ShellCheck, `validate_scripts` where available, and non-network/non-GUI mock launch/SSH tests. |
+| Native operations | No real KWin launching, SSH connections, installation or service changes without separate authorization. |
+| Publication | Commit, push, PR, merge, deployment and protected-repository integration require separate explicit authorization and applicable policy compliance. |
+| Stop/escalate | Conflicting authorization/draft requirements, changed baseline, at-risk maintainer data, uncertain broker ownership/transaction state, unexpected host effects or needed out-of-scope edits. In-scope headless failures may be diagnosed and corrected without a new approval for every test failure. |
 
-Permitted initial write paths: joetoo-kwin, libexec/joetoo-kwin-plan-functions, new narrowly scoped launch/SSH startup helpers under libexec/, relevant tests, task evidence and the agent-owned HANDOFF iteration record.
+This handoff records permissions; it does not override governing policy. Historical approvals do not reopen earlier broad write paths.
 
-Read-only/excluded: Archived POCs, the detailed maintainer-owned implementation outline, AGENTS.md, ARCHITECTURE.md, README.md, installed files, broker/resident/registry sources unless separately authorized, and protected joetoo and joetoo-upstream repositories.
-
-Permitted validation: Headless Python and JavaScript regressions, actual installed-header integration tests, Bash syntax, ShellCheck and approved mock launch/SSH tests.
-
-Separate approval required: Native KWin/SSH operations, installation, service changes, commit, push, PR, merge, deployment or protected-repository integration.
-
-**Separate approval required:** Native KWin/SSH operations, installation, service changes, commit, push, PR, merge, deployment or protected-repository integration.
-Maintainer authorized [20261028-23:49:38] codex to proceed with its proposed first tranche of step 1.5 (step1.5a below)<br>
-Maintainer authorized [20261029-02:10:04] codex to proceed with second tranche of step 1.5 (step1.5b below)<br>
-Maintainer authorized [20261029-21:46:16] codex to proceed with third tranche of step 1.5 (step1.5c below)<br>
-**Initial authorized scope:** Steps 1.5c.1 through 1.5c.3, subject to the detailed scope document and approved execution boundaries. Step 1.5c.4 requires separate authorization.
-
-Proposed 4-trance implementation plan for step 1.5 follows and will be updated in project ARCHITECTURE.md, as gets approved.<br>
-Increment	Scope<br>
-- 1.5a	Configuration, shared geometry planner, CLI options, -c dry run and headless tests<br>
-- 1.5a.1 Implemented configuration and CLI parsing foundation, including -f, -v, -q, and defaults → config → future CLI overrides.<br>
-- 1.5a.2 Adapted archived planner's geometry logic into one shared implementation, preserving the 87% terminal-width policy and configurable gutters.<br>
-- 1.5a.3 Implemented -c with effective configuration display, colorized launch plan, and no application launches.<br>
-- 1.5a.4 Added focused headless tests for configuration precedence, geometry, invalid inputs, and absence of launch operations.<br>
-- 1.5b	Interactive -m l/r, preserve-size semantics and shared geometry integration<br>
-- 1.5b.1	Implement joetoo-kwin -m [DESKTOP] l and -m [DESKTOP] r, moving the active window into the left or right of two-terminal position layout, on its current virtual desktop if DESKTOP is omitted
-- 1.5b.2	Reuse Step 1.5a's terminal_geometry 2 1 and terminal_geometry 2 2 calculations; no duplicated geometry formulas
-- 1.5b.3	Support -m DESKTOP [X Y] [WIDTH HEIGHT], preserving the window's dimensions when width and height are omitted and/or position when X, Y are omitted
-- 1.5b.4	Add regression tests covering both movement modes, preservation of dimensions, current-desktop selection, negative coordinates, validation, and existing launch behavior
-- **1.5c** — Configuration-driven `-o`, managed local and SSH launching
-- **1.5c.1** — Effective configuration, complete plan display, warnings, confirmation and safe preflight
-- **1.5c.2** — Sequential managed Konsole/local launching, unique registration and placement, concurrency safety, independent failure handling
-- **1.5c.3** — Interactive SSH through `ssh_wrapper`, short connectivity probe, original-Bash preservation and unreachable-host placeholders
-- **1.5c.4** — Graphical applications and additional transports, subject to separate approval
-- **1.5d** — Integrated X11/Wayland native validation, including remaining Step 1.5b edge cases
-
-**Approved operating policies:**
-
-1. Preflight failure or declined confirmation must launch no windows.
-2. Only one launch transaction may be active until its registration/placement outcome is definitively known. Preserve existing broker concurrency protections.
-3. A known, isolated failure of one window should be reported conspicuously, but should not automatically prevent launching subsequent independent windows. Retain already-created windows and report the final layout as incomplete when appropriate.
-4. If broker state, window ownership, or previous-request completion cannot be established reliably, stop launching rather than bypassing safety checks.
-5. Conflicts with already managed desktop/slot identities must be rejected. Unmanaged windows must never be silently adopted or replaced. Where reliable observations indicate possible visual overlap, present a warning before confirmation.
-6. Repeated connections to the same SSH target are valid and must be independently registered.
-7. Unsupported execution modes must be rejected during preflight. The planner may continue to describe them for `-c`.
-8. `ssh_wrapper` is the initial multi-window SSH mechanism. `swr` remains distinct and is not automatically substituted. Single-window launch syntax and retry behavior remain open for later design.
-9. Preserve existing broker/resident interfaces unless a demonstrated limitation requires separately authorized changes.
-10. Continue using established `script_header_joetoo` facilities and announce–act–report conventions, including established norms for categorization of severity level in messaging.
-
-This handoff is a state/communication record, not an instruction bypass. Proposed details do not confer new permissions merely by being written here.
-
-## 5. Agent-owned iteration record — currently empty
+## 5. Agent-owned iteration record
 
 | Iteration | Actor | Base / changed files | Verification | Outcome and next actor |
 | --- | --- | --- | --- | --- |
 | 0 | ChatGPT (drafting assistance) | No repository edits; this proposed handoff only | Documentation/source review, no Step 1.5 test execution | Maintainer to review scope and authorize planning/implementation |
 | 1 | Codex (2026-10-29) | Branch `task/joetoo-kwin-step1.5-layout-ssh-workflows`, HEAD `03b3ca493c067f18d434d078fd0c8789de80ca95`; only this agent-owned record changed | Reread handoff and governing root/workspace/project instructions. Confirmed tracked working tree initially clean, with only the two exempted maintainer-owned untracked artifacts. Required `git fetch origin` failed: `cannot open '.git/FETCH_HEAD': Read-only file system`. No implementation or tests performed. | Step 1.5a authorization confirmed, but baseline-fetch prerequisite could not be completed within client permissions. Stopped before implementation; maintainer to fetch the accepted baseline and provide confirmation or make fetching available. No commit, push, deployment, or protected-repository changes. |
-
 | 2 | Codex (2026-10-29) | Same branch/HEAD `03b3ca493c067f18d434d078fd0c8789de80ca95`; `joetoo-kwin`, new `libexec/joetoo-kwin-plan-functions`, `tests/test_step1_5a_plan.py`, task review/example/test evidence and this record; Iteration 1 preserved | Maintainer verified fetch satisfied, HEAD equals origin/main, no incoming commits; no repeat fetch. 161 Python tests passed (17 new); 2 Node test files passed; Bash syntax, ShellCheck and diff whitespace checks passed. See [review and evidence](step1.5a-review.md). | Step 1.5a candidate ready for maintainer review: defaults/config/CLI precedence, shared geometry and colorized `-c` dry run. No launch/transport calls in headless spies. Explicit configured screen dimensions required; no native validation. Stopped at review/publication boundary; later tranches require maintainer tasking. Both exempted untracked artifacts preserved; no commit, push, deploy or protected-repository changes. |
-
 | 3 | Codex (2026-10-29), focused review fixes | Same branch/HEAD `03b3ca493c067f18d434d078fd0c8789de80ca95`; planner `print_plan`, Python planner tests, new portable test-header fixture, task review/diffs/evidence and this agent-owned record | 165 Python tests passed with no skips (including installed-header integration and ordinary tests with header reads blocked); 2 Node test files passed; Bash syntax, ShellCheck and whitespace checks passed. Initial lint style findings corrected; final checks rerun. CLI and planner geometry/defaults/validation byte-compared unchanged against prior bundle. | Addressed all three review findings: portable ordinary tests with separately guarded installed-header coverage; display-width-aware colorized columns tested with long targets; dry-run wording explicitly permits trusted-config side effects. See [Iteration 3 review and complete diff](step1.5a-iteration3-review.md). Earlier bundle/records and maintainer artifacts preserved. No native tests or scope expansion. Maintainer review next; no staging, commit, push, deploy or protected-repository changes. |
-
 | 4 | Codex (2026-10-29), Step 1.5b implementation | Branch `task/joetoo-kwin-step1.5b-interactive-move`; starting HEAD/origin/main `9ea76c6491e1fe2815bea514c6891dc7d5460433`. Verified clean tree and explicit broker/resident authorization in Section 4 before editing. CLI, shared planner validation, bounded broker/resident move changes, relevant tests and task evidence | 183 Python tests passed with real installed-header coverage and no skips; 3 Node test files passed; Bash syntax, ShellCheck and whitespace checks passed. See [Step 1.5b review and complete diff](step1.5b-review.md). | Implemented all six approved forms, independent desktop/position/size preservation, shared l/r geometry, resident-support rejection, captured UUID/source binding and asynchronous resolved-value verification. Legacy Submit and launches retained. No native operations performed. Stopped at maintainer review/native-validation/publication gates; no staging, commit, push, deploy or protected writes. |
-
 | 5 | Codex (2026-10-29), announce–act–report follow-up | Same Step 1.5b branch and HEAD `9ea76c6491e1fe2815bea514c6891dc7d5460433`; preserved existing candidate and maintainer skill edits. Changed CLI messaging, relevant CLI tests and agent-owned evidence only | Reviewed updated skill/demonstration and installed header. Demonstration at verbosity 7 reached its intentional simulated failure (exit 1). 190 Python tests passed, including installed-header integration; 3 Node test files passed; Bash syntax, ShellCheck and whitespace checks passed. See [focused patch](step1.5b-iteration5.patch) and iteration5 validation logs. | Submission and shortcut dispatch now finish their announced lines immediately; verification detail and completion share a result line. Original action failures and auxiliary reporting faults remain distinct. Demo review finding: timestamp example captures `result` but passes the later `j_msg` status to `handle_result`; maintainer skill left untouched. Native formatting review remains with maintainer; no native operations, staging, commit, push, deployment or protected writes. |
-
 | 6 | Codex (2026-10-29), focused native-feedback corrections | Clean existing task branch at `22e93f21e27c38f28e60fd3c2fa4f99523f13d68`; CLI, bounded broker success reporting, two Step 1.5b Python test files, agent evidence and this record | 197 Python tests passed without skips, including real installed-header integration; 3 Node test files passed; Bash syntax, ShellCheck and whitespace checks passed. See [Iteration 6 review](step1.5b-iteration6-review.md) and [complete patch](step1.5b-iteration6.patch). | Verified desktop membership replaces optional-move placeholder zero; submission errors classified by exact known D-Bus names with original diagnostics retained; notice/info/debug reporting refined. Exact geometry comparison unchanged: regression demonstrates roundoff sensitivity, but native timeout also had displaced position, so its cause remains unproven. Maintainer reviews and validates corrections natively next; publication remains gated. No fetch, native operations, staging, commit, push, deploy, skill or protected-repository edits. |
-
 | 7 | Codex (2026-10-29), info-detail clarification | Existing task branch and Iteration 6 candidate preserved; installed-header CLI regression and agent evidence only | 22 focused CLI tests passed, including actual installed-header checks for notice suppression, environment verbosity=6, DEBUG=0, and before/after details following the completed notice block; Bash syntax and diff whitespace checks passed | Confirmed Iteration 6 already implements the requested separate info-level j_msg after handle_result; no redundant production edit or grammar change. Full before/after detail is retained. Existing -v/-q precede -m; trailing -v remains an operand. See [Iteration 7 review](step1.5b-iteration7-review.md). Maintainer native/review gates remain; no commit, push, deploy or live operations. |
-
 | 8 | Codex (2026-10-29), info-detail formatting | Existing candidate preserved; optional-move success detail in CLI, installed-header formatting assertions and agent evidence | 22 focused CLI tests passed, including actual header asterisk prefixes and split after PID with environment info/debug controls; Bash syntax, ShellCheck and whitespace checks passed | Success detail now uses two info-level j_msg -m calls: identity through PID, then before/after frame and tiled/fullscreen data. Other notice/debug/error messages unchanged. Unknown status formats retain all text. Maintainer native review next; no live operations, staging, commit, push or deploy. |
-
 | 9 | Codex (2026-10-29), native acceptance evidence | Clean existing task branch at `de79be3ef14665c0510162f0e72a8352827641b8`; agent-owned validation/evidence documents and this record only | Reviewed maintainer transcripts/screenshots: latest X11 198 Python / 14 JS tests passing; native basic forms, reporting, sticky preservation and expected rejections demonstrated on X11/Wayland. No tests or native operations rerun by agent for this documentation-only iteration; whitespace checked | [Native acceptance record](step1.5b-native-validation.md) distinguishes PASS, FAIL and NOT TESTED, with sanitized evidence links. Recommend proceeding to final review/PR preparation with explicit coverage gaps and no precision-contract change. Maintainer owns acceptance/publication; no staging, commit, push, deploy or protected writes. |
 
 On subsequent iterations, record only material changes, actual evidence and unresolved work. Keep detailed logs, temporary patches, input files and generators alongside this handoff under `task_step1.5/` as appropriate; keep live source/tests in the normal project-root paths.
 
-## 6. Next gate — Step 1.5a candidate review
+## 6. Next gate — Step 1.5c implementation and review
 
-**Agents:** Preserve the maintainer-owned authorization and task-definition sections. Record subsequent implementation or review iterations in the assigned handoff section. Work under Steps 1.5b–1.5d requires subsequent maintainer tasking and scope decisions.
+**Local agent (Codex):** Verify accepted baseline and isolated task branch; read finalized scope and governing instructions; implement only 1.5c.1–1.5c.3 within Section 4 boundaries. Preserve maintainer-owned sections and record material changes, actual tests and next actor in Section 5.
 
-Local agent (Codex): After authorization, verify the accepted baseline, create or use the authorized isolated task branch, read the complete detailed outline and applicable instructions, then implement the approved increments. Preserve maintainer-owned sections and record material implementation/test outcomes in the agent-owned iteration record.
+**Cloud agent (ChatGPT):** Review candidate code, complete diff, headless/native evidence, and unresolved design questions against approved scope.
 
-Cloud agent (ChatGPT): Review implementation proposals, source-grounded findings, diffs, validation results and unresolved design issues; recommend focused corrections or subsequent authorization decisions.
+**Deferred validation/design:** Step 1.5d includes post-capture focus changes, multiple-specific-desktop membership, tiled/fullscreen refusal and integrated X11/Wayland regression. Launch concurrency also needs 1.5c headless coverage. Keep exact geometry comparison absent separate approval. Graphical/VNC/RDP, one-off launch semantics and non-KWin generalization are separate decisions.
 
-Outstanding validation: Carry post-capture focus races, multiple-specific-desktop membership, tiled/fullscreen refusal and controlled concurrency checks into Step 1.5d, except where Step 1.5c correctness requires earlier testing. Preserve exact geometry verification unless separately authorized to change it.
-
-Future design: Single-window launch and retry policy, graphical/VNC/RDP integration, and possible non-KWin desktop-environment support require separate design decisions. Do not treat these possibilities as authorization for current implementation.
-
-Publication: Maintainer retains acceptance, native testing, commit/push/PR, merge and official integration decisions. Completion of a coding iteration does not itself authorize publication.
+**Publication gate:** Maintainer separately decides commit/push/PR, merge, installation and official integration after reviewing candidate and validation evidence.
