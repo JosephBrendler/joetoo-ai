@@ -1,0 +1,43 @@
+#!/bin/bash
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# vnc-via-ssh-launch - proof of concept for cmdline code launching an ssh connection and vnc session over it
+
+# note this connection requires **remote** configuration like below
+# net-misc/tigervnc-1.16+
+# ~/.vnc/passwd - containing hashed passwd
+# /etc/tigervnc - Main config containing global setup files for TigerVNC server
+# /etc/tigervnc/vncserver.users - Maps specific local users to distinct VNC display port numbers
+# /etc/tigervnc/vncserver-config-mandatory - Defines global VNC settings that are strictly enforced
+#   (that cannot users cannot override)
+# /etc/tigervnc/vncserver-config-defaults - Establishes default fallback VNC runtime configurations
+#   (like geometry, depth, or security rules) that users can choose to override.
+# /etc/X11/vncpasswd - Global or legacy encrypted password verification file
+#   (used to store the encrypted credentials required to authenticate incoming VNC connections)
+# /etc/X11/xorg.conf.d/40-vnc.conf - Xorg server snippet used to load and configure a VNC extension module
+# /etc/pam.d/tigervnc - pam config defining explicit auth rules and security policies for TigerVNC sessions
+# /etc/init.d/tigervnc - Master OpenRC init script template
+# /etc/init.d/tigervnc.1 - Symlinked OpenRC init script for VNC display port :1.
+# /etc/init.d/tigervnc.2 - Symlinked OpenRC init script for VNC display port :2.
+# /etc/conf.d/tigervnc - global OpenRC config file with env var overrides, execution flags
+#   (passed directly into the /etc/init.d/ startup daemons)
+# /etc/runlevels/default/tigervnc.2 - Persistent symlink to boot display port :2 service in default runlevel
+
+
+
+
+source /usr/sbin/script_header_joetoo
+
+PN=${0##*/}   #  like =$(basename $0) but w/o subshell and function call
+
+if [ -f /etc/joetoolkit/BUILD ]; then . /etc/joetoolkit/BUILD; else BUILD="0.0.1"; fi
+
+[ -z "$verbosity" ] && verbosity=${notice}  # assign default if null; allow calling program to dictate
+
+user="joe"
+target="x402"
+domain="brendler"
+
+
+vncviewer -Fullcolor -QualityLevel 9 -via ${user}@${target}.${domain} localhost:2

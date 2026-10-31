@@ -6,6 +6,7 @@
 **Step 1.5c branch point:** 31400fe0d2be05064b898cf520d06d6445e13839, verified against current main. The branch incorporates the separately published Step 1.5c scope and authorization.<br>
 **Task branch:** `task/joetoo-kwin-step1.5c-configured-launch` (verify actual branch and HEAD).<br>
 **Required detailed scope:** [Step 1.5c implementation scope and outline](Step1.5c_implementation_scope.md)<br>
+**Extended required detailed scope:** [Step1.5c4 implementation scope and outline](Step1.5c4_implementation_scope.md)<br>
 **Current HEAD:** determine dynamically with `git rev-parse HEAD`.<br>
 **Latest reviewed candidate:** 9b5fe097ad2481b8ba1f8486c60ad0c8caf892ff<br>
 **Product authority:** `../ARCHITECTURE.md` (especially §§3–9 and gate 1.5).<br>
@@ -50,17 +51,28 @@
 
 **Approval/decision history:** Step 1.5a authorized 2026-10-28 23:49:38; Step 1.5b authorized 2026-10-29 02:10:04; initial Step 1.5c.1–1.5c.3 authorized 2026-10-29 21:46:16. Completed increments are documented in Section 5 and PRs #23/#24.
 Maintainer approved [20261030-01:36:43] task_step1.5/Step1.5c_clarification_of_desktop_slot_duplicate_launch_policy 
+Maintainer approved [20261031-12:21:16] local agent to proceed with implementation of Step1.5c4 as outlined in task_step1.5/Step1.5c4_implementation_scope.md
 
 **Completed in this task/branch:**
 - **1.5c.1:** `-o` preflight, effective configuration, plan and warnings, then confirmation before any launch; `-c` remains a complete descriptive dry run.<br>
 - **1.5c.2:** Sequential positive registration and placement of supported local Konsole sessions, using shared geometry and existing managed-launch interfaces.<br>
 - **1.5c.3:** Single-Bash `--rcfile` SSH startup through `ssh_wrapper`, short TCP probe and usable unreachable-target placeholders.<br>
+**Recorded implementation exceptions:** The maintainer's separately approved desktop/slot policy authorized additive modifications to `libexec/joetoo-kwind` for managed launch metadata, conservative broker-state reporting, and atomic duplicate-launch protection. Subsequent focused correction authorization covered launcher-wide concurrency protection, truthful PID reporting, and partial-failure regression tests. These approvals applied to the specified Step 1.5c.1-1.5c.3 work; they do not establish continuing permission for unrelated broker or resident modifications.<br>
 
 **Active implementation increments:**
 - **1.5c.4:** Graphical/VNC/RDP execution and underlay/stacking policy **not authorized**; separate design and approval required. Step 1.5d integrated native regression remains separately gated.<br>
-**Bounded implementation exceptions:** The maintainer's separately approved desktop/slot policy authorized additive modifications to `libexec/joetoo-kwind` for managed launch metadata, conservative broker-state reporting, and atomic duplicate-launch protection. Subsequent focused correction authorization covered launcher-wide concurrency protection, truthful PID reporting, and partial-failure regression tests. These approvals applied to the specified Step 1.5c work; they do not establish continuing permission for unrelated broker or resident modifications.<br>
 
-**Current maintainer decisions requiring consistency in the scope document:** Preflight failure or declined confirmation launches nothing. A known, isolated individual window failure is reported and **does not ordinarily abort other independent launch entries**; retain created windows and report partial completion. Never bypass unresolved Busy/ownership uncertainty. Reject active managed desktop/slot conflicts, not mere unmanaged visual overlap; repeated SSH targets are valid. Warn at confirmation about reliably observed unmanaged overlap. SSH connectivity does not determine registration/placement success. Do not substitute `swr` for `ssh_wrapper`.
+**Current maintainer decisions about subjects requiring consistency in the scope documents:**<br>
+- Preflight failure or declined confirmation launches nothing.<br>
+- A known, isolated individual window failure is reported and **does not ordinarily abort other independent launch entries**<br>
+- Retain created windows and report partial completion.<br>
+- Never bypass unresolved Busy/ownership uncertainty.<br>
+- Reject active managed desktop/slot conflicts, not mere unmanaged visual overlap<br>
+- Repeated SSH targets are valid.<br>
+- Warn at confirmation about reliably observed unmanaged overlap.<br>
+- SSH connectivity does not determine registration/placement success.<br>
+- Do not substitute `swr` for `ssh_wrapper`.<br>
+Report any additional inconsistencies in implementation scope and request maintainer decisions for resolution.<br>
 
 | Control | Current Step 1.5c rule |
 | --- | --- |
@@ -113,7 +125,7 @@ This handoff records permissions; it does not override governing policy. Histori
 | C18 | ChatGPT (2026-10-31), concurrency diagnosis and focused correction tasking | Inspected `open_plan()` and launcher helpers; proposed a pseudo-terminal concurrency test and reviewed maintainer's initial probe transcripts. Drafted the three-objective correction task for Codex. | Initial maintainer Wayland probe showed A and B both reached confirmation, demonstrating missing pre-confirmation whole-run serialization. Both were cancelled without launch. | Recommended invocation-wide locking, corrected launch-PID messaging and deterministic partial-failure regression; Codex implemented these in Iteration 12. |
 | C19 | ChatGPT (2026-10-31), corrected implementation and native evidence review | Inspected revised launcher, FD9 closure, `flock` acquisition, orchestration tests and Codex correction review; evaluated maintainer's corrected X11/Wayland results. | Maintainer Wayland: 242 Python / 14 JS PASS, pseudo-terminal concurrency PASS, lock release after cancellation PASS and lock release with live Konsole PASS. Maintainer X11: corrected concurrency probe PASS at `9b5fe097`; real Konsole successfully registered/placed. No ChatGPT native executions. | Recommended final X11 live-Konsole lock-release check, then complete branch/PR review and maintainer merge decision. |
 | C20 | ChatGPT (2026-10-31), final Step 1.5c PR-readiness review | Compared task branch `9b5fe097` against published `main` `f414f93`; reviewed 26 changed paths, authorization history, existing handoff rows and remaining native evidence. | GitHub comparison: branch 3 commits ahead, 1 behind; `main` contains an unapplied architecture patch not present on the task branch. No active PR found. No tests or host operations executed by ChatGPT. | Candidate recommended for PR review after final X11 lock check and documentation reconciliation. Maintainer retains PR creation, acceptance and merge authority. |
-
+| C21 | ChatGPT (2026-10-31), Step 1.5c.4 scope review | Reviewed architecture, planner, launcher, broker and resident; refined Dolphin/SFTP, TigerVNC/SSH, underlay and security requirements. No edits. | Confirmed missing virtual-desktop provisioning and unsupported graphical dispatch; no native tests. | Proposed bounded increments, desktop provisioning after confirmation, and separate 1.5d regression. Maintainer to approve implementation scope and permissions. |
 On subsequent iterations, record only material changes, actual evidence and unresolved work. Keep detailed logs, temporary patches, input files and generators alongside this handoff under `task_step1.5/` as appropriate; keep live source/tests in the normal project-root paths.
 
 ## 6. Next gate — Step 1.5c implementation and review
