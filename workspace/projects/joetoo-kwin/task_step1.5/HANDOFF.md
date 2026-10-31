@@ -4,7 +4,7 @@
 **Canonical location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`<br>
 **Step 1.5c starting baseline:** the accepted `main` including the finalized scope and authorization; at this review `06ab98ca4d5b34eb2adf73557559bd5be522f4a6`. The prior PR #24 merge is `54f2ef6895f02dc198c79a821f76ef8343e5e701`. Verify the actual task-branch parent before coding.<br>
 **Step 1.5c branch point:** 31400fe0d2be05064b898cf520d06d6445e13839, verified against current main. The branch incorporates the separately published Step 1.5c scope and authorization.<br>
-**Task branch:** `task/joetoo-kwin-step1.5c-configured-launch` (verify actual branch and HEAD).<br>
+**Task branch name:** `task/joetoo-kwin-step1.5c4-graphical-launch` (verify actual branch and HEAD).<br>
 **Required detailed scope:** [Step 1.5c implementation scope and outline](Step1.5c_implementation_scope.md)<br>
 **Extended required detailed scope:** [Step1.5c4 implementation scope and outline](Step1.5c4_implementation_scope.md)<br>
 **Current HEAD:** determine dynamically with `git rev-parse HEAD`.<br>
