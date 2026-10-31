@@ -38,8 +38,8 @@ external changes between the final check and submission still fail under existin
 resident/broker verification rather than authorizing another window.
 
 Dolphin local dispatch constructs argv: dolphin, --new-window, --, canonical-directory.
-Empty target is HOME. Relative paths resolve against the physical configuration-file
-directory; existing symlinks resolve, trailing separators normalize. Whitespace and
+Empty target is HOME. Relative paths resolve against HOME independently of the
+configuration-file directory; existing symlinks resolve, trailing separators normalize. Whitespace and
 literal shell punctuation remain data. Nonexistent paths, regular files, controls
 and URL-scheme targets reject -o preflight. Targets are existing readable/searchable
 directories only. No eval, shell command construction, glob or tilde expansion.
@@ -89,3 +89,24 @@ needed for this first increment. Any future underlay/viewer identity extension r
 separate approval. Staging, commit, push and draft PR creation require express
 publication authorization after review/native disposition; merge/deployment remain
 separate decisions.
+
+
+## Native acceptance review and focused corrections
+
+Accepted candidate 35d1b072b763df8126c602d9840c0ad243a9a656 substantially passed
+maintainer-reported X11/Wayland native acceptance; see the updated native report.
+This corrective iteration starts from that clean commit on the same task branch.
+Relative paths now use HOME (helper config argument retained for compatibility).
+Validator stages close their announcement before running output-producing actions,
+then open a result line for handle_result. The original action status and reporting
+status remain separate; diagnostics are not captured in a state-losing subshell.
+Desktop text distinguishes adequate existing capacity from an exact append shortfall.
+An added mock Dolphin lifetime test proves completed-launch lock reacquisition while
+the original process remains alive; no lock implementation change was necessary.
+
+258 Python tests passed without skips, including installed-header validation-format
+coverage; three JS test files passed; syntax/Python compile, ShellCheck and whitespace
+checks passed. New logs use the step1.5c4-corrections prefix. Current focused diff is
+step1.5c4-corrections.patch; the earlier review patch remains historical evidence.
+No new native tests or executable broker/resident/registry/layer changes were made.
+The separate step1.5c4-layer-proposal.md is a proposal only, requiring maintainer decisions.

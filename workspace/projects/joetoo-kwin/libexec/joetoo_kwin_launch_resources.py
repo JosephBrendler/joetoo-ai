@@ -17,7 +17,9 @@ def local_path(target, config):
         raise ValueError('Dolphin local target must be a local directory, without controls or URL schemes')
     path = Path(target) if target else Path.home()
     if not path.is_absolute():
-        path = Path(config).resolve().parent / path
+        # Keep the config argument for the existing helper interface; relative
+        # directory interpretation is intentionally independent of that location.
+        path = Path.home() / path
     path = path.resolve(strict=True)
     if not path.is_dir() or not os.access(path, os.R_OK | os.X_OK):
         raise ValueError('Dolphin local target must be an existing readable directory')

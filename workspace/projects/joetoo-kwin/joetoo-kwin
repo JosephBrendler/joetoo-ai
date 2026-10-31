@@ -94,8 +94,11 @@ apply_cli_verbosity() {
 plan_stage() {
     local _ps_level=$1 _ps_label=$2 _ps_action_rc
     shift 2
-    j_msg "-${_ps_level}" -pn "${_ps_label} ..."
+    # Validators may emit diagnostics. Use the output-producing AAR form so
+    # their messages cannot interrupt an unfinished announcement/result line.
+    j_msg "-${_ps_level}" -p "${_ps_label} ..."
     if "$@"; then _ps_action_rc=0; else _ps_action_rc=$?; fi
+    j_msg "-${_ps_level}" -pn "${_ps_label} result:"
     report_action "$_ps_action_rc" "$_ps_level"
 }
 

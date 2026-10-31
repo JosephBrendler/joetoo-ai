@@ -68,8 +68,10 @@ class ResourceTests(unittest.TestCase):
             config = base / 'config.conf'
             with patch.dict('os.environ', {'HOME': tmp}):
                 self.assertEqual(resources.local_path('', str(config)), tmp)
-            for value in (str(directory), directory.name, str(directory) + '/'):
-                self.assertEqual(resources.local_path(value, str(config)), str(directory))
+            with patch.dict('os.environ', {'HOME': tmp}):
+                for value in (str(directory), directory.name, str(directory) + '/'):
+                    for config_location in (config, base / 'elsewhere' / 'config.conf'):
+                        self.assertEqual(resources.local_path(value, str(config_location)), str(directory))
             config.write_text('# a file, not a directory')
             for value in ('sftp://host/path', 'missing', 'bad\nname', 'bad\0name', str(config)):
                 with self.subTest(value=value), self.assertRaises((ValueError, OSError)):

@@ -101,7 +101,13 @@ open_plan() {
         (( _op_desktop <= _op_required )) || _op_required=$_op_desktop
     done
     _op_capacity=$(launch_resource snapshot) || return 1
-    j_msg "-${notice}" -p "KWin desktops: current [$(jq -r '.count' <<< "$_op_capacity")], required [${_op_required}]; missing desktops will be appended after confirmation"
+    local _op_current
+    _op_current=$(jq -er '.count | select(type == "number")' <<< "$_op_capacity") || return 1
+    if (( _op_current >= _op_required )); then
+        j_msg "-${notice}" -p "KWin desktops: current [${_op_current}], required [${_op_required}]; existing desktop capacity is adequate"
+    else
+        j_msg "-${notice}" -p "KWin desktops: current [${_op_current}], required [${_op_required}]; append [$((_op_required - _op_current))] missing desktops after confirmation"
+    fi
     confirm_continue_or_exit || return 1
     _op_capacity=$(launch_resource provision "$_op_required" "$_op_capacity") || return 1
     for ((_op_i=0; _op_i<${#planned_desktop[@]}; _op_i++)); do

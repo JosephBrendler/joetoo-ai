@@ -308,3 +308,14 @@ class InstalledHeaderPlannerTests(PlannerHarness, unittest.TestCase):
         self.env['INTERACTIVE'] = '0'
         self.client.write_text(original + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
         self.assertIn('TEST_VERBOSITY=5', self.plan('-qqqqqqqq'))
+
+    def test_validator_diagnostic_does_not_interrupt_open_status_line(self):
+        self.write_config(['21|konsole|local|btop'])
+        result = subprocess.run(['bash', str(self.client), '-c', '-f', str(self.config)],
+                                env=self.env, text=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, timeout=20)
+        self.assertEqual(result.returncode, 2)
+        text = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', result.stdout)
+        self.assertRegex(text, r'Validating configured launch intent \.\.\.\n')
+        self.assertEqual(text.count('invalid desktop or desktop exceeds limit'), 1)
+        self.assertRegex(text, r'Validating configured launch intent result:[^\n]*\(failed\)')

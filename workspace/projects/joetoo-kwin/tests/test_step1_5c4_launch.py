@@ -1,6 +1,8 @@
 """Actual mixed orchestration with mocked resource API and application processes."""
 from pathlib import Path
 import unittest
+import os
+import time
 from test_step1_5a_plan import INSTALLED_HEADER_AVAILABLE
 from test_step1_5c_corrections import CorrectionsTests as _CorrectionsHarness
 
@@ -16,6 +18,8 @@ class GraphicalLaunchTests(_CorrectionsHarness):
         dolphin.write_text('''#!/bin/sh
 exec >/dev/null 2>&1
 printf 'dolphin-arg:%s\\n' "$@" >> "$TRACE"
+printf 'dolphin-pid:%s\\n' "$$" >> "$TRACE"
+if [ "${KEEP_DOLPHIN:-}" = yes ]; then exec sleep 20; fi
 ''')
         dolphin.chmod(0o755)
         helper = self.folder / 'libexec/joetoo-kwin-launch-functions'
@@ -24,7 +28,7 @@ launch_resource() {
     printf 'resource:%s\n' "$1" >> "$TRACE"
     case $1 in
         local-path) command python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_launch_resources.py" "$@" ;;
-        snapshot) printf '%s\n' '{"owner":":owner","ids":["one"],"count":1}' ;;
+        snapshot) printf '{"owner":":owner","ids":["one"],"count":%s}\n' "${SNAPSHOT_COUNT:-1}" ;;
         provision) [[ ${PROVISION_FAIL:-} != yes ]] || return 1; printf '%s\n' "$3" ;;
         verify) [[ ${VERIFY_FAIL:-} != yes ]] || return 1; printf '%s\n' "$3" ;;
     esac
@@ -56,6 +60,49 @@ launch_resource() {
             'source "' + str(self.mock_header) + '"',
             'source /usr/sbin/script_header_joetoo\nchecknotroot() { :; }', 1))
         self.test_mixed_order_and_literal_dolphin_argv()
+
+    def test_relative_target_uses_home_with_config_elsewhere(self):
+        elsewhere = self.folder / 'elsewhere'
+        elsewhere.mkdir()
+        self.config = elsewhere / 'plan.conf'
+        self.write_config(['2|dolphin|local|folder with spaces'])
+        result = self.run_client()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('dolphin-arg:' + str(self.folder / 'folder with spaces'), self.calls.read_text())
+
+    def test_capacity_notice_matches_existing_or_missing_count(self):
+        for count in ('1', '3', '8'):
+            with self.subTest(count=count):
+                result = self.run_client(SNAPSHOT_COUNT=count, CANCEL='yes')
+                self.assertNotEqual(result.returncode, 0)
+                if count == '1':
+                    self.assertIn('append [2] missing desktops after confirmation', result.stdout)
+                else:
+                    self.assertIn('existing desktop capacity is adequate', result.stdout)
+                    self.assertNotIn('missing desktops', result.stdout)
+
+    def test_completed_dolphin_does_not_retain_launcher_lock(self):
+        self.write_config(['2|dolphin|local|'])
+        pid = None
+        try:
+            result = self.run_client(KEEP_DOLPHIN='yes')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            deadline = time.monotonic() + 5
+            while pid is None:
+                for line in self.calls.read_text().splitlines():
+                    if line.startswith('dolphin-pid:'): pid = int(line.split(':')[1])
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(.02)
+            os.kill(pid, 0)
+            self.assertFalse(Path(f'/proc/{pid}/fd/9').exists())
+            second = self.run_client(CANCEL='yes')
+            self.assertEqual(self.calls.read_text().count('confirm'), 2)
+            self.assertNotIn('Busy:', second.stdout + second.stderr)
+            os.kill(pid, 0)  # The first Dolphin is still alive after reacquisition.
+        finally:
+            if pid is not None:
+                try: os.kill(pid, 15)
+                except ProcessLookupError: pass
 
     def test_capacity_failure_suppresses_every_application(self):
         for mode in ('PROVISION_FAIL', 'VERIFY_FAIL'):
