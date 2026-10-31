@@ -92,19 +92,18 @@ Use the established terminal and `graphical_*_percent` geometry as the initial l
 
 The following is the maintainer's **approved inventory for investigation and interface planning**, **not** a statement that each form is currently executable or that every listed program will be implemented in 1.5c.4. Newly authorized executors must be individually named in `HANDOFF.md` after their grammar, dependencies, identity behavior, and security have been reviewed.
 
-| Candidate recipe | Scope/disposition |
-| --- | --- |
-| `konsole|ssh|TARGET` | Existing supported SSH target recipe; regression-protected |
-| `konsole|local|COMMAND` | Existing supported local executable recipe; **blank target not currently supported** |
-| `qterminal|ssh|TARGET`, `qterminal|local|` | Investigate terminal-specific startup, SSH and PID/UUID behavior; not automatically Konsole-compatible |
-| `vncviewer|ssh|TARGET` | **Selected second implementation candidate**, after endpoint/tunnel approval |
-| `mc|sftp|TARGET`, `mc|local|` | Investigate TUI launch inside a managed terminal and actual remote-file protocol; `mc` itself does not create a KWin graphical window |
-| `dolphin|sftp|TARGET`, `dolphin|local|[PATH]` | **Selected first implementation**, local followed by SFTP |
-| `krusader|sftp|TARGET`, `krusader|local|` | Investigate KIO/remote path behavior and unique graphical window launch |
-| `filezilla|sftp|TARGET`, `filezilla|local|` | Investigate application-specific URL/connection-site grammar and window delegation |
-| `nautilus|sftp|TARGET`, `nautilus|local|` | Investigate GNOME/GVfs dependencies, URI launch and process delegation |
-| `nemo|sftp|TARGET`, `nemo|local|` | Investigate URI launch, dependencies and process delegation |
-| `krdc|tls|TARGET`, `remmina|tls|TARGET`, `xfreerdp|tls|TARGET`, `wlfreerdp|tls|TARGET` | **RDP feasibility investigation only**; client availability, RDP-specific grammar, certificates and X11/Wayland compatibility unverified |
+Candidate recipe - Scope/disposition
+- `konsole|ssh|TARGET` - Existing supported SSH target recipe; regression-protected
+- `konsole|local|COMMAND` - Existing supported local executable recipe; **blank target not currently supported**
+- `qterminal|ssh|TARGET`, `qterminal|local|` - Investigate terminal-specific startup, SSH and PID/UUID behavior; not automatically Konsole-compatible
+- `vncviewer|ssh|TARGET` - **Selected second implementation candidate**, after endpoint/tunnel approval
+- `mc|sftp|TARGET`, `mc|local|` - Investigate TUI launch inside a managed terminal and actual remote-file protocol; `mc` itself does not create a KWin graphical window
+- `dolphin|sftp|TARGET`, `dolphin|local|[PATH]` - **Selected first implementation**, local followed by SFTP
+- `krusader|sftp|TARGET`, `krusader|local|` - Investigate KIO/remote path behavior and unique graphical window launch
+- `filezilla|sftp|TARGET`, `filezilla|local|` - Investigate application-specific URL/connection-site grammar and window delegation
+- `nautilus|sftp|TARGET`, `nautilus|local|` - Investigate GNOME/GVfs dependencies, URI launch and process delegation
+- `nemo|sftp|TARGET`, `nemo|local|` - Investigate URI launch, dependencies and process delegation
+- `krdc|tls|TARGET`, `remmina|tls|TARGET`, `xfreerdp|tls|TARGET`,`wlfreerdp|tls|TARGET` - **RDP feasibility investigation only**; client availability, RDP-specific grammar, certificates and X11/Wayland compatibility unverified
 
 For each investigation, report executable/package presence separately for `gmki91` and `q552u01`; actual launch syntax and protocols; whether the process reliably produces a uniquely correlated KWin window; local vs remote endpoint security; user-facing benefit; and a recommendation to implement, defer or reject. Do not infer installation from a package's general availability.
 
