@@ -1,10 +1,10 @@
 # Step 1.5c.4 — Graphical launch, remote display, and underlay: implementation scope and outline
 
-**Status:** Maintainer approved the 1.5c.4 *scope direction* on 2026-10-31 at 09:56:37; the decisions below refine that direction for final maintainer review. **This document is not an authorization to edit implementation files, conduct native/remote operations, or publish changes.** Increment-specific authority resides in `HANDOFF.md`.
+**Status:** Maintainer approved the 1.5c.4 *scope direction* on 2026-10-31 at 09:56:37; the decisions below refine that direction. Increment-specific authority to proceed resides in `HANDOFF.md`.
 
 **Baseline:** Accepted and merged `joetoo-ai/main` following Step 1.5c.1–1.5c.3 (PR #25). Verify current `main`, exact commit, and clean state before creating a new task branch.
 
-**Proposed branch:** `task/joetoo-kwin-step1.5c4-graphical-launch`; creation requires separate maintainer authorization in `HANDOFF.md`.
+**Branch name:** `task/joetoo-kwin-step1.5c4-graphical-launch`
 
 **Authorities:** `../ARCHITECTURE.md` (§§4–7, 9, and gate 1.5c.4); `HANDOFF.md`; applicable repository, workspace, and project `AGENTS.md`. `Step1.5c_implementation_scope.md` records completed work, not renewed permissions.
 
@@ -25,15 +25,15 @@ Keep distinct: **program** (local executable), **mode** (defined action/transpor
 
 ### 1.5c.4 prerequisite — KWin virtual-desktop capacity verification and provisioning
 
-Before initiating configured application launches, `joetoo-kwin -o` shall inspect the actual virtual desktops available in the current KWin session and ensure that every desktop referenced by the validated launch plan exists. The minimum required desktop count is the **maximum intended desktop number** among all planned entries, not the number of launch entries or distinct desktop numbers referenced.<br>
-1. After validating the full launch plan and completing non-mutating preflight, query the running KWin session for its current virtual-desktop inventory and available creation mechanism. Distinguish the configured `desktop_limit` validation ceiling from actual runtime desktop availability.<br>
-2. Report the current and required desktop counts before requesting confirmation. When additional desktops are necessary, include their creation explicitly in the proposed launch operation.<br>
-3. Do not create desktops during `-c`, during preflight, or when the user declines confirmation. Preserve `-c` as a non-mutating, usable dry run without requiring an active KWin session; it may show the required maximum desktop number.<br>
-4. Following affirmative confirmation, recheck actual desktop availability and append only the additional desktops required. Do not reduce the desktop count, rename or reorder existing desktops, switch the active desktop unnecessarily, or change existing window assignments.<br>
-5. Verify successful creation and availability of every required intended desktop before launching the first configured application. A D-Bus method returning successfully does not, by itself, establish that KWin has completed the requested change.<br>
-6. If KWin cannot supply or create the necessary desktops, fail the configured launch before starting application windows. Report the required count, observed count, and reason. If partial desktop creation occurred, report that state without automatically deleting the created desktops.<br>
-7. Preserve the launcher-wide lock throughout preflight, confirmation, provisioning, and application launch. Recheck required desktop availability before placement where necessary to handle external desktop changes conservatively.<br>
-8. Inspect and use supported KWin desktop-management APIs on both X11 and Wayland. Do not modify `kwinrc` directly, assume X11-only desktop-management interfaces are valid on Wayland, or introduce new broker/resident methods unless inspection demonstrates they are necessary and the maintainer approves the interface extension.<br>
+Before initiating configured application launches, `joetoo-kwin -o` shall inspect the actual virtual desktops available in the current KWin session and ensure that every desktop referenced by the validated launch plan exists. The minimum required desktop count is the **maximum intended desktop number** among all planned entries, not the number of launch entries or distinct desktop numbers referenced.
+1. After validating the full launch plan and completing non-mutating preflight, query the running KWin session for its current virtual-desktop inventory and available creation mechanism. Distinguish the configured `desktop_limit` validation ceiling from actual runtime desktop availability.
+2. Report the current and required desktop counts before requesting confirmation. When additional desktops are necessary, include their creation explicitly in the proposed launch operation.
+3. Do not create desktops during `-c`, during preflight, or when the user declines confirmation. Preserve `-c` as a non-mutating, usable dry run without requiring an active KWin session; it may show the required maximum desktop number.
+4. Following affirmative confirmation, recheck actual desktop availability and append only the additional desktops required. Do not reduce the desktop count, rename or reorder existing desktops, switch the active desktop unnecessarily, or change existing window assignments.
+5. Verify successful creation and availability of every required intended desktop before launching the first configured application. A D-Bus method returning successfully does not, by itself, establish that KWin has completed the requested change.
+6. If KWin cannot supply or create the necessary desktops, fail the configured launch before starting application windows. Report the required count, observed count, and reason. If partial desktop creation occurred, report that state without automatically deleting the created desktops.
+7. Preserve the launcher-wide lock throughout preflight, confirmation, provisioning, and application launch. Recheck required desktop availability before placement where necessary to handle external desktop changes conservatively.
+8. Inspect and use supported KWin desktop-management APIs on both X11 and Wayland. Do not modify `kwinrc` directly, assume X11-only desktop-management interfaces are valid on Wayland, or introduce new broker/resident methods unless inspection demonstrates they are necessary and the maintainer approves the interface extension.
 9. Fail gracefully with informative error message if the required number of desktops exceeds system capacity.
 
 **Acceptance:** On both supported backends, verify that sufficient existing desktops cause no modification; insufficient desktops are added and positively verified; cancellation causes no changes; and desktop provisioning failures prevent all application launches. Include headless tests for sparse desktop references, configured limits, partial provisioning failures, and launch-order preservation.
@@ -85,8 +85,7 @@ Use the established terminal and `graphical_*_percent` geometry as the initial l
 ## 4. Maintainer network/security policy
 
 - **Direct VNC is prohibited**, even on a local subnet; the selected VNC implementation must use authenticated SSH tunneling. Do not disable host-key verification, weaken authentication, expose VNC listeners on non-loopback interfaces, store credentials in scripts, or put secrets in error messages.
-- For **newly introduced remote connections** when client is attempting connection from an external network (client and server are in different subnets), connectivity will be established by a VPN pathway without which the launcher will not be able to resolve an address for the remote host and if target is an ip local subnet address, it will not be routable. Thus, formal verification of vpn/SSH/TLS protection is not required. Preserve existing accepted Konsole/SSH behavior; this should apply similarly to new Dolphin SFTP and future file-browser/RDP candidates.
-- `ip addr`, `getent`, and routing observations can inform endpoint/network assessment, but **subnet difference alone is not proof of WAN exposure**, and those commands alone are not proof of a protected VPN route. Define an approved trust/network policy and a reliable fail-closed verification method before implementing an automatic gate; report unsupported cases instead of assuming safety.
+- For **newly introduced remote connections** when client is attempting connection from an external network (client and server are in different subnets), connectivity will be established by a secure (e.g. VPN/ssh) pathway without which the launcher will not be able to resolve an address for the remote host and if target is an ip local subnet address, it will not be routable. Thus, formal verification of vpn/SSH/TLS protection is not required. Preserve existing accepted Konsole/SSH behavior; this should apply similarly to new Dolphin SFTP and future file-browser/RDP candidates. joetoo-kwin is a desktop-window orchestration framework, not a network security manager.
 - Treat TLS as a security property, **not a complete RDP/VNC execution mode**. For every future `|tls|` candidate identify the underlying protocol, endpoint grammar, actual client capabilities and certificate-verification behavior before authorizing execution.
 
 ## 5. Candidate program/mode/target inventory and feasibility reports
