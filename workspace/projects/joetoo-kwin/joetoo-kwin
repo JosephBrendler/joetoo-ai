@@ -415,7 +415,11 @@ launch_managed_window() {
     # retain it after this launcher exits; keep the actual launch and $! intact.
     "$@" 9>&- &
     _lm_pid=$!
-    j_msg "-${notice}" -p "Launched Konsole operation; launch-process PID [${_lm_pid}] (interactive Bash PID is reported inside the terminal)"
+    if [[ $_lm_class == konsole ]]; then
+        j_msg "-${notice}" -p "Launched Konsole operation; launch-process PID [${_lm_pid}] (interactive Bash PID is reported inside the terminal)"
+    else
+        j_msg "-${notice}" -p "Launched [${_lm_class}] operation; launch-process PID [${_lm_pid}]"
+    fi
     if ! qdbus6 "$bus" "$path" "$iface.SetManagedLaunchPid" "$_lm_registration" "$_lm_pid"; then
         j_msg "-${err}" -p "${PN}: managed PID handoff failed for [${_lm_registration}]"
         return 1

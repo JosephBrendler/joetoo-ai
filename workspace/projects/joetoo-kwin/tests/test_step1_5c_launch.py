@@ -35,11 +35,22 @@ class SlotGuardTests(ReadOnlyManagedQueryTests):
 class ConfiguredLaunchTests(PlannerHarness, unittest.TestCase):
     def setUp(self):
         super().setUp()
-        for name in ('joetoo-kwin-launch-functions', 'joetoo-kwin-session.bashrc'):
+        for name in ('joetoo-kwin-launch-functions', 'joetoo-kwin-session.bashrc', 'joetoo_kwin_launch_resources.py'):
             shutil.copyfile(ROOT / 'libexec' / name, self.folder / 'libexec' / name)
         runtime = self.folder / 'runtime'
         runtime.mkdir(mode=0o700)
         self.env['XDG_RUNTIME_DIR'] = str(runtime)
+        helper = self.folder / 'libexec/joetoo-kwin-launch-functions'
+        helper.write_text(helper.read_text() + r'''
+# Headless desktop resource double; production helper tested separately.
+launch_resource() {
+    case $1 in
+        snapshot) printf '%s\n' '{"owner":":test","ids":["one"],"count":20}' ;;
+        provision|verify) printf '%s\n' "$3" ;;
+        local-path) command python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_launch_resources.py" "$@" ;;
+    esac
+}
+''')
         self.env['BROKER_STATE'] = json.dumps({'observation': {'synchronized': True},
             'presence_counts': {'uncertain': 0}, 'request_counts': {'pending': 0, 'running': 0},
             'placement_transaction': {'state': 'IDLE'}})

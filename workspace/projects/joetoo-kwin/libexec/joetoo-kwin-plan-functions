@@ -99,7 +99,7 @@ validate_plan() {
             ssh|swr|via-ssh|local|direct) ;;
             *) plan_error "unsupported mode [${_vp_mode}]"; return 2 ;;
         esac
-        if [[ $_vp_mode != direct && -z $_vp_target ]]; then
+        if [[ $_vp_mode != direct && -z $_vp_target && ! ( $_vp_program == dolphin && $_vp_mode == local ) ]]; then
             plan_error "missing target for mode [${_vp_mode}]"; return 2
         fi
         if [[ $_vp_program == konsole ]]; then

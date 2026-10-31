@@ -4,18 +4,28 @@
 # Sourced by joetoo-kwin; geometry and ownership remain with their existing owners.
 # shellcheck disable=SC2154
 
+launch_resource() {
+    python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_launch_resources.py" "$@"
+}
+
 launch_preflight() {
     local _lp_status _lp_managed _lp_observed _lp_i _lp_conflicts
-    for _lp_i in konsole bash jq qdbus6; do
+    for _lp_i in bash jq qdbus6 python3; do
         command -v "$_lp_i" >/dev/null || { plan_error "missing executable [$_lp_i]"; return 2; }
     done
     for ((_lp_i=0; _lp_i<${#planned_desktop[@]}; _lp_i++)); do
         case ${planned_program[$_lp_i]}:${planned_mode[$_lp_i]} in
+            dolphin:local)
+                command -v dolphin >/dev/null || return 2
+                _lp_status=$(launch_resource local-path "${planned_target[$_lp_i]}" "$config") || return 2
+                planned_local_path[_lp_i]=$(jq -er 'select(type == "string")' <<< "$_lp_status") || return 2 ;;
             konsole:ssh)
+                command -v konsole >/dev/null || return 2
                 command -v nc >/dev/null && command -v ssh >/dev/null || return 2
                 [[ ${planned_target[$_lp_i]} =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.@:-]*$ ]] || {
                     plan_error 'invalid SSH target'; return 2; } ;;
             konsole:local)
+                command -v konsole >/dev/null || return 2
                 if [[ ! ${planned_target[$_lp_i]} =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.+-]*$ ]] ||
                     ! command -v "${planned_target[$_lp_i]}" >/dev/null; then
                     plan_error 'local target must be an available executable basename'; return 2
@@ -83,17 +93,33 @@ open_plan() {
     # When sourced, this helper's directory is libexec.
     launch_session_file=${_op_dir}/joetoo-kwin-session.bashrc
     [[ -r $launch_session_file ]] || return 1
+    declare -a planned_local_path=()
     check_plan launch || return $?
+    local _op_required=0 _op_desktop _op_capacity _op_class
+    local -a _op_argv
+    for _op_desktop in "${planned_desktop[@]}"; do
+        (( _op_desktop <= _op_required )) || _op_required=$_op_desktop
+    done
+    _op_capacity=$(launch_resource snapshot) || return 1
+    j_msg "-${notice}" -p "KWin desktops: current [$(jq -r '.count' <<< "$_op_capacity")], required [${_op_required}]; missing desktops will be appended after confirmation"
     confirm_continue_or_exit || return 1
+    _op_capacity=$(launch_resource provision "$_op_required" "$_op_capacity") || return 1
     for ((_op_i=0; _op_i<${#planned_desktop[@]}; _op_i++)); do
         # Recheck after confirmation and between entries; broker independently
         # guards each actual submission against concurrent conflicting launches.
         launch_preflight "$_op_i" || return 1
         j_msg "-${notice}" -p "Launching desktop [${planned_desktop[$_op_i]}] slot [${planned_slot[$_op_i]}]"
-        if launch_managed_window konsole "${planned_slot[$_op_i]}" "${planned_desktop[$_op_i]}" \
+        _op_capacity=$(launch_resource verify "$_op_required" "$_op_capacity") || return 1
+        _op_class=${planned_program[$_op_i]}
+        if [[ $_op_class == dolphin ]]; then
+            _op_argv=(dolphin --new-window -- "${planned_local_path[$_op_i]}")
+        else
+            _op_argv=(env JOETOO_SESSION_MODE="${planned_mode[$_op_i]}" JOETOO_SESSION_TARGET="${planned_target[$_op_i]}"
+                konsole --separate -e bash --rcfile "$launch_session_file" -i)
+        fi
+        if launch_managed_window "$_op_class" "${planned_slot[$_op_i]}" "${planned_desktop[$_op_i]}" \
             "${planned_x[$_op_i]}" "${planned_y[$_op_i]}" "${planned_width[$_op_i]}" "${planned_height[$_op_i]}" \
-            -- env JOETOO_SESSION_MODE="${planned_mode[$_op_i]}" JOETOO_SESSION_TARGET="${planned_target[$_op_i]}" \
-            konsole --separate -e bash --rcfile "$launch_session_file" -i; then _op_rc=0
+            -- "${_op_argv[@]}"; then _op_rc=0
         else _op_rc=$?; fi
         if (( _op_rc != 0 )); then
             _op_failed=$((_op_failed + 1))
