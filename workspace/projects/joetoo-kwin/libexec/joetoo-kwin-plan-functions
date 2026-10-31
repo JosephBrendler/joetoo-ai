@@ -178,7 +178,11 @@ print_plan() {
     local _pp_i _pp_col _pp_length _pp_padding _pp_line _pp_color
     local -a _pp_cells=(Desktop Slot Program Mode Target Layer X Y Width Height)
     local -a _pp_widths=()
-    j_msg "-${notice}" -p "DRY RUN: [${#planned_desktop[@]}] windows; planner launches no applications"
+    if [[ ${1:-dry-run} == launch ]]; then
+        j_msg "-${notice}" -p "LAUNCH PLAN: [${#planned_desktop[@]}] windows; confirmation required"
+    else
+        j_msg "-${notice}" -p "DRY RUN: [${#planned_desktop[@]}] windows; planner launches no applications"
+    fi
     j_msg "-${notice}" -p "The sourced trusted Bash configuration may have side effects."
     j_msg "-${notice}" -p "Configured display: [${screen_width}x${screen_height}] (not autodetected); terminal width budget: [${terminal_width_percent}%]"
     for ((_pp_i=0; _pp_i<${#planned_desktop[@]}; _pp_i++)); do

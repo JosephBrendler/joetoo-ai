@@ -1,0 +1,58 @@
+# Step 1.5c — final clarification of desktop, slot, mission and duplicate-launch policy
+
+Following further consideration, I am confirming the requirement for a broker-enforced managed desktop/slot conflict guard, with the following precise semantics.
+
+A joetoo-kwin "desktop" is reference to an actual numbered graphical virtual desktop, assigned by the system.
+**A joetoo-kwin "slot" is the sequence number of a configured launch plan entry on a particular desktop.**
+The joetoo-kwin.conf configuration assigns desktop, slot, mode, and target (mode/target are mission/purpose for the window).
+The joetoo-kwin Bash script determines geometry based on the number of slots to be configured on a particualr desktop.
+(The joetoo-kwin ARCHITECTURE prescribes a layout geometry for up to four windows on one desktop)
+
+The Bash launch-planner owns slot assignment and calculates initial geometry. KWin owns actual window placement and desktop membership. The broker owns managed-window identity, registration, observation and transaction safety.
+
+The broker should retain the originally requested `(desktop, slot)` association as logical launch metadata. This does not give the broker responsibility for calculating layouts or maintaining the window at its initially requested geometry.
+
+## Duplicate-launch policy
+
+The conservative guard serves two purposes:
+
+1. Avoid launching a duplicate managed entry when a prior launch may already have satisfied the intended mission, such as establishing a Konsole for SSH to a particular host.
+2. Avoid unnecessary proliferation of windows and clutter of limited screen real estate.
+
+A positively registered, currently present managed window associated with the same original configured `(desktop, slot)` should prevent another launch into that logical entry, **regardless of where the user has subsequently moved that window**.
+
+Do not compare actual geometry to determine whether the original logical slot is still associated with the window.
+
+The user is always free to move or resize managed windows. Neither the broker nor joetoo-kwin should automatically restore their original position in response to such movement.
+
+Multiple intentional connections to the same hostname are valid when represented by distinct configured entries/slots.
+
+An existing managed Konsole does not, by itself, prove that an SSH connection remains active. Preserve the distinction between managed-window presence and transport state.
+
+A changed configuration attempting to reuse an occupied logical desktop/slot must be reported as a conflict, not silently treated as permission to replace the existing managed window.
+
+## Interface and authorization direction
+
+The current `SubmitManagedLaunch` signature already includes desktop and slot, and the broker retains both in the managed launch recipe.
+
+I authorize the minimal additive changes to `libexec/joetoo-kwind` necessary to:
+
+- Expose the original configured desktop/slot through existing read-only managed-window JSON queries.
+- Enforce active managed desktop/slot conflict rejection within `SubmitManagedLaunch`, without partially arming placement or registration.
+- Expose minimal active transaction state if existing interfaces demonstrably cannot support safe conservative preflight.
+
+Preserve existing D-Bus signatures, managed identity guarantees and actual desktop/geometry observations.
+
+Do not implement broker layout calculations, automatic repositioning, durable restore, or broader registry/resident changes.
+
+Treat absent, uncertain or stale managed-window presence conservatively; do not silently assume ownership has been released when evidence is insufficient.
+
+The launcher should detect and report conflicts during preflight, before requesting confirmation. The broker must independently enforce its guard at actual submission to close the race between preflight and launch.
+
+The previous instruction to abandon broker-side slot guarding is superseded by this clarification.
+
+Continue the approved Step 1.5c.1–1.5c.3 implementation under the existing task branch and other HANDOFF authorization limits. Add focused tests for original desktop/slot preservation, manual movement without reassignment, duplicate rejection, different-slot same-host launches, and atomic conflict handling.
+
+Do not alter the maintainer-owned HANDOFF scope or implementation-scope document; record this refinement and its implementation evidence in the authorized agent-owned iteration record. No native operations or publication are authorized.
+
+Proceed with the minimal source-grounded implementation.

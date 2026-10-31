@@ -1,0 +1,86 @@
+#!/bin/bash
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Sourced by joetoo-kwin; geometry and ownership remain with their existing owners.
+# shellcheck disable=SC2154
+
+launch_preflight() {
+    local _lp_status _lp_managed _lp_observed _lp_i _lp_conflicts
+    for _lp_i in konsole bash jq qdbus6; do
+        command -v "$_lp_i" >/dev/null || { plan_error "missing executable [$_lp_i]"; return 2; }
+    done
+    for ((_lp_i=0; _lp_i<${#planned_desktop[@]}; _lp_i++)); do
+        case ${planned_program[$_lp_i]}:${planned_mode[$_lp_i]} in
+            konsole:ssh)
+                command -v nc >/dev/null && command -v ssh >/dev/null || return 2
+                [[ ${planned_target[$_lp_i]} =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.@:-]*$ ]] || {
+                    plan_error 'invalid SSH target'; return 2; } ;;
+            konsole:local)
+                if [[ ! ${planned_target[$_lp_i]} =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.+-]*$ ]] ||
+                    ! command -v "${planned_target[$_lp_i]}" >/dev/null; then
+                    plan_error 'local target must be an available executable basename'; return 2
+                fi ;;
+            *) plan_error "unsupported executable recipe [${planned_program[$_lp_i]}:${planned_mode[$_lp_i]}]"; return 2 ;;
+        esac
+    done
+    _lp_status=$(qdbus6 "$bus" "$path" "$iface.RegistryStatus") || return 1
+    jq -e '.observation.synchronized == true and .presence_counts.uncertain == 0
+        and .request_counts.pending == 0 and .request_counts.running == 0
+        and (.placement_transaction.state == "IDLE" or .placement_transaction.state == "OK"
+             or .placement_transaction.state == "ERROR")' <<< "$_lp_status" >/dev/null || {
+        plan_error 'broker state unresolved or required preflight interface unavailable'; return 1; }
+    _lp_managed=$(qdbus6 "$bus" "$path" "$iface.ListManaged") || return 1
+    jq -e '.windows | type == "array" and all(.[]; (.intended.desktop | type == "number")
+        and (.intended.slot | type == "number"))' <<< "$_lp_managed" >/dev/null || return 1
+    _lp_observed=$(qdbus6 "$bus" "$path" "$iface.ListObserved") || return 1
+    jq -e '.windows | type == "array"' <<< "$_lp_observed" >/dev/null || return 1
+    for ((_lp_i=${1:-0}; _lp_i<${#planned_desktop[@]}; _lp_i++)); do
+        _lp_conflicts=$(jq -r --argjson d "${planned_desktop[$_lp_i]}" --argjson s "${planned_slot[$_lp_i]}" \
+            '.windows[] | select(.intended.desktop == $d and .intended.slot == $s) | .managed_id' <<< "$_lp_managed") || return 1
+        [[ -z $_lp_conflicts ]] || { plan_error "managed desktop/slot conflict [$_lp_conflicts]"; return 2; }
+        # Observed overlap is a visual warning, never evidence of managed ownership.
+        if jq -e --argjson managed "$_lp_managed" --argjson d "${planned_desktop[$_lp_i]}" \
+            --argjson x "${planned_x[$_lp_i]}" --argjson y "${planned_y[$_lp_i]}" \
+            --argjson w "${planned_width[$_lp_i]}" --argjson h "${planned_height[$_lp_i]}" '
+            .windows[] | . as $win | select(all($managed.windows[]; .window_uuid != $win.uuid)) |
+            select(.on_all_desktops or (.desktops | index($d))) |
+            select(.geometry.x < $x+$w and .geometry.x+.geometry.width > $x
+                and .geometry.y < $y+$h and .geometry.y+.geometry.height > $y)' <<< "$_lp_observed" >/dev/null; then
+            j_msg "-${warn}" -p "Unmanaged window may obscure desktop [${planned_desktop[$_lp_i]}] slot [${planned_slot[$_lp_i]}]"
+        fi
+    done
+}
+
+open_plan() {
+    local _op_dir _op_i _op_failed=0 _op_rc _op_state _op_status
+    _op_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+    # When sourced, this helper's directory is libexec.
+    launch_session_file=${_op_dir}/joetoo-kwin-session.bashrc
+    [[ -r $launch_session_file ]] || return 1
+    check_plan launch || return $?
+    confirm_continue_or_exit || return 1
+    for ((_op_i=0; _op_i<${#planned_desktop[@]}; _op_i++)); do
+        # Recheck after confirmation and between entries; broker independently
+        # guards each actual submission against concurrent conflicting launches.
+        launch_preflight "$_op_i" || return 1
+        j_msg "-${notice}" -p "Launching desktop [${planned_desktop[$_op_i]}] slot [${planned_slot[$_op_i]}]"
+        if launch_managed_window konsole "${planned_slot[$_op_i]}" "${planned_desktop[$_op_i]}" \
+            "${planned_x[$_op_i]}" "${planned_y[$_op_i]}" "${planned_width[$_op_i]}" "${planned_height[$_op_i]}" \
+            -- env JOETOO_SESSION_MODE="${planned_mode[$_op_i]}" JOETOO_SESSION_TARGET="${planned_target[$_op_i]}" \
+            konsole --separate -e bash --rcfile "$launch_session_file" -i; then _op_rc=0
+        else _op_rc=$?; fi
+        if (( _op_rc != 0 )); then
+            _op_failed=$((_op_failed + 1))
+            j_msg "-${err}" -p 'Window failed; layout is incomplete'
+        fi
+        # A local wait failure is not proof that broker work ended. Independently
+        # require terminal exact-ID results before starting another transaction.
+        [[ -n $launch_registration_id && -n $launch_placement_id ]] || return 1
+        _op_state=$(qdbus6 "$bus" "$path" "$iface.PollManagedLaunch" "$launch_registration_id") || return 1
+        jq -e '.state == "registered" or .state == "failed"' <<< "$_op_state" >/dev/null || return 1
+        _op_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$launch_placement_id") || return 1
+        case $_op_status in OK*|ERROR*) ;; *) j_msg "-${err}" -p 'Unresolved placement; stopping incomplete layout'; return 1 ;; esac
+    done
+    j_msg "-${notice}" -pn "Configured layout: [$(( ${#planned_desktop[@]} - _op_failed ))/${#planned_desktop[@]}] windows completed ..."
+    if (( _op_failed == 0 )); then report_action 0 "$notice"; else report_action 1 "$notice"; fi
+}
