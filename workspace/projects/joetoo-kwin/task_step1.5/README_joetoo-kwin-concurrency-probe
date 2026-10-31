@@ -1,0 +1,6 @@
+cd ~/joetoo-ai/workspace/projects/joetoo-kwin
+
+python3 ./task_step1.5/joetoo-kwin-concurrency-probe.py \
+    --project "$PWD" \
+    --desktop-a 1 \
+    --desktop-b 3

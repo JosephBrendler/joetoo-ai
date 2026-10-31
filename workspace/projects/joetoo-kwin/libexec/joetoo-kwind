@@ -463,6 +463,15 @@ class Broker(dbus.service.Object):
         """Atomically arm placement and broker-owned managed correlation."""
         if not isinstance(slot, int) or isinstance(slot, bool) or not 1 <= slot <= 256:
             raise dbus.DBusException("Invalid launch slot", name=IFACE + ".BadArguments")
+        # Original launch association is independent of observed geometry and
+        # desktop membership. Missing/uncertain entries retain their reservation
+        # until an explicit future reconciliation policy releases ownership.
+        for record in self.registry.managed_windows.values():
+            if (record.recipe.get("desktop") == desktop
+                    and record.recipe.get("slot") == slot):
+                raise dbus.DBusException(
+                    f"Managed desktop/slot already associated with {record.managed_id} "
+                    f"(presence={record.presence})", name=IFACE + ".SlotConflict")
         previous_request = self.request
         placement_id = self._submit("launch", desktop, x, y, width, height, app_class)
         try:
@@ -1007,7 +1016,8 @@ class Broker(dbus.service.Object):
                 "run_id": record.run_id,
                 "presence": record.presence,
                 "placement": record.placement,
-                "connection": record.connection}
+                "connection": record.connection,
+                "intended": {key: record.recipe.get(key) for key in ("desktop", "slot")}}
 
     @dbus.service.method(IFACE, in_signature="", out_signature="s")
     def ListManaged(self):
@@ -1059,6 +1069,10 @@ class Broker(dbus.service.Object):
         for request in self.registry.requests.values():
             requests[request.state] += 1
         return json.dumps({
+            # Snapshot only; Status(request_id) remains responsible for advancing
+            # verification. Clients conservatively stop on nonterminal snapshots.
+            "placement_transaction": ({"id": self.request["id"], "state": self.request["state"]}
+                                      if self.request is not None else {"id": None, "state": "IDLE"}),
             "managed_count": len(self.registry.managed_windows),
             "presence_counts": presence,
             "request_count": len(self.registry.requests),

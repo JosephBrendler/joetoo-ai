@@ -77,21 +77,46 @@ identifiers are separate runtime metadata.
 Runs need not be retained beyond completion, and not every CLI
 invocation requires a broker-visible `run_id`.
 
-**Saved configuration:** (Runtime launches each configured entry)
-`desktop`, `slot`, `program`, `mode`, and `target` describe a **logical launch
-recipe**; they are not sufficient to uniquely identify a runtime window.
+**Configured launch intent:** Each configuration entry specifies an intended
+`desktop`, `program`, `mode`, and `target`. The Bash planner derives
+`slot` as the 1-based sequence number among **all** entries on that intended
+desktop, including graphical entries. A slot is a logical launch-entry
+association, **not** a coordinate or terminal position. These values describe
+a launch recipe but do not uniquely identify an actual runtime window.
+
 A readable window title/label such as **`joetoo_konsole_3.1`** means intended
-desktop 3, slot 1. Use this naming shape where it can be set and observed
-reliably. It is **not a globally unique key**: repeated runs can create
-`joetoo_konsole_3.1` again, and titles can change. Preserve `request_id`,
-`managed_id`, and matched UUID independently of visible caption.
+desktop 3, slot 1. It is **not a globally unique key**: titles can change
+and configured entries can recur across runs. Preserve `request_id`,
+`managed_id`, and matched UUID independently of a visible caption.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
-| desktop | integer | KDE/Plasma virtual desktop number |
-| slot | integer | Layout position within/on virtual desktop |
-| program | string | basename of executable program |
-| mode | string | one-word descrption of role of program |
-| target | string | hostname of remote target |
+| desktop | integer | Intended KWin virtual desktop; distinct from actual observed desktop membership |
+| slot | integer | Planner-assigned sequence number within that desktop, not geometry |
+| program | string | Executable basename |
+| mode | string | Intended execution/connection mode; executable semantics require explicit definition |
+| target | string | Mode-dependent launch target (e.g. SSH hostname or local command), not necessarily a hostname |
+
+**Logical association versus observed state:** After positive registration, the
+broker retains the original intended desktop/slot association with the
+managed-window identity. KWin is authoritative for *actual* desktop membership
+(which may span multiple desktops) and window geometry. User movement,
+resizing, or desktop reassignment does not erase the original launch
+association and does not trigger automatic repositioning. Without an explicit
+operation request, the broker observes and reports window changes rather than
+enforcing the original layout.
+
+**Duplicate-launch safety (accepted Step 1.5c contract):** Another launch
+for an intended desktop/slot conflicts with an already positively registered,
+present managed window bearing that original launch association, even if the
+user has moved it. This protects the configured mission and avoids clutter;
+it does not reserve a rectangle. The same SSH hostname in **different** slots
+is valid. Uncertain ownership/presence must be handled conservatively, never
+assumed released merely because current geometry differs. The launcher
+reports conflicts during preflight, and the broker enforces the guard at
+submission without partially arming a rejected transaction. The broker
+does **not** calculate layout geometry. Window presence alone does not
+prove that an SSH connection remains active.
 
 `joetoo-kwin -m ...` on an arbitrary preexisting window changes its geometry; it does **not**
 automatically enroll that window for subsequent `-x` closure. Only a window
@@ -127,7 +152,9 @@ The broker maintains distinct kinds of runtime information:
 These are logical responsibilities; exact Python structures remain
 implementation details. The broker validates observations,
 correlates launches, maintains the records, and reports outcomes.
-KWin is authoritative for actual window existence and geometry.
+KWin is authoritative for actual window existence and geometry. The broker
+tracks observations and responds to explicit operation requests; it does not
+automatically return moved windows to planned geometry.
 
 ### registry contract (Implementation Step 1.4a)
 
@@ -195,19 +222,25 @@ Do not duplicate calculations inside aliases, the broker, and the planner.
   wasted pixels.
 - Four terminals use two-by-two quadrants; more than four terminals on one
   desktop is initially rejected. Count intended terminal windows, **not**
-  reachable SSH connections. Graphical apps do not consume terminal slots.
+  reachable SSH connections. Graphical apps do not consume terminal geometry
+  positions, but **do** receive logical launch-entry slots.
+- `planned_slot` numbers all configured entries on a desktop; a distinct
+  terminal-only sequence selects the position used by `terminal_geometry()`.
+  Neither current screen geometry nor terminal order defines the persistent
+  logical entry association.
 - Permit graphical windows such as VNC beneath terminals but **protruding**
   enough for independent mouse selection; actual stacking and focus policy
   require native tests, not merely proposed geometry.
 - `joetoo-kwin -m l` and `-m r` move/resize the **active** window to the
-  corresponding two-terminal left/right slot **on its current desktop**, using
-  this shared policy; expose `mw` as `alias mw='joetoo-kwin -m'` or an equivalent
-  shell function, not as a separate geometry implementation.
-- `-m DESKTOP X Y` preserves current window **width and height**;
-  `-m DESKTOP X Y WIDTH HEIGHT` explicitly resizes. The `-m` parser must
-  accept precisely 1 (`l|r`), 3, or 5 operands. No guessed pixel dimensions
-  from `termwidth()`/`termheight()`; resident KWin reads actual
-  `frameGeometry` for the preserve-size case.
+  corresponding two-terminal left/right geometry on its current desktop,
+  using the shared policy. Interactive moves do not assign managed launch
+  slots; expose `mw` as an alias/function, not a separate geometry engine.
+- The six accepted `-m` operand forms are `l|r`, `DESKTOP`,
+  `DESKTOP l|r`, `DESKTOP X Y`, `X Y WIDTH HEIGHT`, and
+  `DESKTOP X Y WIDTH HEIGHT`. Preserve omitted desktop, position, and size
+  independently as required by each form. Do not guess dimensions from
+  `termwidth()`/`termheight()`; the KWin resident reads `frameGeometry`.
+
 - Screen selection and work-area/panel deductions (especially multiple
   monitors) are not yet established; the current candidate uses explicit
   `screen_width`/`screen_height` from configuration. Do not present them as
@@ -220,7 +253,17 @@ Konsole window, identifying **which connection was attempted and why** (its
 "what-for" function). Retain the *original* local Bash and permit manual retry,
 as validated in the POC. No `tmux`, no extra Bash replacement, no always-enabled
 Konsole security-sensitive D-Bus API. Continue using the established
-`ssh_wrapper` and `bash --rcfile` pattern.
+`ssh_wrapper` and `bash --rcfile` pattern. Multi-window SSH uses
+`ssh_wrapper` within the original local interactive Bash; `swr` has
+separate wait-for-readiness semantics and is not an automatic substitute.
+A short bounded connection probe may avoid an immediate failed SSH attempt,
+but must not suppress creation/placement of a usable placeholder.
+
+Known, isolated registration/placement failures make the overall launch
+incomplete but should not prevent safe attempts at later independent entries.
+Unresolved Busy state, uncertain ownership, or an indeterminate preceding
+transaction must stop further submissions. Do not automatically close or
+roll back already-created windows.
 
 A layout is **complete** when each intended window was positively identified
 and placed, **even if some SSH connections are unavailable or have exited**.
@@ -281,7 +324,11 @@ silently be writable by unrelated processes.
 | `-o [-f CONFIG]` | Open/record a managed layout, each window positively matched |
 | `-x` | Gracefully close **all managed** windows; never unrelated windows |
 | `-m l|r` | Two-terminal left/right placement on current virtual desktop |
-| `-m DESKTOP X Y [WIDTH HEIGHT]` | Move active window; optional size preservation |
+| `-m DESKTOP` | Change desktop; preserve position and size |
+| `-m DESKTOP l|r` | Two-terminal left/right placement on specified desktop |
+| `-m DESKTOP X Y` | Change desktop/position; preserve size |
+| `-m X Y WIDTH HEIGHT` | Change position/size; preserve desktop |
+| `-m DESKTOP X Y WIDTH HEIGHT` | Explicit desktop, position and size |
 | `-a` | Add one newly launched managed window; exact operands TBD |
 | `-d MANAGED_ID` | Gracefully close one managed window |
 | `-l` | List managed windows with readable IDs and states |
@@ -342,7 +389,13 @@ Current completion status and supporting evidence are recorded in the
 | **1.4b** | Multiwindow registration and UUID-based observation reconciliation | Multiple independent registrations; duplicate rejection; conservative missing/uncertain handling |
 | **1.4c** | Read-only managed-window list, detail, and status interfaces | Structured broker queries; existing D-Bus compatibility preserved |
 | **1.4d** | Multiwindow integration and native validation | Representative mock scenarios, then X11 and Wayland tests; no fixed capacity requirement |
-| **1.5** | Shared geometry + `mw l/r`; colorized `-c`; `-o` with tested SSH placeholders | Native layout/SSH/underlay tests; `-v/-q` |
+| **1.5a** | Configuration precedence, shared geometry/planner and colorized `-c` | Headless configuration, geometry and dry-run checks |
+| **1.5b** | Interactive `-m` forms and independent preservation of omitted values | X11/Wayland movement and refusal scenarios |
+| **1.5c.1** | `-o` preflight, effective configuration/plan and confirmation | Invalid/unsupported plans and declined confirmation launch nothing |
+| **1.5c.2** | Sequential managed local launches, identity/slot conflict guard and placement | Positive registration, Busy safety and best-effort per-entry results |
+| **1.5c.3** | `ssh_wrapper` startup, original Bash and unreachable SSH placeholders | Independent transport and placement outcomes |
+| **1.5c.4** | Graphical applications and additional transports; separate approval required | VNC/RDP candidates, stacking and focus validation |
+| **1.5d** | Integrated native X11/Wayland `-o` and deferred Step 1.5b regression | Concurrency, focus, membership, refusal, complete/incomplete layouts |
 | **1.6** | Managed `-a`, `-d`, `-x` | Close one/all managed, leave unrelated Konsole untouched |
 | **1.7** | Private atomic JSON checkpoint and same-session reconciliation | Daemon restart preserves all running windows; registry revalidated |
 | **1.8** | Durable `.conf` snapshot, `-S` and `-r` | Clean-reboot launch with new UUID/PIDs, including SSH placeholders |
@@ -381,8 +434,14 @@ Phase 2 work shall be divided into focused, reviewable tasks, with measurable ac
   reconciliation? What can be recovered after an intermediate KWin restart?
 - Which layout work area and screen should drive shared geometry on multi-
   monitor setups? How should panel reserved areas and scaling be considered?
-- What is the validated, non-ambiguous way to request **preserve size** from
-  the existing five-integer broker protocol while retaining compatibility?
+- If a future explicit reset-to-intended-layout action is designed, how
+  will configuration entries correlate with managed windows across failures,
+  reordered entries and restarts? Geometry and managed-ID order are not
+  sufficient; no reset action is authorized in Step 1.5.
 - When should automatic last-good snapshots advance, and how is manual
   rearrangement encoded in a reusable `.conf`?
 - What are the exact `-a` and `-S` operands and safe selection behavior?
+- After initial KWin functionality is validated, should a separately scoped
+  feasibility effort evaluate reuse of the Bash planner with non-KWin desktop
+  environments (e.g. LXQt/GNOME) before Phase 2 optimization? This is not
+  a version 1 portability commitment.

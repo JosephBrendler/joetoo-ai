@@ -35,7 +35,7 @@ usage() {
     j_msg "-${notice}" -p "       ${PN} test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]"
     j_msg "-${notice}" -p "       ${PN} test-multi-launch  (TEST ONLY: register 4 local Konsoles)"
     j_msg "-${notice}" -p "       ${PN} -h"
-    j_msg "-${notice}" -p "       ${PN} -o (not yet integrated)"
+    j_msg "-${notice}" -p "       ${PN} -o [-f CONFIG] (confirm and launch configured Konsoles)"
 }
 
 # Retain the positional move/test grammar. getopts handles common options and
@@ -137,8 +137,9 @@ check_plan() {
     varlist+=" terminal_width_percent terminal_gap_percent terminal_height_percent"
     varlist+=" terminal_left_percent terminal_top_percent terminal_row_gap_percent"
     varlist+=" graphical_left_percent graphical_top_percent graphical_width_percent graphical_height_percent"
+    [[ ${1:-} != launch ]] || launch_preflight || return $?
     show_config || return $?
-    print_plan
+    print_plan "${1:-dry-run}"
     # -c ends here. Confirmation and launch belong to the later -o tranche.
 }
 
@@ -380,6 +381,7 @@ launch_one_window() {
 launch_managed_window() {
     local _lm_class=$1 _lm_slot=$2 _lm_payload _lm_placement _lm_registration
     local _lm_pid _lm_result _lm_state _lm_attempt _lm_registration_rc=1
+    launch_registration_id=""; launch_placement_id=""
     local _lm_placement_rc=1
     shift 2
     if (( $# < 7 )) || [[ ${6:-} != -- || -z ${7:-} ]]; then
@@ -407,10 +409,13 @@ launch_managed_window() {
         <<< "$_lm_payload") || return 1
     _lm_registration=$(jq -er '.registration_request_id | select(type == "string" and length > 0)' \
         <<< "$_lm_payload") || return 1
+    launch_registration_id=$_lm_registration; launch_placement_id=$_lm_placement
     j_msg "-${notice}" -p "Armed managed launch [${_lm_registration}], placement [${_lm_placement}]"
-    "$@" &
+    # FD 9 is the configured-launch lock. Application descendants must never
+    # retain it after this launcher exits; keep the actual launch and $! intact.
+    "$@" 9>&- &
     _lm_pid=$!
-    j_msg "-${notice}" -p "Launched [${1}], shell PID [${_lm_pid}]"
+    j_msg "-${notice}" -p "Launched Konsole operation; launch-process PID [${_lm_pid}] (interactive Bash PID is reported inside the terminal)"
     if ! qdbus6 "$bus" "$path" "$iface.SetManagedLaunchPid" "$_lm_registration" "$_lm_pid"; then
         j_msg "-${err}" -p "${PN}: managed PID handoff failed for [${_lm_registration}]"
         return 1
@@ -474,7 +479,7 @@ checknotroot
 parse_cmdline "$@" || exit $?
 # -c loads configuration before applying these overrides; other operations do
 # not need layout configuration and retain their existing operational behavior.
-if [[ $cli_operation != -c && $cli_operation != -m && $cli_operation != move ]]; then apply_cli_verbosity || exit $?; fi
+if [[ $cli_operation != -c && $cli_operation != -o && $cli_operation != -m && $cli_operation != move ]]; then apply_cli_verbosity || exit $?; fi
 set -- "$cli_operation" "${cli_args[@]}"
 case ${1:-} in
     -m|move)
@@ -490,8 +495,9 @@ case ${1:-} in
         test_multi_launch ;;
     -h|--help) usage ;;
     -o) action="open";   # open multiple windows
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
+        launch_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || exit 1
+        source "$launch_dir/libexec/joetoo-kwin-launch-functions" || exit 1
+        open_plan ;;
     -L) action="launch";   # launch (open) one window [maybe with mode (e.g. ssh_wrapper) and target]
                            # note: this may be a separate executable (see test-launch prototype)
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";

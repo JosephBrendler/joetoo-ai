@@ -203,7 +203,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
                      ('-c', '--unknown'), ('-v',), ('-f', str(self.config), '-m', '1', '2', '3', '4', '5')):
             with self.subTest(args=args):
                 self.run_cli(*args, expected=2)
-        self.run_cli('-o', '-f', str(self.config), expected=2)
+        # Configured -o execution is covered by test_step1_5c_launch.
 
     def test_reporting_fault_is_not_silent_success(self):
         self.env['REPORT_RC'] = '2'
