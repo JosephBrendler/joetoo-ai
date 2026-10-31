@@ -411,9 +411,11 @@ launch_managed_window() {
         <<< "$_lm_payload") || return 1
     launch_registration_id=$_lm_registration; launch_placement_id=$_lm_placement
     j_msg "-${notice}" -p "Armed managed launch [${_lm_registration}], placement [${_lm_placement}]"
-    "$@" &
+    # FD 9 is the configured-launch lock. Application descendants must never
+    # retain it after this launcher exits; keep the actual launch and $! intact.
+    "$@" 9>&- &
     _lm_pid=$!
-    j_msg "-${notice}" -p "Launched [${1}], shell PID [${_lm_pid}]"
+    j_msg "-${notice}" -p "Launched Konsole operation; launch-process PID [${_lm_pid}] (interactive Bash PID is reported inside the terminal)"
     if ! qdbus6 "$bus" "$path" "$iface.SetManagedLaunchPid" "$_lm_registration" "$_lm_pid"; then
         j_msg "-${err}" -p "${PN}: managed PID handoff failed for [${_lm_registration}]"
         return 1

@@ -37,6 +37,9 @@ class ConfiguredLaunchTests(PlannerHarness, unittest.TestCase):
         super().setUp()
         for name in ('joetoo-kwin-launch-functions', 'joetoo-kwin-session.bashrc'):
             shutil.copyfile(ROOT / 'libexec' / name, self.folder / 'libexec' / name)
+        runtime = self.folder / 'runtime'
+        runtime.mkdir(mode=0o700)
+        self.env['XDG_RUNTIME_DIR'] = str(runtime)
         self.env['BROKER_STATE'] = json.dumps({'observation': {'synchronized': True},
             'presence_counts': {'uncertain': 0}, 'request_counts': {'pending': 0, 'running': 0},
             'placement_transaction': {'state': 'IDLE'}})

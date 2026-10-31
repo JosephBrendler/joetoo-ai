@@ -1,0 +1,353 @@
+diff --git a/workspace/projects/joetoo-kwin/joetoo-kwin b/workspace/projects/joetoo-kwin/joetoo-kwin
+index 6730c05..266d33a 100755
+--- a/workspace/projects/joetoo-kwin/joetoo-kwin
++++ b/workspace/projects/joetoo-kwin/joetoo-kwin
+@@ -411,9 +411,11 @@ launch_managed_window() {
+         <<< "$_lm_payload") || return 1
+     launch_registration_id=$_lm_registration; launch_placement_id=$_lm_placement
+     j_msg "-${notice}" -p "Armed managed launch [${_lm_registration}], placement [${_lm_placement}]"
+-    "$@" &
++    # FD 9 is the configured-launch lock. Application descendants must never
++    # retain it after this launcher exits; keep the actual launch and $! intact.
++    "$@" 9>&- &
+     _lm_pid=$!
+-    j_msg "-${notice}" -p "Launched [${1}], shell PID [${_lm_pid}]"
++    j_msg "-${notice}" -p "Launched Konsole operation; launch-process PID [${_lm_pid}] (interactive Bash PID is reported inside the terminal)"
+     if ! qdbus6 "$bus" "$path" "$iface.SetManagedLaunchPid" "$_lm_registration" "$_lm_pid"; then
+         j_msg "-${err}" -p "${PN}: managed PID handoff failed for [${_lm_registration}]"
+         return 1
+diff --git a/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-launch-functions b/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-launch-functions
+index 0f9f060..8be8af4 100644
+--- a/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-launch-functions
++++ b/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-launch-functions
+@@ -51,8 +51,34 @@ launch_preflight() {
+     done
+ }
+ 
++# The CLI exits after open_plan returns. Keep FD 9 open for that invocation's
++# lifetime; kernel flock cleanup handles normal exit, cancellation and signals.
++# Never unlink this file: replacing its inode could allow two simultaneous locks.
++lock_configured_launcher() {
++    local _ll_runtime=${XDG_RUNTIME_DIR:-} _ll_file
++    if [[ -z $_ll_runtime || ! -d $_ll_runtime || -L $_ll_runtime || ! -O $_ll_runtime ]] ||
++        [[ $(stat -c %a -- "$_ll_runtime" 2>/dev/null) != 700 ]]; then
++        j_msg "-${err}" -p 'Configured launch requires a user-owned mode-700 XDG_RUNTIME_DIR'
++        return 1
++    fi
++    command -v flock >/dev/null || { j_msg "-${err}" -p 'Configured launch requires flock'; return 1; }
++    _ll_file=$_ll_runtime/joetoo-kwin-launch.lock
++    if [[ -L $_ll_file ]] || { [[ -e $_ll_file ]] && [[ ! -f $_ll_file || ! -O $_ll_file ]]; }; then
++        j_msg "-${err}" -p 'Unsafe configured-launch lock file'; return 1
++    fi
++    # Runtime directory is private; creation permissions are private as well.
++    if ! (umask 077; : >> "$_ll_file"); then return 1; fi
++    exec 9>>"$_ll_file" || return 1
++    if ! flock -n 9; then
++        exec 9>&-
++        j_msg "-${err}" -p 'Busy: another configured launcher is active'
++        return 1
++    fi
++}
++
+ open_plan() {
+     local _op_dir _op_i _op_failed=0 _op_rc _op_state _op_status
++    lock_configured_launcher || return 1
+     _op_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+     # When sourced, this helper's directory is libexec.
+     launch_session_file=${_op_dir}/joetoo-kwin-session.bashrc
+diff --git a/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md b/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md
+index a2ffa66..86a8afe 100644
+--- a/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md
++++ b/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md
+@@ -86,6 +86,8 @@ This handoff records permissions; it does not override governing policy. Histori
+ | 10 | Codex (2026-10-30), Step 1.5c prerequisite inspection | Clean existing task branch at `31400fe0d2be05064b898cf520d06d6445e13839`, equal to main/cached origin/main and descended from supplied bf835c7; agent evidence and this Section 5 row only | Read current governing instructions, complete scope/handoff, planner and managed/public query interfaces, relevant SSH POCs and installed header helpers. No production edits or tests; whitespace check only | Explicit confirmation resolves draft language. Required intended-slot and active-placement preflight data are not exposed by existing public APIs; existing broker edits remain excluded. [Concrete bounded interface recommendation](step1.5c-interface-review.md). Maintainer must authorize necessary broker extension/slot-race policy; no fetch, native operations, staging or publication. |
+ | 11 | Codex (2026-10-30), Step 1.5c.1–1.5c.3 implementation | Existing approved task branch/baseline 31400fe; CLI/shared planner/bounded broker, new launch/session helpers, relevant tests and agent evidence; preexisting maintainer records preserved | 235 Python tests PASS without skips including installed-header integration; 3 Node test files PASS; syntax/ShellCheck logs and production/test whitespace checks. Full diff retains preexisting maintainer approval-line whitespace | Confirmed plan/preflight, atomic original-slot guard/query metadata, sequential managed launch with safe partial-failure continuation and conservative unresolved-state stopping, single-Bash nc/ssh_wrapper placeholders. See [candidate review](step1.5c-review.md). Maintainer/cloud review and native gates next; no fetch, live operations, staging, commit, push or deploy. |
+ 
++| 12 | Codex (2026-10-31), focused native-feedback corrections | Clean approved task branch at 06bf97a7df1b68c3e9dc7fbfb0f40a328c3ea560; CLI/launch helper, focused tests and agent evidence only | 242 Python tests PASS without skips including installed-header integration; 3 JS files PASS; syntax, ShellCheck and whitespace PASS. See [correction review and inventory](step1.5c-corrections-review.md) | Added invocation-wide nonblocking runtime flock, child FD closure and truthful launch PID wording. Actual three-window orchestration regression passes existing safe partial-failure continuation; unresolved/ambiguous state stops. Native probe file/transcripts unavailable locally; maintainer reruns controlled PTY probe next. No broker changes, native operations or publication. |
++
+ | C1 | ChatGPT (2026-10-29), Step 1.5a closeout | Read PR #23 merge status and reviewed the accepted Step 1.5a scope; no repository edits. | GitHub confirmed PR #23 merge; Codex-reported 165 Python tests and installed-header coverage were not rerun by ChatGPT. | Maintainer/Codex proceeded to Step 1.5b; no independent cloud testing or publication. |
+ | C2 | ChatGPT (2026-10-29), Step 1.5b native and source review | Reviewed X11/Wayland move transcripts and broker/CLI optional-move reporting, including separate Konsole PIDs and shortcut-time target selection. | Maintainer native results showed distinct X11 windows and successful right placement. Source review located the optional-move `after=[0]` placeholder and generic Busy explanation; Wayland drag/roundoff cause remained unproven. | Recommended focused corrections and controlled focus/geometry tests; no edits or native actions. |
+ | C3 | ChatGPT (2026-10-29), Codex correction tasking | Drafted the Step 1.5b focused-correction prompt: verified desktop membership, Busy/unsupported classification, announce-act-report levels, regression tests and bounded geometry-precision investigation. | Prompt was based on published candidate source, Codex reports and maintainer transcripts; no tools were run to modify files or execute tests. | Maintainer supplied tasking to Codex; implementation and test evidence belong to Codex Iteration 6. |
+diff --git a/workspace/projects/joetoo-kwin/tests/test_step1_5c_launch.py b/workspace/projects/joetoo-kwin/tests/test_step1_5c_launch.py
+index b22af7e..0f2f2e1 100644
+--- a/workspace/projects/joetoo-kwin/tests/test_step1_5c_launch.py
++++ b/workspace/projects/joetoo-kwin/tests/test_step1_5c_launch.py
+@@ -37,6 +37,9 @@ class ConfiguredLaunchTests(PlannerHarness, unittest.TestCase):
+         super().setUp()
+         for name in ('joetoo-kwin-launch-functions', 'joetoo-kwin-session.bashrc'):
+             shutil.copyfile(ROOT / 'libexec' / name, self.folder / 'libexec' / name)
++        runtime = self.folder / 'runtime'
++        runtime.mkdir(mode=0o700)
++        self.env['XDG_RUNTIME_DIR'] = str(runtime)
+         self.env['BROKER_STATE'] = json.dumps({'observation': {'synchronized': True},
+             'presence_counts': {'uncertain': 0}, 'request_counts': {'pending': 0, 'running': 0},
+             'placement_transaction': {'state': 'IDLE'}})
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/tests/test_step1_5c_corrections.py
+@@ -0,0 +1,161 @@
++"""Actual -o orchestration with process/broker doubles; no GUI/network calls."""
++import os
++from pathlib import Path
++import subprocess
++import time
++import unittest
++import test_step1_5c_launch as configured
++
++
++class CorrectionsTests(configured.ConfiguredLaunchTests):
++    def setUp(self):
++        super().setUp()
++        self.write_config(['1|konsole|local|btop', '2|konsole|local|btop', '3|konsole|local|btop'])
++        text = self.client.read_text().replace("launch_managed_window() {\n    printf 'launch:",
++                                               "unused_launch_double() {\n    printf 'launch:")
++        text = text.replace('#-----[ main script ]', r'''
++confirm_continue_or_exit() {
++    printf 'confirm\n' >> "$TRACE"
++    if [[ ${WAIT_CONFIRM:-} == yes ]]; then read -r reply; [[ $reply == y ]];
++    else [[ ${CANCEL:-} != yes ]]; fi
++}
++# Retain the baseline preflight query double; override only transaction methods.
++eval "$(declare -f qdbus6 | sed '1s/qdbus6/preflight_bus/')"
++qdbus6() {
++    case $3 in
++    *.SubmitManagedLaunch)
++        printf 'submit:%s\n' "$5" >> "$TRACE"
++        printf '{"placement_request_id":"place-%s","registration_request_id":"reg-%s"}\n' "$5" "$5" ;;
++    *.SetManagedLaunchPid) printf 'pid:%s\n' "$4" >> "$TRACE" ;;
++    *.PollManagedLaunch)
++        if [[ $4 == reg-2 && ${FAILURE_KIND:-} == registration ]]; then
++            printf '{"state":"failed"}\n'
++        elif [[ $4 == reg-2 && ${FAILURE_KIND:-} == ambiguous ]]; then
++            printf '{"state":"ambiguous"}\n'
++        else printf '{"state":"registered","managed_id":"win-test","window_uuid":"uuid-test"}\n'; fi ;;
++    *.Status)
++        if [[ $4 == place-2 ]]; then
++            case ${FAILURE_KIND:-} in
++            placement|registration) printf 'ERROR controlled middle failure\n' ;;
++            busy) printf 'PENDING\n' ;;
++            *) printf 'OK verified\n' ;; esac
++        else printf 'OK verified\n'; fi ;;
++    *) preflight_bus "$@" ;;
++    esac
++}
++#-----[ main script ]''')
++        # Do not wait 15s on the intentionally unresolved request in this test.
++        text = text.replace('_wr_limit=150', '_wr_limit=1')
++        self.client.write_text(text)
++        (self.folder / 'konsole').write_text('''#!/bin/sh
++exec >/dev/null 2>&1
++if [ -e /proc/self/fd/9 ]; then echo inherited-lock >> "$TRACE"; fi
++echo child:$$ >> "$TRACE"
++if [ "${KEEP_CHILD:-}" = yes ]; then exec sleep 10; fi
++''')
++        (self.folder / 'konsole').chmod(0o755)
++
++    def run_client(self, **values):
++        return subprocess.run(['bash', str(self.client), '-o', '-f', str(self.config)],
++                              env={**self.env, **values}, text=True, capture_output=True, timeout=20)
++
++    def test_middle_failure_continues_and_identifies_incomplete_layout(self):
++        for kind in ('placement', 'registration'):
++            with self.subTest(kind=kind):
++                self.calls.unlink(missing_ok=True)
++                result = self.run_client(FAILURE_KIND=kind)
++                trace = self.calls.read_text()
++                self.assertNotEqual(result.returncode, 0)
++                self.assertLess(trace.index('submit:1'), trace.index('submit:2'))
++                self.assertLess(trace.index('submit:2'), trace.index('submit:3'))
++                self.assertIn('Configured layout: [2/3]', result.stdout)
++                self.assertIn('layout is incomplete', result.stdout + result.stderr)
++                self.assertIn('Launching desktop [2] slot [1]', result.stdout)
++                self.assertNotIn('inherited-lock', trace)
++                # No rollback/close methods exist in the broker double; all three
++                # processes are attempted and none is terminated by orchestration.
++
++    def test_indeterminate_or_ambiguous_transaction_stops(self):
++        for kind in ('busy', 'ambiguous'):
++            with self.subTest(kind=kind):
++                self.calls.unlink(missing_ok=True)
++                result = self.run_client(FAILURE_KIND=kind)
++                self.assertNotEqual(result.returncode, 0)
++                self.assertIn('submit:2', self.calls.read_text())
++                self.assertNotIn('submit:3', self.calls.read_text())
++
++    def test_lock_refuses_competitor_before_confirmation_and_releases_on_cancel(self):
++        first = subprocess.Popen(['bash', str(self.client), '-o', '-f', str(self.config)],
++            env={**self.env, 'WAIT_CONFIRM': 'yes'}, stdin=subprocess.PIPE,
++            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
++        try:
++            deadline = time.monotonic() + 5
++            while not self.calls.exists() or 'confirm' not in self.calls.read_text():
++                self.assertIsNone(first.poll())
++                self.assertLess(time.monotonic(), deadline)
++                time.sleep(.02)
++            competing = self.run_client()
++            self.assertNotEqual(competing.returncode, 0)
++            self.assertIn('Busy:', competing.stderr + competing.stdout)
++            self.assertEqual(self.calls.read_text().count('confirm'), 1)
++            self.assertNotIn('submit:', self.calls.read_text())
++            first.communicate('n\n', timeout=5)
++            self.assertNotEqual(first.returncode, 0)
++            self.assertEqual(self.run_client().returncode, 0)
++        finally:
++            if first.poll() is None: first.kill(); first.wait()
++            if first.stdin is not None and not first.stdin.closed: first.stdin.close()
++
++    def test_reacquire_after_error_and_normal_exit(self):
++        self.assertNotEqual(self.run_client(FAILURE_KIND='placement').returncode, 0)
++        self.assertEqual(self.run_client().returncode, 0)
++        self.assertEqual(self.run_client().returncode, 0)
++        self.assertNotIn('inherited-lock', self.calls.read_text())
++
++    def test_reacquire_after_termination(self):
++        first = subprocess.Popen(['bash', str(self.client), '-o', '-f', str(self.config)],
++            env={**self.env, 'WAIT_CONFIRM': 'yes'}, stdin=subprocess.PIPE,
++            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++        try:
++            deadline = time.monotonic() + 5
++            while not self.calls.exists() or 'confirm' not in self.calls.read_text():
++                self.assertLess(time.monotonic(), deadline); time.sleep(.02)
++            first.terminate(); first.wait(timeout=5)
++            self.assertEqual(self.run_client().returncode, 0)
++        finally:
++            if first.poll() is None: first.kill(); first.wait()
++            if first.stdin is not None and not first.stdin.closed: first.stdin.close()
++
++    def test_live_application_children_do_not_retain_lock(self):
++        children = []
++        try:
++            result = self.run_client(KEEP_CHILD='yes', FAILURE_KIND='placement')
++            self.assertNotEqual(result.returncode, 0)
++            self.assertIn('Configured layout: [2/3]', result.stdout)
++            deadline = time.monotonic() + 5
++            while len(children) < 3:
++                children = [int(line.split(':')[1]) for line in self.calls.read_text().splitlines()
++                            if line.startswith('child:')]
++                self.assertLess(time.monotonic(), deadline); time.sleep(.02)
++            for pid in children:
++                os.kill(pid, 0)
++                self.assertFalse(Path(f'/proc/{pid}/fd/9').exists())
++            self.assertEqual(self.run_client().returncode, 0)
++            self.assertNotIn('inherited-lock', self.calls.read_text())
++        finally:
++            for pid in children:
++                try: os.kill(pid, 15)
++                except ProcessLookupError: pass
++
++    def test_truthful_launch_pid_message(self):
++        result = self.run_client()
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertIn('Launched Konsole operation; launch-process PID [', result.stdout)
++        self.assertIn('interactive Bash PID is reported inside the terminal', result.stdout)
++        self.assertNotIn('Launched [env], shell PID', result.stdout)
++
++# This harness uses the real transaction function, unlike the baseline test
++# class. Run its focused cases only; the baseline cases run in their own module.
++for _name in dir(configured.ConfiguredLaunchTests):
++    if _name.startswith('test_') and _name not in CorrectionsTests.__dict__:
++        setattr(CorrectionsTests, _name, None)
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/task_step1.5/step1.5c-corrections-node.log
+@@ -0,0 +1,11 @@
++✔ tests/test_step1_3a.js (56.560515ms)
++✔ tests/test_step1_4d_placement.js (44.195311ms)
++✔ tests/test_step1_5b_move.js (61.535133ms)
++ℹ tests 3
++ℹ suites 0
++ℹ pass 3
++ℹ fail 0
++ℹ cancelled 0
++ℹ skipped 0
++ℹ todo 0
++ℹ duration_ms 75.148652
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/task_step1.5/step1.5c-corrections-python.log
+@@ -0,0 +1,9 @@
++.............................................joetoo-kwind: KWin resident reused: joetoo-bridge
++joetoo-kwind: KWin resident reused: joetoo-bridge
++.joetoo-kwind: KWin resident reused: joetoo-bridge
++joetoo-kwind: KWin resident started: joetoo-bridge
++....................................................................................................................................................................................................
++----------------------------------------------------------------------
++Ran 242 tests in 26.459s
++
++OK
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/task_step1.5/step1.5c-corrections-review.md
+@@ -0,0 +1,69 @@
++# Focused Step 1.5c native-feedback corrections
++
++Branch: task/joetoo-kwin-step1.5c-configured-launch.
++Starting HEAD: 06bf97a7df1b68c3e9dc7fbfb0f40a328c3ea560; working tree initially clean.
++Current scope and handoff inspected; latest chat authorization bounds this iteration.
++
++## Corrections and evidence
++
++-o acquires a nonblocking flock before preflight/configuration/confirmation, using
++XDG_RUNTIME_DIR/joetoo-kwin-launch.lock. The runtime directory must be user-owned,
++not a symlink, and mode 700; the lock file must be regular/user-owned, not a symlink.
++Creation uses umask 077. No fallback to shared /tmp. No lock-file unlinking: locks
++remain on a stable inode, with kernel release on process exit or termination.
++The CLI holds descriptor 9 until its invocation exits. -c/-m do not acquire it.
++The managed application spawn explicitly closes descriptor 9 before running env,
++Konsole and its descendants, preserving $! and SetManagedLaunchPid. Synchronous
++short-lived helper commands may inherit it, but are awaited by the launcher.
++Broker per-request Busy and identity/correlation mechanisms remain independent.
++
++The message now says “Launched Konsole operation; launch-process PID [...]”, and
++states that the interactive Bash PID is reported inside the terminal. Process
++creation and PID correlation are unchanged.
++
++New tests exercise actual open_plan and launch_managed_window with mocked broker
++and executable processes (no real GUI/network). Window 1 succeeds, window 2 has
++controlled registration or placement failure, window 3 is submitted; final count
++is 2/3 and failure is conspicuous in the desktop/slot context. Mock application
++children remain alive even after a failed layout; no close/rollback is performed.
++No production continuation-policy correction was needed. Pending placement or
++ambiguous registration instead prevents window 3. Additional tests hold confirmation,
++reject the competitor before it confirms/submits, cancel the owner, and reacquire.
++They cover error/normal exits, termination, truthful PID wording and reacquisition
++while live mock application children have no descriptor 9.
++
++242 Python tests PASS, no skips, including existing real installed-header integration.
++All 3 Node test files PASS (this host's runner reports files rather than 14 cases).
++Bash syntax, ShellCheck and complete diff whitespace checks PASS. Initial new test
++harness inheritance error and resource warning were fixed before the final full run.
++See step1.5c-corrections-{python,node,syntax,shellcheck}.log.
++
++## Inventory
++
++Modified tracked: joetoo-kwin; libexec/joetoo-kwin-launch-functions;
++tests/test_step1_5c_launch.py (isolated runtime directory for tests);
++task_step1.5/HANDOFF.md (Codex Section 5 row only).
++New test: tests/test_step1_5c_corrections.py.
++New evidence: this report, four correction logs and step1.5c-corrections.patch.
++Temporary harness output resides under /tmp and is not part of the review patch.
++Broker/resident/registry, startup workflow, scope and architectural documents untouched.
++
++## Native evidence and next gate
++
++Maintainer reports 235 Python / 14 JS tests on both backends, successful multiwindow
++SSH/local launch, duplicate protection after movement, unreachable placeholders,
++original local Bash PID continuity, missing observations and window survival across
++broker restart. Those are human-provided results, not agent native executions.
++The controlled Wayland probe established the missing pre-confirmation serialization.
++
++The named task_step1.5/joetoo-kwin-concurrency-probe.py and
++/tmp/joetoo-kwin-concurrency-6g23ppjo were unavailable locally; no copy was replaced,
++created or executed. The new headless test exercises the same hold-confirmation
++condition without live GUI behavior. Exact native probe review remains unavailable.
++
++Maintainer next: review the focused diff and install by existing human procedure;
++rerun the original separate-PTY probe on Wayland (and X11 where practical). Expect A
++to wait at confirmation and B to exit nonzero with Busy, no confirmation or launch.
++Cancel A and verify a new invocation can confirm; also verify normal completion
++with living Konsole/SSH sessions does not retain the lock. No native operations,
++installation, service changes, commit, push, PR or merge were performed by the agent.
+diff --git a/workspace/projects/joetoo-kwin/task_step1.5/step1.5c-corrections-shellcheck.log b/workspace/projects/joetoo-kwin/task_step1.5/step1.5c-corrections-shellcheck.log
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/workspace/projects/joetoo-kwin/task_step1.5/step1.5c-corrections-syntax.log
+@@ -0,0 +1 @@
++bash -n: CLI and launch helper PASS

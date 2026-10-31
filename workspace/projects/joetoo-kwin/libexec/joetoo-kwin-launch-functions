@@ -51,8 +51,34 @@ launch_preflight() {
     done
 }
 
+# The CLI exits after open_plan returns. Keep FD 9 open for that invocation's
+# lifetime; kernel flock cleanup handles normal exit, cancellation and signals.
+# Never unlink this file: replacing its inode could allow two simultaneous locks.
+lock_configured_launcher() {
+    local _ll_runtime=${XDG_RUNTIME_DIR:-} _ll_file
+    if [[ -z $_ll_runtime || ! -d $_ll_runtime || -L $_ll_runtime || ! -O $_ll_runtime ]] ||
+        [[ $(stat -c %a -- "$_ll_runtime" 2>/dev/null) != 700 ]]; then
+        j_msg "-${err}" -p 'Configured launch requires a user-owned mode-700 XDG_RUNTIME_DIR'
+        return 1
+    fi
+    command -v flock >/dev/null || { j_msg "-${err}" -p 'Configured launch requires flock'; return 1; }
+    _ll_file=$_ll_runtime/joetoo-kwin-launch.lock
+    if [[ -L $_ll_file ]] || { [[ -e $_ll_file ]] && [[ ! -f $_ll_file || ! -O $_ll_file ]]; }; then
+        j_msg "-${err}" -p 'Unsafe configured-launch lock file'; return 1
+    fi
+    # Runtime directory is private; creation permissions are private as well.
+    if ! (umask 077; : >> "$_ll_file"); then return 1; fi
+    exec 9>>"$_ll_file" || return 1
+    if ! flock -n 9; then
+        exec 9>&-
+        j_msg "-${err}" -p 'Busy: another configured launcher is active'
+        return 1
+    fi
+}
+
 open_plan() {
     local _op_dir _op_i _op_failed=0 _op_rc _op_state _op_status
+    lock_configured_launcher || return 1
     _op_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
     # When sourced, this helper's directory is libexec.
     launch_session_file=${_op_dir}/joetoo-kwin-session.bashrc
