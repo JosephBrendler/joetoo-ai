@@ -20,7 +20,6 @@ Keep distinct: **program** (local executable), **mode** (defined action/transpor
 - The current `-o` executor supports only `konsole:ssh` and `konsole:local`. For the latter, a nonempty executable target (e.g. `btop`) is currently required: empty-target `konsole|local|` is **not yet implemented**. Unsupported recipes cause whole-plan preflight rejection before confirmation or application launch; `-c` remains descriptive for accepted syntax.
 - The broker requires positive registration and unambiguous PID/UUID correspondence; a program that delegates window creation to an existing process is not evidence of ownership. Step 1.3b native evidence found Dolphin `--new-window` could match on both backends; reconfirm using currently installed executable versions.
 - The accepted `(intended desktop, slot)` association and duplicate guard persist through manual window movement; existing single-invocation `flock`, broker transaction safety, exact placement verification, best-effort isolated-failure continuation, and unresolved-state stopping remain intact.
-- The existing `archive/tigervnc-poc/vnc-via-ssh-launch` was supplied as a maintainer reference, but its current content **was not retrievable from published `joetoo-ai/main` during this review**. The implementing agent must inspect the actual file when supplied; do not infer its command syntax, configuration, or security posture.
 
 ## 3. Proposed implementation increments (separately reviewable)
 
@@ -35,7 +34,7 @@ Before initiating configured application launches, `joetoo-kwin -o` shall inspec
 6. If KWin cannot supply or create the necessary desktops, fail the configured launch before starting application windows. Report the required count, observed count, and reason. If partial desktop creation occurred, report that state without automatically deleting the created desktops.<br>
 7. Preserve the launcher-wide lock throughout preflight, confirmation, provisioning, and application launch. Recheck required desktop availability before placement where necessary to handle external desktop changes conservatively.<br>
 8. Inspect and use supported KWin desktop-management APIs on both X11 and Wayland. Do not modify `kwinrc` directly, assume X11-only desktop-management interfaces are valid on Wayland, or introduce new broker/resident methods unless inspection demonstrates they are necessary and the maintainer approves the interface extension.<br>
-9. Fail gracefully with informative "-${err}" message if the required number of desktops exceeds system capacity.
+9. Fail gracefully with informative error message if the required number of desktops exceeds system capacity.
 
 **Acceptance:** On both supported backends, verify that sufficient existing desktops cause no modification; insufficient desktops are added and positively verified; cancellation causes no changes; and desktop provisioning failures prevent all application launches. Include headless tests for sparse desktop references, configured limits, partial provisioning failures, and launch-order preservation.
 
@@ -86,7 +85,7 @@ Use the established terminal and `graphical_*_percent` geometry as the initial l
 ## 4. Maintainer network/security policy
 
 - **Direct VNC is prohibited**, even on a local subnet; the selected VNC implementation must use authenticated SSH tunneling. Do not disable host-key verification, weaken authentication, expose VNC listeners on non-loopback interfaces, store credentials in scripts, or put secrets in error messages.
-- For **newly introduced remote connections** where client and server are in different subnets, the maintainer requires a **verified VPN pathway** in addition to any program-specific SSH/TLS protections. Preserve existing accepted Konsole/SSH behavior; do not extend new cross-subnet modes unless the requirement is enforceable and approved. Apply the same conservative review to new Dolphin SFTP and future file-browser/RDP candidates.
+- For **newly introduced remote connections** when client is attempting connection from an external network (client and server are in different subnets), connectivity will be established by a VPN pathway without which the launcher will not be able to resolve an address for the remote host and if target is an ip local subnet address, it will not be routable. Thus, formal verification of vpn/SSH/TLS protection is not required. Preserve existing accepted Konsole/SSH behavior; this should apply similarly to new Dolphin SFTP and future file-browser/RDP candidates.
 - `ip addr`, `getent`, and routing observations can inform endpoint/network assessment, but **subnet difference alone is not proof of WAN exposure**, and those commands alone are not proof of a protected VPN route. Define an approved trust/network policy and a reliable fail-closed verification method before implementing an automatic gate; report unsupported cases instead of assuming safety.
 - Treat TLS as a security property, **not a complete RDP/VNC execution mode**. For every future `|tls|` candidate identify the underlying protocol, endpoint grammar, actual client capabilities and certificate-verification behavior before authorizing execution.
 
@@ -142,4 +141,4 @@ Do not implement `-a`, `-d`, `-x` (Step 1.6); checkpoint/same-session recovery a
 
 This is a **scope outline**, not operative implementation authorization. `HANDOFF.md` must separately designate the accepted increment(s), base SHA/new isolated branch, precise editable paths, headless validations, native/remote operations, stop/escalation conditions, and distinct commit/push/PR/merge permissions. In particular, broker/resident interface edits and any VPN enforcement need explicit narrow approval.
 
-**Next actor:** local aagent, upon maintainer approval documented in task HANDOFF.md, begins bounded implementation
+**Next actor:** local agent, upon maintainer approval documented in task HANDOFF.md, begins bounded implementation

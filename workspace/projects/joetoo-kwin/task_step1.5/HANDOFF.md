@@ -34,7 +34,7 @@
 
 - **Mandatory for 1.5c:** Read the complete [implementation scope and outline](Step1.5c_implementation_scope.md), this handoff and applicable `AGENTS.md` files. The outline specifies detailed functionality; Section 4 here is the **single current agent write/operation authorization**. Flag contradictions before coding.
 - Inspect `joetoo-kwin`, `libexec/joetoo-kwin-plan-functions`, broker, resident, registry, configurations and relevant tests.
-- Read-only historical references: `archive/step1-candidate/`, `archive/joetoo-kwin-launch-poc/`, `archive/joetoo-kwin-plan-poc/`, `archive/joetoo-kwin-ssh-nc-poc/`, `archive/joetoo-kwin-ssh-rcfile-poc/`, and legacy `xdotool_open_windows`. Do not copy POCs wholesale.
+- Read-only historical references: `archive/tigervnc-poc/vnc-via-ssh-launch`, `archive/step1-candidate/`, `archive/joetoo-kwin-launch-poc/`, `archive/joetoo-kwin-plan-poc/`, `archive/joetoo-kwin-ssh-nc-poc/`, `archive/joetoo-kwin-ssh-rcfile-poc/`, and legacy `xdotool_open_windows`. Do not copy POCs wholesale.
 - Discover relevant `.agents/skills/` and inspect the **actual** installed `script_header_joetoo` functions, particularly `ssh_wrapper`, `swr`, `pur`, `varlist`, `show_config`, `confirm_continue_or_exit`, and announce–act–report. `ssh_wrapper` is intended for initial multi-window SSH; `swr` is a separate waiting/retry-oriented helper. Do not infer behavior from names.
 
 ## 3. Task workflow — authorization boundaries are in Section 4
@@ -59,8 +59,11 @@ Maintainer approved [20261031-12:21:16] local agent to proceed with implementati
 - **1.5c.3:** Single-Bash `--rcfile` SSH startup through `ssh_wrapper`, short TCP probe and usable unreachable-target placeholders.<br>
 **Recorded implementation exceptions:** The maintainer's separately approved desktop/slot policy authorized additive modifications to `libexec/joetoo-kwind` for managed launch metadata, conservative broker-state reporting, and atomic duplicate-launch protection. Subsequent focused correction authorization covered launcher-wide concurrency protection, truthful PID reporting, and partial-failure regression tests. These approvals applied to the specified Step 1.5c.1-1.5c.3 work; they do not establish continuing permission for unrelated broker or resident modifications.<br>
 
-**Active implementation increments:**
-- **1.5c.4:** Graphical/VNC/RDP execution and underlay/stacking policy **not authorized**; separate design and approval required. Step 1.5d integrated native regression remains separately gated.<br>
+**Active implementation increment is 1.5c.4:** authorized above, and active. see task_step1.5/Step1.5c4_implementation_scope.md; for clarification, initial iteration scope
+- Virtual-desktop capacity verification/provisioning.
+- Dolphin local launches, including the empty target and explicit directory cases.
+- Headless regression tests, preserving all existing Konsole/SSH behavior.
+**Step 1.5d integrated native regression remains separately gated.**
 
 **Current maintainer decisions about subjects requiring consistency in the scope documents:**<br>
 - Preflight failure or declined confirmation launches nothing.<br>
@@ -128,16 +131,16 @@ On subsequent iterations, record only material changes, actual evidence and unre
 
 ## 6. Next gate — Step 1.5c implementation and review
 
-**Current candidate:** Step 1.5c.1–1.5c.3 has been implemented on task/joetoo-kwin-step1.5c-configured-launch. The maintainer completed extensive X11 and Wayland native testing. The focused concurrency correction passed the controlled pseudo-terminal probe on both backends, and Wayland confirmed lock release after cancellation and after successful launch with a Konsole remaining open.
+**Step 1.5c.4 approval:** Maintainer approved the scope direction on 2026-10-31 at 09:56:37 and authorized implementation on 2026-10-31 at 12:21:16. Work is governed by `Step1.5c4_implementation_scope.md` and the bounded permissions below. Earlier 1.5c.1–1.5c.3 permissions are historical.
 
-**Deferred:** Graphical/VNC/RDP integration (1.5c.4), Step 1.5d regression work, SSH transport-state telemetry, slot release following confirmed closure, durable registry recovery, one-off launch semantics and non-KWin desktop support remain outside the accepted 1.5c.1–1.5c.3 scope.
+**Task branch:** `task/joetoo-kwin-step1.5c4-graphical-launch`, created from current accepted `main`; record the actual base SHA. Branch creation requires explicit maintainer authorization or maintainer action.
 
-**Architecture follow-up:** The staged ARCHITECTURE-step1.5-clarifications.patch has been applied.
+**First bounded implementation iteration:** KWin virtual-desktop capacity checking/provisioning and Dolphin local launching, with focused headless tests. Investigate and report requirements for Dolphin SFTP, TigerVNC-over-SSH, underlay/focus and network/VPN enforcement; do not invent unresolved contracts or extend broker/resident APIs without further approval.
 
-**Local agent (Codex):** Verify accepted baseline and isolated task branch; read finalized scope and governing instructions; implement only 1.5c.1–1.5c.3 within Section 4 boundaries. Preserve maintainer-owned sections and record material changes, actual tests and next actor in Section 5.
+**Permitted candidate edits:** `joetoo-kwin`, `libexec/joetoo-kwin-plan-functions`, `libexec/joetoo-kwin-launch-functions`, narrowly scoped new helpers under `libexec/`, relevant tests/fixtures, agent-created evidence under `task_step1.5/`, and Section 5 of `HANDOFF.md` only.
 
-**Cloud agent (ChatGPT):** Review candidate code, complete diff, headless/native evidence, and unresolved design questions against approved scope.
+**Read-only/excluded:** Existing broker, KWin resident and registry files; archived POCs; installed headers; maintainer-owned scope, README, architecture and policy files; protected `joetoo`/`joetoo-upstream`. Escalate necessary exceptions before editing.
 
-**Deferred validation/design:** Step 1.5d includes post-capture focus changes, multiple-specific-desktop membership, tiled/fullscreen refusal and integrated X11/Wayland regression. Launch concurrency also needs 1.5c headless coverage. Keep exact geometry comparison absent separate approval. Graphical/VNC/RDP, one-off launch semantics and non-KWin generalization are separate decisions.
+**Validation:** Authorized non-network, non-GUI Python/Node mocks and regressions, installed-header integration, Bash syntax, ShellCheck and whitespace/diff review. Real launches, KWin configuration changes, SSH/VNC connections, package installation and service changes remain maintainer-operated.
 
-**Publication gate:** Maintainer separately decides commit/push/PR, merge, installation and official integration after reviewing candidate and validation evidence.
+**Next actor:** Codex begins the authorized first iteration on the designated task branch, reports changed files and tests in Section 5, and stops for maintainer review before further increments, commit, push or PR publication. Step 1.5d remains separate.
