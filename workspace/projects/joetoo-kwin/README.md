@@ -7,12 +7,7 @@ for version 1 requirements, design contracts, and acceptance gates.
 
 ## Current status
 
-**Completed through Step 1.4d** (October 2026). Step 1.4 established
-broker-private managed-window registration, independent presence and placement
-states, UUID-based observation reconciliation, read-only registry queries, and
-bounded asynchronous placement confirmation. The four-window managed-launch
-fixture passed native X11 and Wayland validation. These are collaboration
-candidates in `joetoo-ai`, not yet the complete version 1 application.
+**Completed through Step 1.c.3** (PRs #23, #24 and #25, October 2026). Step 1.5c.4 is now active, and 1.5d is not yet started. These are collaboration candidates in `joetoo-ai`, not yet the complete version 1 application.
 
 | Increment | Status and scope | Evidence |
 | --- | --- | --- |
