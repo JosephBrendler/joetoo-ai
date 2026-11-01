@@ -28,6 +28,8 @@ The sequence proposed for a new, separately authorized task handoff is:
 | 1.5c.5c | Compare RDP graphical candidates and decide whether secure, reliable RDP should replace legacy VNC as preferred graphical remote access | Feasibility first; implementation separately gated |
 | 1.5d | Integrated X11/Wayland regression of accepted 1.5 features, including selected new transports | Future separate gate |
 
+**Implementation scope:** See [Step 1.5c.5 implementation scope and outline](task_step1.5/Step1.5c5_implementation_scope.md) for detailed objectives, program/mode contracts, investigation requirements, security constraints, acceptance criteria, and increment boundaries. The scope document guides planning and review; implementation authorization and execution controls are established separately in `task_step1.5/HANDOFF.md`.
+
 Additional installed clients may now be evaluated deliberately, but are not
 automatically scheduled for implementation. The original 1.5c.4 scope outline
 is historical; later layer/group/focus approvals and accepted source supersede

@@ -468,6 +468,8 @@ Feasibility assessment does not itself authorize RDP implementation.
 If the maintainer approves an RDP implementation, define a separate bounded
 candidate and native acceptance gate before integrating it.
 
+**Implementation scope:** The [Step 1.5c.5 implementation scope](task_step1.5/Step1.5c5_implementation_scope.md) elaborates the proposed remote-access increments and their acceptance gates. It does not supersede this architecture or independently authorize implementation; current task permissions are controlled by the separately approved `HANDOFF.md`.
+
 **Broader application inventory (evaluation, not automatic implementation):**
 Newly installed on `gmki91` as reported by the maintainer: QTerminal 2.4.0,
 Krusader 2.9.0, FileZilla 3.70.6, Nautilus 49.6-r1, Nemo 6.6.4,
