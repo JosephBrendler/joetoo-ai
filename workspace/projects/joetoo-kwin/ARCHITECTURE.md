@@ -1,467 +1,527 @@
 # joetoo-kwin — architecture and version 1 requirements
 
-This is the project-specific design record for the authorized collaboration project
-`joetoo-ai/workspace/projects/joetoo-kwin/`. It distinguishes **accepted requirements**, **proposed design contracts**,
-and **open questions**. A proposed interface is not evidence that it has been
-implemented or tested; development status and native results belong in the
-[project README](README.md).
+This is the project-specific design record for `joetoo-ai/workspace/projects/joetoo-kwin/`.
+It distinguishes accepted requirements, implemented and accepted contracts, proposed
+future capabilities, and open design questions. The [project README](README.md)
+records implementation status; the [Step 1.5c.4 closure](task_step1.5/HANDOFF.md)
+and associated acceptance records retain test history.
 
-The governing collaboration instructions are in the repository's root
-`AGENTS.md`, `workspace/AGENTS.md`, and `workspace/README.md`. Official sources and
-packaging belong respectively to `joetoo-upstream` and `joetoo`, which remain
-**read-only to AI agents** under their current policies. This document does not
-supersede those policies or authoritative architecture after human integration.
+Repository-root, workspace and project `AGENTS.md` instructions govern AI collaboration.
+Official sources and Gentoo packaging belong in `joetoo-upstream` and `joetoo`,
+respectively. Their repository-specific AI restrictions take precedence; no new
+write authorization is granted by this architecture.
 
 ## 1. Purpose and release boundary
 
 Replace the legacy X11 `xdotool_open_windows`, `xdotool_close_windows`, and
-`xdotool_sizemove_this_window` workflows with `joetoo-kwin`, operating under
-KDE Plasma/KWin on **X11 and Wayland**. Support the maintainer's normal
-interactive shell workflow, a declarative multi-desktop session layout,
-independently manageable SSH and graphical windows, and conservative window
-closure.
+`xdotool_sizemove_this_window` workflows with `joetoo-kwin` on KDE Plasma/KWin
+under **X11 and Wayland**. Support interactive local shells, declarative
+multi-desktop launches, independently manageable SSH and graphical windows,
+and conservative managed closure.
 
 Version 1 requires an OpenRC-supervised `joetoo-kwind` management daemon and
-reliable initialization/reconnection of resident KWin JavaScript. Intermediate
-0.x prototypes are permitted; neither requirement is deferred past version 1.
+reliable activation/reconnection of resident KWin JavaScript. Intermediate
+prototypes are permitted; these are not deferred beyond version 1.
 
 ## 2. Supported development environment
 
-Development and validation must address both KWin/X11 and KWin/Wayland under
-Gentoo Linux, KDE Plasma, and an OpenRC user session. The specific host
-platforms and observed test outcomes are recorded in the
-[project README](README.md), not maintained as architectural requirements.
+Development and acceptance address Gentoo Linux, KDE Plasma/KWin on X11 and
+Wayland, and an OpenRC user session. Native host and version information is
+reported in the README and task evidence, not imposed as permanent product
+requirements.
 
 ## 3. Components and ownership
 
 | Component | Intended name | Owns | Must not do |
 | --- | --- | --- | --- |
-| Public Bash CLI | `joetoo-kwin` | Options, profile selection, planning, application launch orchestration, user messages | Guess ownership from window class alone; kill unrelated processes |
-| Broker daemon | `joetoo-kwind` | Session D-Bus API, transactions, managed-window registry, status, live checkpoint, reconciliation | Become process supervisor/parent of SSH/Konsole sessions; guess window geometry |
-| OpenRC user service | `joetoo-kwind` | Supervise broker process; expose service lifecycle and optional diagnostic delegation | Reinterpret the registry file; terminate managed applications on service stop |
-| KWin resident JavaScript | `joetoo-kwin-resident.js` | Observe KWin windows, UUIDs, geometry/desktops, KWin move/close actions, window removal | Own the durable launch configuration; infer SSH connectivity from a window's existence |
-| Configuration/profile | `/etc/joetoo-kwin/joetoo-kwin.conf` | Selected *desired* layout (symlink to profile under `configs/`) | Store ephemeral PIDs or KWin UUIDs |
+| Public Bash CLI | `joetoo-kwin` | Options, configuration selection, planning, launch orchestration, reporting | Infer ownership from class; kill unrelated processes |
+| Broker daemon | `joetoo-kwind` | Session D-Bus API, transactions, managed registry, result history, future checkpoint/reconciliation | Parent or supervise SSH/Konsole sessions; independently calculate layout geometry |
+| OpenRC user service | `joetoo-kwind` | Broker process supervision and user-session lifecycle | Terminate managed applications on service stop |
+| KWin resident JavaScript | `joetoo-kwin-resident.js` | KWin observations, exact UUID resolution, window placement, one-shot initial stack/focus, future safe close | Own launch configuration; infer transport connection from window presence |
+| Configuration/profile | `joetoo-kwin.conf` | Desired layout and configurable operational parameters, user override plus system fallback | Persist transient PID/UUID identity or credentials |
 
-**D-Bus compatibility:** The established service name `org.joetoo.KWinBridge`,
-object path `/org/joetoo/KWinBridge`, and existing method signatures are
-compatibility contracts. Renaming executables must not silently change them.
+**D-Bus compatibility:** The service `org.joetoo.KWinBridge`, object
+`/org/joetoo/KWinBridge`, and established method signatures are compatibility
+contracts. Additive, specifically approved methods may extend this interface.
 
-**Service lifecycle contract:** stop/restart of `joetoo-kwind` must leave all
-managed Konsole, SSH, and graphical client processes running. Restart
-reinitializes management and attempts bounded reconciliation; it does **not**
-close and reopen windows. No DDNS-style `trap 'kill 0' EXIT` in the broker.
-The `joetoo-kwin` CLI must not run as root or initiate root-level SSH.
+**Service lifecycle:** Broker restart must not kill Konsole, SSH or graphical
+clients, close their windows, or relaunch them as a side effect. The resident
+and broker shall synchronize a complete observed-window inventory on startup
+and reconnection without adopting observations as managed windows. The manual
+`joetoo_bridge_observe` shortcut remains diagnostic. Durable registry
+reconstruction is future Step 1.7 work, not an assertion about current support.
+The CLI must not invoke root-level SSH or require root for GUI management.
 
-**Synchronization of current window inventory:** When the broker starts or reconnects to an already-running KWin resident, it must automatically request a complete current-window inventory. This synchronization must be idempotent, tolerate concurrent window events, and must not confer managed ownership on observed windows. The existing manual joetoo_bridge_observe shortcut remains available for diagnostics. Managed-window checkpoint recovery is a separate responsibility addressed in Step 1.7.
+**Configuration discovery (accepted and implemented):** Explicit `-f FILE`
+wins. Without `-f`, use
+`${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf` when present;
+otherwise fall back to `/etc/joetoo-kwin/joetoo-kwin.conf`. A present but
+unreadable/invalid user file must not silently fall back. `XDG_CONFIG_HOME`
+need not be set; its standard default is `$HOME/.config`.
 
-**Configuration discovery and packaging contract (accepted):**
+**Packaging obligation (Step 1.9):** Distribute a documented configuration
+template and provide ebuild post-install guidance for optional per-user
+configuration. Do not populate HOME, overwrite user configurations, or modify
+shell login files during package installation. Final template installation
+paths and Gentoo dependency arrangements remain packaging decisions.
 
-The joetoo-kwin user configuration is resolved from `${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf`, falling back to `/etc/joetoo-kwin/joetoo-kwin.conf` when the user configuration is absent. An explicit `-f` takes precedence. Existing validation and unreadable-configuration error semantics remain authoritative.
+## 4. Identity, ownership, launch configuration, and transactions
 
-`XDG_CONFIG_HOME` will resolve the preferred config file if set, but it need not be defined; `$HOME/.config` is its standard default. The package shall not require users to set this variable or modify shell initialization files.
-
-Packaging shall provide a documented configuration template and explain how users can create an optional per-user override. The ebuild should communicate this through a post-install informational message. Package installation shall not automatically write into individual users' home directories or replace their configurations.
-
-The exact installed template path and ebuild implementation belong to the packaging integration task.
-
-## 4. Identity, ownership; launch configuration and transactions
-
-**Runtime identities:** joetoo-assigned logical identifiers and
-externally assigned identities have distinct purposes.
+### Runtime identity
 
 | Identifier | Assigned by | Meaning | Lifetime |
 | --- | --- | --- | --- |
-| `run_id` | joetoo | Groups coordinated operations when needed | Execution/reporting |
-| `request_id` | joetoo | Identifies one requested operation or transaction | Operation and bounded result history |
-| `managed_id` | joetoo | Human-readable alias for one registered window (e.g. `win-004`) | Registered instance |
-| `window_uuid` | KWin | Identifies the actual KWin window | Compositor/window lifetime |
+| `run_id` | joetoo | Optional coordinated-run identifier | Execution/reporting |
+| `request_id` | joetoo | One operation or transaction | Operation and bounded result history |
+| `managed_id` | joetoo | Human-readable registered-window alias, e.g. `win-004` | Registered instance |
+| `window_uuid` | KWin | Identity of a real compositor window | Window/compositor lifetime |
 
-Each active managed-window record has exactly one `managed_id`
-and one `window_uuid`, with a unique bidirectional association
-within the broker's active registry.
+Each active managed registration uniquely associates one `managed_id` with
+one `window_uuid`. Neither a window title nor a bare managed alias proves
+ownership for destructive operations. Linux PIDs and observation-source
+identities are independent metadata. Runs need not be retained after completion,
+and not every CLI operation needs a broker-visible `run_id`.
 
-A `managed_id` is an alias, not proof of ownership or authorization
-for destructive operations. Linux PIDs and KWin observation-source
-identifiers are separate runtime metadata.
+### Joetoo-kwin window-management terms
 
-Runs need not be retained beyond completion, and not every CLI
-invocation requires a broker-visible `run_id`.
+**The following is a glossary of window-management concepts defined for
+clarity, not a listing of literal configuration fields.** In particular,
+`slot` is derived by the planner and is *not* a positional field in a
+`desktop_session_list` entry.
 
-**Configured launch intent:** Each configuration entry specifies an intended
-`desktop`, `program`, `mode`, and `target`. The Bash planner derives
-`slot` as the 1-based sequence number among **all** entries on that intended
-desktop, including graphical entries. A slot is a logical launch-entry
-association, **not** a coordinate or terminal position. These values describe
-a launch recipe but do not uniquely identify an actual runtime window.
+| Term | Meaning |
+| --- | --- |
+| `desktop` | Intended numbered KWin virtual desktop; actual membership is independently observed and may be changed by the user |
+| `slot` | One-based position of an entry among **all entries for its intended desktop**, in configuration order; persistent logical launch association, not geometry or a terminal position |
+| `program` | Supported local application/executable selected for launch |
+| `mode` | Explicitly defined program-specific behavior or transport, e.g. `local`, `ssh`, or a later approved remote mode; acceptance of a descriptive label alone does not grant executable support |
+| `target` | Program/mode-specific command, directory, hostname or endpoint; interpretation must be defined per supported combination |
+| `layer` | Optional initial stacking/layout classification: `under`, `panel`, or `over`, independent of program and not a persistent keep-above/below rule |
 
-A readable window title/label such as **`joetoo_konsole_3.1`** means intended
-desktop 3, slot 1. It is **not a globally unique key**: titles can change
-and configured entries can recur across runs. Preserve `request_id`,
-`managed_id`, and matched UUID independently of a visible caption.
+### `desktop_session_list` grammar
 
-| Field | Type | Meaning |
-| --- | --- | --- |
-| desktop | integer | Intended KWin virtual desktop; distinct from actual observed desktop membership |
-| slot | integer | Planner-assigned sequence number within that desktop, not geometry |
-| program | string | Executable basename |
-| mode | string | Intended execution/connection mode; executable semantics require explicit definition |
-| target | string | Mode-dependent launch target (e.g. SSH hostname or local command), not necessarily a hostname |
+A trusted Bash configuration defines an indexed array of pipe-delimited
+strings. Each entry has four mandatory positional fields and one optional
+fifth field:
 
-**Logical association versus observed state:** After positive registration, the
-broker retains the original intended desktop/slot association with the
-managed-window identity. KWin is authoritative for *actual* desktop membership
-(which may span multiple desktops) and window geometry. User movement,
-resizing, or desktop reassignment does not erase the original launch
-association and does not trigger automatic repositioning. Without an explicit
-operation request, the broker observes and reports window changes rather than
-enforcing the original layout.
+`DESKTOP|PROGRAM|MODE|TARGET[|LAYER]`
 
-**Duplicate-launch safety (accepted Step 1.5c contract):** Another launch
-for an intended desktop/slot conflicts with an already positively registered,
-present managed window bearing that original launch association, even if the
-user has moved it. This protects the configured mission and avoids clutter;
-it does not reserve a rectangle. The same SSH hostname in **different** slots
-is valid. Uncertain ownership/presence must be handled conservatively, never
-assumed released merely because current geometry differs. The launcher
-reports conflicts during preflight, and the broker enforces the guard at
-submission without partially arming a rejected transaction. The broker
-does **not** calculate layout geometry. Window presence alone does not
-prove that an SSH connection remains active.
+`TARGET` can be the empty string only for approved program/mode combinations.
+The fifth `LAYER` is optional: omitted means `panel`, retaining compatibility
+with legacy four-field entries. Supported values are `under`, `panel`, `over`.
+An explicit `panel` entry is different from an implicit panel for ordinary
+layout-budget accounting where the current policy distinguishes them.
 
-`joetoo-kwin -m ...` on an arbitrary preexisting window changes its geometry; it does **not**
-automatically enroll that window for subsequent `-x` closure. Only a window
-created by an authorized joetoo launch and **positively correlated** with that
-launch becomes managed. Uncertain matches must not become close targets.
+```bash
+desktop_session_list=(
+    "2|konsole|ssh|nuthuvia"
+    "2|dolphin|local||under"
+    "2|konsole|local|btop|over"
+    "4|dolphin|local|Documents|panel"
+)
+# End of configuration
+```
 
-### Launch-and-correlate contract
+Here desktop 2 derives slots 1, 2 and 3; desktop 4 derives slot 1.
+**There is no `slot` configuration field or sixth pipe-separated field.**
+Desktop and slot together identify intended launch association, not an actual
+compositor window. A caption such as `joetoo_konsole_3.1` may hint at desktop
+3/slot 1 but is not a unique identity or ownership proof.
 
-1. Validate the requested layout/launch, allocate a request_id and, when coordinated operations require one, a run_id
-2. Capture existing KWin window identities, arm a specific pending request in the broker, and launch one application instance independently of the daemon's process group.
-3. Observe `windowAdded` and subsequent changes if needed. Poll/await a **bounded** period for a *unique* match using available evidence: new UUID, application class/desktop file, launch PID when trustworthy, and optionally an explicit title token such as `joetoo_konsole_3.1`.
-4. Record matched `window_uuid` and current metadata, request KWin placement, verify readback when settled, and complete the transaction with a structured result. Keep launch and placement outcomes distinct.
-5. On timeout or ambiguous matches, report **unmatched/ambiguous** and never take ownership of an arbitrary class-matching window.
+Entries may interleave desktops. Execution groups entries by desktop in the
+order of each desktop's first appearance, retaining configuration order
+within each group. Each desktop group finalizes its initial-layout transaction
+before the next group begins. The planner assigns slot numbers before any
+layer-based stacking reordering; moving a window never changes its slot.
+
+### Layer, focus and one-shot layout semantics
+
+Initial bottom-to-top stacking is **`under → panel → over`**, with
+configuration order preserved within each layer. The preferred focus target
+is the last successfully registered `over`, otherwise the last successful
+`panel`; an `under` entry is never selected as the automatic preferred focus
+target. Focus is requested only if the target desktop is currently displayed.
+KWin receives at most one focus activation request and its asynchronous
+completion is observed for a bounded interval. Placement, stack verification
+and focus outcomes are separately reported. No automatic desktop switch is
+performed to realize focus. After initialization, KWin and the user control
+raising, movement, resizing, focus and desktop assignment without continuous
+layout restoration.
+
+### Logical association, duplicate protection and actual state
+
+Positive registration preserves original intended `(desktop, slot)` in the
+broker. KWin independently reports actual desktop membership (possibly
+multiple desktops), geometry, window presence, stacking and focus. A present
+managed window blocks a second launch for its original `(desktop, slot)` even
+when moved or resized. Repeated SSH destinations in *different* slots are
+valid. Uncertain ownership/presence must not be assumed released. The launcher
+checks conflicts during preflight and the broker checks them atomically at
+submission; unmanaged visual overlap is a warning, not a managed-slot conflict.
+Broker-side logic must not calculate planned geometry. Window presence is not
+SSH/RDP/VNC connection state.
+
+Interactive `-m` on a preexisting unmanaged window does not register it,
+assign an intended slot or make it eligible for `-x`/`-d`.
+
+### Launch, correlate and complete
+
+1. Validate configuration, effective bounds, whole plan and unsupported
+   program/mode combinations before any application/network side effects.
+2. Acquire the invocation-wide coordination lock, inspect KWin inventory,
+   reserve the exact request and launch the chosen local application without
+   joining the broker's process group.
+3. Correlate uniquely via new KWin UUID, trustworthy PID, class/desktop file
+   and optional diagnostic hints; never adopt an arbitrary matching class.
+4. Positively register the UUID, apply requested desktop/geometry, verify
+   readback, then finalize each group with a bounded UUID-owned one-shot
+   stacking/focus transaction.
+5. Distinguish unmatched/ambiguous, application launch, geometry/stack/focus,
+   and transport/authentication outcomes. Report partial completion accurately.
+   Isolated known failures may permit subsequent entries; uncertain Busy or
+   ownership/transaction state must stop further submissions.
 
 ### Configuration and operational bounds
 
-**Requirement:** User-adjustable operational parameters shall govern joetoo-kwin's layout planning, resource limits, timing, and transaction behavior rather than relying on unnecessarily hardcoded implementation values.
+User-adjustable operational parameters govern planning, capacity, geometry,
+timing and transactions. `desktop_limit`, `dt_win_limit`, percentages/gutters,
+`min_window_exposure_px`, and initial-focus observation timing are examples.
+Each configurable value needs a documented default in
+`joetoo-kwin-template.conf`, units and safe validation bounds. New remote
+launch timeouts, retries and leases must follow the same principle.
 
-- **Layout and capacity:** Parameters such as `desktop_limit`, `dt_win_limit`, geometry percentages, gutters, and `min_window_exposure_px` shall be configurable.
-- **Timing and coordination:** Operational timeouts, polling intervals, retry delays, observation windows, transaction leases, and similar timing parameters shall be configurable.
-- **Defaults:** Each user-adjustable parameter shall have a documented default assignment in `joetoo-kwin-template.conf`, allowing ordinary operation without mandatory customization.
-- **Validation:** Parameters shall have defined units, supported ranges, and appropriate cross-parameter constraints. Invalid settings must fail predictably; configurable limits must not defeat bounded execution, resource safeguards, or ownership protections.
-- **Component boundaries:** The CLI shall validate effective configuration values and convey relevant parameters explicitly to the broker or KWin resident as needed; independently running components must not assume access to the launcher's Bash variables.
-- **Compatibility:** New parameters shall follow these requirements. Existing hardcoded operational values should be inventoried and migrated through focused, reviewable increments without unnecessarily changing established behavior.
+The CLI passes effective parameters explicitly across the broker/resident
+boundary rather than relying on shared Bash globals. New parameters must be
+bounded and cannot compromise ownership or coordination. Preexisting hardcoded
+timing should be inventoried and migrated in focused, compatible increments.
+Configuration values do not confer managed ownership or make unsupported
+program/mode combinations executable.
 
 ## 5. Working registry and operation outcomes
 
-The broker maintains distinct kinds of runtime information:
+The broker logically maintains `observed_windows` (all KWin observations),
+`managed_windows` (positively identified instances), bounded `requests`,
+transient `runs`, future application-specific `application_sessions`, and
+`graphical_context` (KWin/broker observation source). Exact Python data
+structures are implementation choices. The broker observes changes and
+processes explicit operations; it does not automatically restore planned
+geometry after a manual change.
 
-- `observed_windows`: KWin-reported windows, regardless of whether
-  joetoo manages them.
-- `managed_windows`: positively correlated and registered window
-  instances, indexed by KWin UUID with a unique secondary lookup
-  by `managed_id`.
-- `requests`: pending operations and bounded completed results.
-- `runs`: transient contexts for coordinated operations, retained
-  only as necessary for execution and reporting.
-- `application_sessions`: activities established within windows,
-  where application-specific reporting supports them.
-- `graphical_context`: broker/KWin observation-source and
-  graphical-environment metadata, distinct from application sessions.
+### Registry invariants (established in Step 1.4)
 
-These are logical responsibilities; exact Python structures remain
-implementation details. The broker validates observations,
-correlates launches, maintains the records, and reports outcomes.
-KWin is authoritative for actual window existence and geometry. The broker
-tracks observations and responds to explicit operation requests; it does not
-automatically return moved windows to planned geometry.
-
-### registry contract (Implementation Step 1.4a)
-
-1. A window becomes managed only after a broker-associated launch
-   is positively correlated with a newly observed KWin UUID.
-2. Registration requires a synchronized prelaunch inventory,
-   unique qualifying correlation, no relevant observation-history
-   gap, and confirmation that the UUID remains present.
-3. Unresolved or ambiguous requests do not create managed-window
-   registrations. Observation, inspection, or movement of an
-   existing window does not confer managed ownership.
-4. Each active registration has a unique, one-to-one association
-   between `managed_id` and `window_uuid`. Duplicate or conflicting
-   registrations must be rejected without altering existing records.
-5. Window existence, placement, operation outcome, and application
-   session state are independent. Successful window registration
-   does not imply successful placement or connection.
-6. A failed SSH/VNC connection does not invalidate an otherwise
-   successfully registered window. An unsuccessful connection
-   attempt does not create an established application session.
-7. The broker updates registered windows using exact UUID-based
-   observations. Missing or uncertain windows must not be silently
-   re-adopted through class, title, desktop, or slot matching.
-8. Registration does not itself authorize destructive operations.
-   Stronger validation is required before managed close operations
-   are introduced.
-9. Multiple managed windows and completed requests must coexist.
-   Correlation and registration operations may initially be
-   serialized; no arbitrary fixed window-count requirement applies.
-10. Read-only managed-window list, detail, and status semantics
-    are defined during Step 1.4a and exposed in Step 1.4c.
+1. Registration requires a synchronized prelaunch inventory, unambiguous
+   correlation with a new UUID, no material observation gap and confirmation
+   the UUID is still present.
+2. Only a broker-associated successful correlation grants managed registration;
+   diagnostic observation, manual movement, and class/title similarity do not.
+3. UUID and managed ID are unique and bidirectionally associated in the live
+   registry; conflicting registration leaves prior records unchanged.
+4. Window existence, initial placement, operation result and application
+   session state are independent. A failed connection does not erase a
+   successfully placed window, nor create a connected session.
+5. Updates and removal use exact UUID observations. Missing/uncertain windows
+   are not silently adopted under another UUID.
+6. Managed status alone is not sufficient authorization for future destructive
+   operations. Confirm current ownership/source before closure.
+7. Multiple records and completed requests coexist; bounded serialization
+   is allowed but no arbitrary fixed total window count is required.
+8. Read-only `ListManaged`, `GetManaged` and `RegistryStatus` contracts remain
+   available without granting new destructive access.
 
 ### Independent state dimensions
 
-| Dimension | Candidate states |
+| Dimension | Representative states |
 | --- | --- |
 | Request | `pending`, `running`, `succeeded`, `failed`, `timeout`, `ambiguous` |
 | Window observation | `present`, `missing`, `uncertain` |
 | Placement | `not_requested`, `pending`, `succeeded`, `failed` |
 | Application connection | `not_attempted`, `connecting`, `connected`, `unavailable`, `exited`, `unknown` |
 
-Exact state representations and permitted transitions are to be
-finalized and tested during Step 1.4a. Avoid redundant flags or
-a generalized state-machine framework without demonstrated need.
+Actual API representations and transitions follow the implemented registry;
+these are architectural dimensions, not a requirement for a new general
+state-machine framework. Broker-lifetime IDs and same-session checkpoint
+recovery remain distinct until Step 1.7. A window may support multiple
+application sessions over its life; generalized transport telemetry was not
+implemented by Step 1.5c.4.
 
-An application window may be associated with zero or more
-application sessions over its lifetime. General session tracking
-is not required for Step 1.4.
+## 6. Shared geometry, layers and visibility
 
-Managed IDs are broker-lifetime identifiers initially; safe
-same-session recovery and stale-ID protection are addressed
-before destructive operations are enabled.
+`-c`, `-o` and interactive `-m l|r` share planner geometry calculations. The
+broker must not independently generate placement coordinates.
 
+### 6.1 Panel allocation and budget
 
-## 6. Geometry and visibility
+The panel allocator supports one through four panel entries in ordinary
+one/two/three-region layouts and the four-region two-by-two arrangement.
+Defaults reserve 87% of the configured screen width for the terminal/panel
+region, with configurable gaps, position and dimensions. **Panel allocation
+is application-independent**: Dolphin can occupy a panel, and Konsole can
+appear in an explicit `under` or `over` layer. The panel limit applies to
+panel positions, not the number of accessible SSH connections.
 
-`-c`, `-o`, and interactive `-m l|r` must use **one shared geometry policy**.
-Do not duplicate calculations inside aliases, the broker, and the planner.
+An ordinary `dt_win_limit=4` implicit-entry budget is enforced; explicit
+layers may increase the total window count with a warning without bypassing
+the four-panel allocator or other safety limits. All configured windows
+receive logical slot numbers, regardless of the physical allocator position.
 
-- Allocate **87% of usable screen width by default** to the total terminal
-  region for 1–3 terminals, with configurable width percentage and inter-window
-  gutters. Leave clickable space **between** terminals and **to the right** so
-  desktop widgets (clocks, CPU/network monitors, etc.) remain visible and
-  underlying windows remain selectable. This is deliberate usable space, not
-  wasted pixels.
-- Four terminals use two-by-two quadrants; more than four terminals on one
-  desktop is initially rejected. Count intended terminal windows, **not**
-  reachable SSH connections. Graphical apps do not consume terminal geometry
-  positions, but **do** receive logical launch-entry slots.
-- `planned_slot` numbers all configured entries on a desktop; a distinct
-  terminal-only sequence selects the position used by `terminal_geometry()`.
-  Neither current screen geometry nor terminal order defines the persistent
-  logical entry association.
-- Permit graphical windows such as VNC beneath terminals but **protruding**
-  enough for independent mouse selection; actual stacking and focus policy
-  require native tests, not merely proposed geometry.
-- `joetoo-kwin -m l` and `-m r` move/resize the **active** window to the
-  corresponding two-terminal left/right geometry on its current desktop,
-  using the shared policy. Interactive moves do not assign managed launch
-  slots; expose `mw` as an alias/function, not a separate geometry engine.
-- The six accepted `-m` operand forms are `l|r`, `DESKTOP`,
-  `DESKTOP l|r`, `DESKTOP X Y`, `X Y WIDTH HEIGHT`, and
-  `DESKTOP X Y WIDTH HEIGHT`. Preserve omitted desktop, position, and size
-  independently as required by each form. Do not guess dimensions from
-  `termwidth()`/`termheight()`; the KWin resident reads `frameGeometry`.
+### 6.2 Graphical regions and stacking
 
-- Screen selection and work-area/panel deductions (especially multiple
-  monitors) are not yet established; the current candidate uses explicit
-  `screen_width`/`screen_height` from configuration. Do not present them as
-  autodetected.
+`under` and `over` use the configurable graphical region dimensions
+(`graphical_left_percent`, `graphical_top_percent`,
+`graphical_width_percent`, `graphical_height_percent`) and cascade offsets.
+After positive registration, one bounded cohort transaction establishes and
+verifies bottom-to-top `under → panel → over`, preserving entry order within
+each layer. The last successful `over` or, absent that, last `panel` is
+preferred focus when the group desktop is displayed. No permanent keep-above,
+keep-below or continuous repair behavior is imposed.
+
+### 6.3 Exposure and its limits
+
+`min_window_exposure_px` is a configurable desired minimum exposed *logical
+pixel* rectangle for graphical windows. Planner frame-rectangle predictions
+warn about insufficient exposure and possible unmanaged obstructions; these
+warnings are not proof of compositor-visible clickable regions and are not
+ordinary launch failures. Decorations, scaling, reserved work areas, other
+windows and real KWin stacking may affect actual usability. An ergonomically
+unhelpful layout can still be technically valid. The obsolete proposed
+`underlay_protrusion_percent` is **not** the accepted exposure contract.
+
+### 6.4 Interactive movement and display limitations
+
+The six accepted `-m` forms are `l|r`, `DESKTOP`, `DESKTOP l|r`,
+`DESKTOP X Y`, `X Y WIDTH HEIGHT`, and `DESKTOP X Y WIDTH HEIGHT`.
+Omitted desktop/position/size fields are preserved independently; the KWin
+resident reads actual `frameGeometry`. These moves do not assign managed
+slots. Default `screen_width`/`screen_height` remain explicitly configured,
+**not autodetected**; multi-monitor output selection, work area deductions,
+reserved panels and scale-aware clickable exposure need future specification.
 
 ## 7. Unavailable SSH is a valid placeholder
 
-For a configured SSH target that cannot be reached, keep the correctly placed
-Konsole window, identifying **which connection was attempted and why** (its
-"what-for" function). Retain the *original* local Bash and permit manual retry,
-as validated in the POC. No `tmux`, no extra Bash replacement, no always-enabled
-Konsole security-sensitive D-Bus API. Continue using the established
-`ssh_wrapper` and `bash --rcfile` pattern. Multi-window SSH uses
-`ssh_wrapper` within the original local interactive Bash; `swr` has
-separate wait-for-readiness semantics and is not an automatic substitute.
-A short bounded connection probe may avoid an immediate failed SSH attempt,
-but must not suppress creation/placement of a usable placeholder.
+A configured unreachable SSH endpoint may still yield a correctly placed
+managed Konsole with the **original local interactive Bash** and a manual
+retry instruction. Use `ssh_wrapper` in the original `bash --rcfile` context;
+`swr` has different wait/retry semantics and is not an automatic replacement.
+Do not use `exec`, a replacement shell, mandatory tmux, root SSH or a new
+always-enabled Konsole-sensitive D-Bus interface to simplify lifecycle.
+A short bounded network probe must not suppress a usable placeholder.
 
-Known, isolated registration/placement failures make the overall launch
-incomplete but should not prevent safe attempts at later independent entries.
-Unresolved Busy state, uncertain ownership, or an indeterminate preceding
-transaction must stop further submissions. Do not automatically close or
-roll back already-created windows.
-
-A layout is **complete** when each intended window was positively identified
-and placed, **even if some SSH connections are unavailable or have exited**.
-An absent, unmatched, ambiguously identified, or unplaced required window
-makes the launch incomplete. Persist the intent for placeholders, so a later
-`-r` makes a **new connection attempt** rather than trying to revive old SSH
-processes. Do not mistake network health for window-management success.
+Known isolated launch failures permit safe continuation; unresolved Busy,
+ownership or transaction ambiguity stops further submissions. Preserve
+already created windows and report partial success; do not automatically roll
+back. Layout completeness means positively registered and placed requested
+windows regardless of SSH connection availability. An unregistered or unplaced
+required window makes the layout incomplete. Future `-r` creates new
+connections/windows; it cannot revive old SSH processes. Application
+connection and window management remain independent.
 
 ## 8. Runtime checkpoint versus restorable layout
 
-### 8.1 Working state and private runtime JSON (accepted direction)
+### 8.1 Private runtime checkpoint (Step 1.7 target)
 
-- Broker's Python memory is the active authority for managed ownership and
-  operation records. Serialize a private checkpoint atomically to
-  `$XDG_RUNTIME_DIR/joetoo-kwin/managed-windows.json`.
-- Checkpoint is a **copy of live registry state**, including UUIDs, PIDs,
-  requests/results and current-session identifiers, not the template for a
-  clean reboot. File mode/directory permissions must restrict other users;
-  do not persist SSH secrets or environment dumps.
-- On same-session broker restart, load and validate checkpoint, verify active
-  KWin session and live UUIDs, and mark missing/ambiguous entries uncertain.
-  An uncertain record is **not** eligible for automatic destructive operations.
-- Broker or OpenRC stop/restart **must not close** managed windows. Treat
-  compositor corruption/session replacement as outside the bounded recovery
-  guarantee; no broad class-based recreation or forced adoption.
+Broker memory is the active authority. A private atomic checkpoint at
+`$XDG_RUNTIME_DIR/joetoo-kwin/managed-windows.json` should copy valid current
+registry identifiers, results and compositor/session source, **not** act as a
+clean-reboot template. Restrict directory/file permissions and exclude
+credentials. On same-session restart, validate KWin source and exact live UUIDs
+conservatively; missing/uncertain identity cannot authorize destructive acts.
+Broker/service stop must not close applications. This recovery is future scope.
 
-### 8.2 Durable last-known-good `.conf` (accepted direction)
+### 8.2 Durable last-good launch layout (Step 1.8 target)
 
-- A separate, reusable Bash-layout snapshot is stored in a user-writable
-  persistent state area, proposed path
-  `${XDG_STATE_HOME:-$HOME/.local/state}/joetoo-kwin/last-session.conf`.
-  It contains launch recipes and layout policy, **not prior UUIDs or PIDs**.
-- Generate the snapshot from a **complete and validated intended layout**;
-  unreachable SSH targets whose Konsole placeholders are created and placed
-  **count as valid**. Do not overwrite the previous good snapshot with a
-  partial launch or an empty shutdown inventory. Write updates atomically.
-- `-r` restores that last good **set of windows**, through the same internal
-  plan/launch implementation as `-f FILE -o`, yielding new PIDs, KWin UUIDs,
-  request IDs and run ID. It does not resume an old SSH transport, shell
-  process, or remote login state.
-- `-S` explicitly exports a chosen current arrangement to reusable config,
-  including verified current geometry as supported by the future config
-  schema; handle trusted Bash sourcing and user-writable storage safely.
-- `-x` closes managed windows but **does not delete** the restorable snapshot.
-  `-d` changes live state, without implicitly rewriting the saved layout.
-
-The **exact trigger** for automatically advancing `last-session.conf` and the
-representation of manually adjusted per-window geometry remain to be
-specified in milestone 1.8. Do not conflate user-issued `-S` with every registry
-write. The exported file is a *trusted* Bash configuration and should not
-silently be writable by unrelated processes.
+A reusable trusted Bash `.conf` snapshot is proposed at
+`${XDG_STATE_HOME:-$HOME/.local/state}/joetoo-kwin/last-session.conf`.
+It stores validated desired launch recipes and policy, not old UUIDs/PIDs.
+An unreachable SSH target with successfully placed placeholder counts as a
+valid recipe. Write atomically; do not overwrite a valid snapshot with partial
+or empty state. `-r` launches a new set through the normal planner with new
+UUIDs/PIDs/connections. `-S` exports a chosen arrangement with verified current
+geometry once its schema is approved. `-x`/`-d` should not implicitly erase
+last-good history. Automatic advancement triggers and representation of manual
+geometry remain open design questions; trusted config files must not be
+modifiable by unrelated processes.
 
 ## 9. CLI contract (target; not all flags implemented)
 
 | Invocation | Intended action |
 | --- | --- |
-| `-c [-f CONFIG]` | Validate config and display a colorized **dry run** (no programs launched) |
-| `-o [-f CONFIG]` | Open/record a managed layout, each window positively matched |
-| `-x` | Gracefully close **all managed** windows; never unrelated windows |
-| `-m l|r` | Two-terminal left/right placement on current virtual desktop |
-| `-m DESKTOP` | Change desktop; preserve position and size |
-| `-m DESKTOP l|r` | Two-terminal left/right placement on specified desktop |
-| `-m DESKTOP X Y` | Change desktop/position; preserve size |
-| `-m X Y WIDTH HEIGHT` | Change position/size; preserve desktop |
-| `-m DESKTOP X Y WIDTH HEIGHT` | Explicit desktop, position and size |
-| `-a` | Add one newly launched managed window; exact operands TBD |
-| `-d MANAGED_ID` | Gracefully close one managed window |
-| `-l` | List managed windows with readable IDs and states |
-| `-i MANAGED_ID` | Show info for one managed window |
-| `-s` | Broker/application status (not OpenRC process status) |
-| `-S` | Save reusable current layout; selection/path options TBD |
-| `-r` | Recreate last-known-good layout with new window/process IDs |
-| `-f FILE` | Select configuration path without modifying default `eselect` symlink |
-| `-v`, `-q` | Adjust verbosity using existing `script_header_joetoo` `_pc_action_verbosity()` |
+| `-c [-f CONFIG]` | Validate config and display a colorized dry-run plan without launching |
+| `-o [-f CONFIG]` | Confirm then launch and positively register/position managed windows |
+| `-L DESKTOP PROGRAM MODE TARGET [LAYER] | Confirm then launch and positively register/position one managed window |
+| `-m l|r` | Two-panel active-window geometry on current desktop |
+| `-m DESKTOP` | Change active window's desktop, preserve geometry |
+| `-m DESKTOP l|r` | Two-panel placement on specified desktop |
+| `-m DESKTOP X Y` | Change desktop/position and preserve size |
+| `-m X Y WIDTH HEIGHT` | Change position/size and preserve desktop |
+| `-m DESKTOP X Y WIDTH HEIGHT` | Specify desktop, position and size |
+| `-x` | Gracefully close all positively managed windows, not unrelated ones (future 1.6) |
+| `-a` | Add one managed window (future; syntax TBD) |
+| `-d MANAGED_ID` | Close one safely validated managed window (future 1.6) |
+| `-l`, `-i MANAGED_ID`, `-s` | Readable registry/detail/application-status interfaces as supported |
+| `-S` | Export reusable layout (future 1.8) |
+| `-r` | Restore a saved last-good layout using new instances (future 1.8) |
+| `-f FILE` | Explicit configuration precedence, no implicit symlink edits |
+| `-v`, `-q` | Adjust verbosity using established joetoo CLI conventions |
 
-Preserve established `j_msg`, `separator`, status-color styling and the
-application-specific `getopts` pattern, referencing the
-`script_header_joetoo-CLI` skill. This table is a **target**, not a description of currently implemented CLI
-capabilities. Retire the POC `move` subcommand when `-m` coverage is
-validated; use `mw` as an alias/function and preserve `ow`/`cw` shorthands.
-See the [project README](README.md) for the current implementation status.
+Retain `j_msg`, announce/act/report, `separator`, color styling, effective
+`varlist`/`show_config`, and the script-header joetoo CLI conventions. A
+configured launch presents its effective configuration/plan and seeks
+confirmation **before** any application/network side effects. The table
+contains targets for later milestones as well as accepted features; see README
+for the implemented subset. Preserve `mw` and legacy convenience shorthands
+without introducing a second geometry implementation.
 
 ## 10. Supervision, safety and identity invariants
 
-1. A managed UUID must be matched to a *specific* launch transaction before
-   that UUID is eligible for `-d` or `-x`.
-2. A KWin UUID is a runtime identity, not a stand-alone ownership token.
-   Registration, compositor epoch and positive observation establish scope.
-3. A broker restart does not imply relaunch, and application close does not
-   imply daemon shutdown.
-4. A user-requested close is graceful first, with removal confirmation.
-   Do not translate uncertainty into indiscriminate class matching or
-   force-killing process groups.
-5. `joetoo-kwind` runs with ordinary graphical-user privileges and uses the
-   correct user session bus. Do not use root SSH or system-wide OpenRC merely
-   to simplify implementation.
-6. Keep window state, SSH transport state and launch transaction state
-   independent; each can succeed or fail separately.
-7. Do not expose private host secrets or credentials in the public `joetoo-ai`
-   review repository or debug dumps. Status/dumps must filter sensitive data.
-8. Preserve verified POCs unchanged as regression references unless their
-   modification is explicitly in scope and documented.
+1. A managed UUID must be correlated to a specific launch and validated against
+   current observation/source before it is eligible for future `-d` or `-x`.
+2. A raw UUID or readable alias is not a standalone destructive capability.
+3. Broker restart must not relaunch clients; application close must not imply
+   broker shutdown.
+4. Destructive operations, when authorized, must be graceful with confirmed
+   removal, never arbitrary class matching or process-group killing.
+5. The broker runs with ordinary graphical user privileges on the correct
+   session bus, without privileged root SSH or system-wide OpenRC shortcuts.
+6. Window, launch transaction and remote-session state remain independent.
+7. Do not leak private credentials, host secrets or bearer tokens in public
+   sources, arguments, D-Bus diagnostics or logs.
+8. Preserve established POCs as historical references; don't rewrite them
+   without separate authorization.
+9. New remote viewers and tunnels must fail conservatively on uncertain
+   ownership or authentication and clean up only processes they own.
 
 ## 11. Numbered implementation and review gates
 
-These gates describe intended deliverables and acceptance criteria.
-Current completion status and supporting evidence are recorded in the
-[project README](README.md); collaboration procedures are governed by
-`AGENTS.md` and the parent workspace instructions.
+Completion history is maintained in README and task evidence. Each gate
+identifies a product objective; it is **not** independent permission for an
+AI agent to edit code, deploy, connect to remote hosts, or merge. Later
+accepted decisions refine older scope outlines without rewriting history.
 
-### Phase 1 - Initial implementation
+### Phase 1 — Initial implementation
 
-| Gate | Deliverable | Native/validation gate |
+| Gate | Deliverable | Acceptance / status |
 | --- | --- | --- |
-| **1.1** | This architecture/registry/CLI contract and project `AGENTS.md` | Source-referenced review; accepted decisions distinguished from proposals |
-| **1.2a** | Early OpenRC **user** service `joetoo-kwind` prototype | Safe start/stop/restart, supervised restart, no Konsole/SSH loss |
-| **1.2b** | Session-bus and resident JS activation/reconnection | Correct KWin session, no double registration, idempotence across restart |
-| **1.3a** | KWin UUID, geometry and `windowRemoved` observation | gmki91 X11 and q552u01 Wayland identity tests |
-| **1.3a.1** | Separate lifecycle history and coalesce window changes by UUID | Bounded history unaffected by dragging; X11 and Wayland regression tests |
-| **1.3a.2** | Automatic broker-start/reconnect synchronization of current KWin window inventory | Full inventory restored without manual refresh; no duplicate subscriptions or implicit ownership |
-| **1.3b** | Launch-and-poll unique correlation; title-token feasibility | Same-class Konsole stress/ambiguity tests; no false adoption |
-| **1.4a** | In-memory registry data model, identity rules, state transitions, and headless contract tests | Unique UUID/managed-ID association; lifecycle and registration safety tests |
-| **1.4b** | Multiwindow registration and UUID-based observation reconciliation | Multiple independent registrations; duplicate rejection; conservative missing/uncertain handling |
-| **1.4c** | Read-only managed-window list, detail, and status interfaces | Structured broker queries; existing D-Bus compatibility preserved |
-| **1.4d** | Multiwindow integration and native validation | Representative mock scenarios, then X11 and Wayland tests; no fixed capacity requirement |
-| **1.5a** | Configuration precedence, shared geometry/planner and colorized `-c` | Headless configuration, geometry and dry-run checks |
-| **1.5b** | Interactive `-m` forms and independent preservation of omitted values | X11/Wayland movement and refusal scenarios |
-| **1.5c.1** | `-o` preflight, effective configuration/plan and confirmation | Invalid/unsupported plans and declined confirmation launch nothing |
-| **1.5c.2** | Sequential managed local launches, identity/slot conflict guard and placement | Positive registration, Busy safety and best-effort per-entry results |
-| **1.5c.3** | `ssh_wrapper` startup, original Bash and unreachable SSH placeholders | Independent transport and placement outcomes |
-| **1.5c.4** | Graphical applications and additional transports; separate approval required | VNC/RDP candidates, stacking and focus validation |
-| **1.5d** | Integrated native X11/Wayland `-o` and deferred Step 1.5b regression | Concurrency, focus, membership, refusal, complete/incomplete layouts |
-| **1.6** | Managed `-a`, `-d`, `-x` | Close one/all managed, leave unrelated Konsole untouched |
-| **1.7** | Private atomic JSON checkpoint and same-session reconciliation | Daemon restart preserves all running windows; registry revalidated |
-| **1.8** | Durable `.conf` snapshot, `-S` and `-r` | Clean-reboot launch with new UUID/PIDs, including SSH placeholders |
-| **1.9** | `eselect`, packaging and full regression | Maintainer-driven joetoo/joetoo-upstream integration; version 1 lifecycle gate |
+| **1.1–1.4d** | Architecture, OpenRC user service, resident KWin observation, UUID correlation, managed registry/queries, multiwindow placement | Completed; see project README and Step 1.4 closure |
+| **1.5a** | Configuration precedence, shared planner and colorized `-c` | Accepted |
+| **1.5b** | Interactive `-m` forms and independent omitted-value preservation | Accepted on X11 and Wayland |
+| **1.5c.1** | `-o` preflight, plan, confirmation and invalid-plan refusal | Accepted |
+| **1.5c.2** | Sequential managed launches, positive UUID registration, geometry and duplicate-slot safety | Accepted |
+| **1.5c.3** | Original local Bash, `ssh_wrapper` and unavailable SSH placeholders | Accepted |
+| **1.5c.4** | Desktop capacity, Dolphin local launches, XDG discovery, application-independent `under/panel/over`, grouped launches, bounded initial stack/focus | Accepted, merged; native X11/Wayland closure evidence in Step 1.5 task |
+| **1.5c.5a** | Dolphin SFTP integration | Proposed next increment; approved endpoint/URI grammar and separate remote-access status before implementation |
+| **1.5c.5b** | TigerVNC viewer over authenticated SSH | Proposed next increment; inspect existing functioning KDE launcher/POC, verify compatibility, then approve minimal managed-launch translation |
+| **1.5c.5c** | Comparative RDP feasibility and decision | Evaluate installed candidates, security, capability and user value; an accepted secure/reliable RDP workflow may supersede legacy VNC as primary graphical remote access; implementation requires explicit follow-up authorization |
+| **1.5d** | add -L, -l; conduct integrated native X11/Wayland regression of completed Step 1.5 capabilities | Cross-feature ownership, Busy, focus, desktop membership, failures and completeness; not an implicit feature-development gate |
+| **1.6** | Managed `-a`, `-d`, `-x` | Selective safe close, never unrelated windows |
+| **1.7** | Runtime JSON checkpoint and same-session reconciliation | Broker restart and exact source/UUID reconciliation |
+| **1.8** | Restorable `.conf` snapshot, `-S`, `-r` | New-window recovery from validated last-good intent |
+| **1.9** | `eselect`, installation/ebuild and complete integration | Maintainer-led joetoo/joetoo-upstream packaging, template guidance and version 1 lifecycle |
+
+### 1.5c.5 — Remote resource and desktop integration (proposed; not yet authorized)
+
+**Common contract:** Each approved new `program|mode|target` combination
+must define exact parsing, local process invocation, authentication and
+security assumptions, positive unique KWin UUID identity, desktop/slot
+placement, layer behavior, transport/session lifecycle, bounded cancellation,
+and truthful partial success. Reuse existing CLI/planner/broker/resident
+interfaces wherever possible. Do not introduce a generic remote-access
+framework or unnecessary broker expansion. Unsupported recipes reject before
+confirmation and before process or network side effects.
+
+**1.5c.5a — Dolphin SFTP (first).** Investigate installed Dolphin/KIO SFTP
+behavior, target grammar (user, hostname, IPv6, optional port and remote
+path), safe URI encoding and credentials handling, and `--new-window` PID/UUID
+correlation. Then, on separate explicit implementation approval, add
+`dolphin|sftp|TARGET` to the known safe local-Dolphin launch framework. A
+remote file navigation/authentication failure is not a KWin placement failure.
+Do not execute remote Dolphin or treat KIO file transfer as SSH GUI forwarding.
+
+**1.5c.5b — TigerVNC over SSH (second).** First inspect the existing archived
+`archive/tigervnc-poc/vnc-via-ssh-launch` and the maintainer's *working*,
+KDE-application-launcher-integrated TigerVNC-over-SSH invocation. This path is
+already demonstrated operational by the maintainer: concentrate on actual
+command-line compatibility with the managed launch model, accurate viewer
+window identity, and minimal safe translation into script activation. The
+candidate is not thereby presumed cryptographically secure or production
+ready; determine actual tunnel options, loopback binding, SSH host-key
+verification, VNC authentication, child/tunnel ownership and cleanup. No
+**direct VNC** is authorized, including on local LAN. Distinguish viewer
+existence/placement from tunnel, authentication and remote-display success.
+If source inspection reveals material weaknesses in the POC, report them
+rather than blindly copying it into a supported executable recipe.
+
+**1.5c.5c — RDP feasibility and decision (third).** Deliberately evaluate
+*each viable graphical remote-desktop client candidate* identified in the
+original 1.5c.4 inventory and the now-installed toolset; at minimum assess
+KRDC, Remmina (if available), and appropriate installed or installable
+FreeRDP graphical clients. For each candidate report exact executable and
+installed-version evidence per test host, KWin X11/Wayland integration,
+RDP/TLS negotiation and certificate verification, authentication and
+credential exposure, invocation/endpoint grammar, PID→UUID identity,
+window/dialog lifecycle, usability, feature support, failure reporting,
+operational complexity, and security advantages/disadvantages. Compare them
+with the TigerVNC-over-SSH workflow and present a ranked, reasoned
+implementation recommendation. **A reliable and demonstrably secure RDP
+client is the preferred prospective primary graphical remote-access method;
+legacy TigerVNC-over-SSH remains a compatibility/fallback candidate.**
+Feasibility assessment does not itself authorize RDP implementation.
+If the maintainer approves an RDP implementation, define a separate bounded
+candidate and native acceptance gate before integrating it.
+
+**Broader application inventory (evaluation, not automatic implementation):**
+Newly installed on `gmki91` as reported by the maintainer: QTerminal 2.4.0,
+Krusader 2.9.0, FileZilla 3.70.6, Nautilus 49.6-r1, Nemo 6.6.4,
+KRDC 26.04.3, and Midnight Commander (`mc`) 4.8.33. Verify the actual
+executables, runtime behavior and installed versions on each host before
+relying on them. Earlier “not available” assessments must not be treated as
+current evidence. Evaluate their potential for safe managed launch, local and
+SFTP workflows, application-specific PID/UUID correlation, and value over
+supported Dolphin/Konsole paths. Report feasibility and advantages/
+disadvantages **per candidate**, recommending implement/defer/reject.
+`mc` is a *text-based terminal application*, not an independent KWin graphical
+window: evaluate whether joetoo-kwin should offer it as a terminal-launched
+workflow and what it adds beyond `konsole|local|...`. On `gmki91`, the
+reported `mc` build has `-sftp`; do not assume SFTP support without
+rebuilding or inspecting capabilities. Availability does **not** establish
+that these candidates belong in the immediate implementation tranche.
+
+**Security and sequencing:** RDP transport protection and certificate
+verification must be evaluated as properties of a concrete client and
+configured connection, not inferred from the word `tls`. Existing network
+reachability/VPN assumptions are not a substitute for verifying SSH tunnel
+binding or TLS trust where those properties are part of the chosen contract.
+Do not require a new generic VPN detector. Inspect both X11 and Wayland and
+report differences. First approve 1.5c.5a interface+implementation, then
+inspect/approve 1.5c.5b, then undertake the 1.5c.5c comparison and obtain a
+**new** decision for any RDP implementation. Step 1.5d begins after the
+selected integrations are accepted or explicitly deferred. No new HANDOFF
+permissions are granted by this document.
 
 ### Phase 2 — Optimization and refinement
 
-**Objective:** Improve the performance, efficiency, maintainability, robustness, and usability of the working joetoo-kwin prototype without sacrificing its established behavior, safety guarantees, or cross-platform compatibility.
-
-Phase 1 prioritizes completion and validation of the functional prototype. Phase 2 begins after the essential Phase 1 capabilities have been implemented and demonstrated on both supported KWin backends.
-
-Optimization work shall:
-
-1. **Establish a measured baseline** for startup latency, window-launch latency, placement confirmation, resource consumption, and other relevant operating characteristics.
-2. **Identify and prioritize improvements** based on measured deficiencies, user experience, implementation complexity, and expected benefit.
-3. **Optimize existing mechanisms** where justified, including D-Bus transaction overhead, event handling, polling, timeouts, resource consumption, and unnecessary serialization.
-4. **Refine reliability and usability**, including diagnostics, error reporting, configuration, and operational ergonomics.
-5. **Preserve established behavior**, supported environments, compatibility contracts, and security invariants through regression testing.
-6. **Validate improvements** against the baseline on both X11 and Wayland, distinguishing demonstrated improvements from theoretical expectations.
-
-Premature optimization shall not delay progress toward the functional prototype unless a deficiency materially compromises correctness, safety, security, or essential usability.
-
-Optimization is not a substitute for required correctness or security controls. Such controls must be implemented at the earliest milestone where the relevant capability requires them.
-
-Phase 2 work shall be divided into focused, reviewable tasks, with measurable acceptance criteria wherever practical.
+Once essential Phase 1 functionality has been demonstrated on both backends,
+measure startup, launch, placement, D-Bus, polling, CPU/memory and user-visible
+latencies; then prioritize targeted improvements. Preserve safety, compatibility,
+function and both X11/Wayland regressions. Optimization does not defer
+correctness/security requirements. Split refinements into reviewable, measured
+tasks rather than broad speculative rewrites.
 
 ## 12. Open questions and explicit verification tasks
 
-- Can a per-launch Konsole title token such as `joetoo_konsole_3.1` be
-  made KWin-visible in time for correlation? A title alone is only a hint;
-  direct-PID Konsole correspondence has been tested on both backends.
-- What additional Plasma-readiness guarantees are needed at OpenRC
-  user-session startup? Broker stop/restart and client-process survival have
-  been validated in the POC scenarios.
-- What compositor/session identity sufficiently bounds checkpoint
-  reconciliation? What can be recovered after an intermediate KWin restart?
-- Which layout work area and screen should drive shared geometry on multi-
-  monitor setups? How should panel reserved areas and scaling be considered?
-- If a future explicit reset-to-intended-layout action is designed, how
-  will configuration entries correlate with managed windows across failures,
-  reordered entries and restarts? Geometry and managed-ID order are not
-  sufficient; no reset action is authorized in Step 1.5.
-- When should automatic last-good snapshots advance, and how is manual
-  rearrangement encoded in a reusable `.conf`?
-- What are the exact `-a` and `-S` operands and safe selection behavior?
-- After initial KWin functionality is validated, should a separately scoped
-  feasibility effort evaluate reuse of the Bash planner with non-KWin desktop
-  environments (e.g. LXQt/GNOME) before Phase 2 optimization? This is not
-  a version 1 portability commitment.
+- How should managed-window recovery validate broker/KWin session identities
+  across restart, and what should remain unrecoverable without a live UUID?
+- Which monitor/work-area, reserved panel and scaling policy should govern
+  geometry and actual clickable exposure?
+- How should a future explicit reset-to-intended-layout action distinguish
+  original slot from current geometry and reordered configuration entries?
+- When should last-good snapshots advance, and how should manually adjusted
+  coordinates be represented in reusable configuration?
+- What are the exact syntax and selection safeguards for `-a` and `-S`?
+- Which remote-resource endpoint grammars, connection/credential policies and
+  application lifecycles best fit each 1.5c.5 candidate?
+- Can any RDP client provide verified secure negotiation, convenient workflow
+  and robust managed-window identity under both KWin backends?
+- Should joetoo's Bash planner be evaluated for non-KWin environments such as
+  LXQt/GNOME in a separately authorized later effort? This is not a version 1
+  portability commitment.
+
