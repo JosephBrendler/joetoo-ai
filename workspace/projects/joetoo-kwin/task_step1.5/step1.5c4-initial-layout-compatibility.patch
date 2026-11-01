@@ -1,0 +1,370 @@
+diff --git a/joetoo-kwin-resident.js b/joetoo-kwin-resident.js
+--- a/joetoo-kwin-resident.js
++++ b/joetoo-kwin-resident.js
+@@ -397,19 +397,24 @@
+ // Initialization-only, positively registered cohort. Never select the active
+ // window as an operation target, and never subscribe to later user overrides.
+ function initialLayoutFromBroker() {
++    // Broker UUIDs are canonical (lowercase, without Qt QUuid braces).
++    // Normalize representation only; never substitute a class/title/PID match.
++    function layoutUUID(win) {
++        return windowUUID(win).replace(/^\{([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\}$/i, "$1").toLowerCase();
++    }
+     const beforeActive = workspace.activeWindow;
+     const beforeDesktop = workspace.currentDesktop;
+     const beforeDesktopId = String(beforeDesktop && beforeDesktop.id);
+     const beforeDesktopNumber = Number(beforeDesktop && beforeDesktop.x11DesktopNumber);
+-    const beforeActiveId = windowUUID(beforeActive);
++    const beforeActiveId = layoutUUID(beforeActive);
+     const started = Date.now();
+     callDBus(BRIDGE, PATH, BRIDGE, "TakeInitialLayout", observerSource, function(payload) {
+         if (!payload) return;
+         let r;
+         try { r = JSON.parse(payload); } catch (err) { return; }
+         const result = {source: observerSource, order: [], focus_attempted: false,
+-                        before_active_uuid: windowUUID(beforeActive),
+-                        active_uuid: windowUUID(workspace.activeWindow),
++                        before_active_uuid: layoutUUID(beforeActive),
++                        active_uuid: layoutUUID(workspace.activeWindow),
+                         current_desktop: Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber),
+                         geometry_unchanged: false};
+         try {
+@@ -417,37 +422,57 @@
+                 Date.now() - started < 0 || Date.now() - started >= r.remaining_ms ||
+                 String(workspace.currentDesktop && workspace.currentDesktop.id) !== beforeDesktopId ||
+                 Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber) !== beforeDesktopNumber ||
+-                windowUUID(workspace.activeWindow) !== beforeActiveId) {
++                layoutUUID(workspace.activeWindow) !== beforeActiveId) {
+                 throw new Error("Initial layout stale or user focus/desktop changed during claim");
+             }
+             const available = workspace.stackingOrder;
+             const cohort = r.entries.map(e => {
+-                const win = available.find(w => windowUUID(w) === e.uuid);
+-                if (!win || win.deleted || win.fullScreen || win.keepAbove || win.keepBelow ||
+-                    win.tile != null || win.maximizeMode !== 0) throw new Error("Missing/incompatible cohort window");
++                const win = available.find(w => layoutUUID(w) === e.uuid);
++                // Keep resolution anchored to the actual stack. windowList is
++                // diagnostic evidence only, never an alternate ownership path.
++                if (!win) {
++                    const listed = typeof workspace.windowList === "function" ?
++                        workspace.windowList().some(w => layoutUUID(w) === e.uuid) : "unavailable";
++                    throw new Error("Cohort UUID [" + e.uuid + "]: stackingOrder match=false; windowList match=" + listed);
++                }
++                // Do not coerce an unknown Qt enum/property into a normal mode.
++                // Include its JS type: undefined and numeric zero differ here.
++                const checks = [
++                    ["deleted", win.deleted, Boolean(win.deleted)],
++                    ["fullScreen", win.fullScreen, Boolean(win.fullScreen)],
++                    ["keepAbove", win.keepAbove, Boolean(win.keepAbove)],
++                    ["keepBelow", win.keepBelow, Boolean(win.keepBelow)],
++                    ["tile", win.tile, win.tile != null],
++                    ["maximizeMode", win.maximizeMode, win.maximizeMode !== 0]
++                ];
++                const incompatible = checks.find(check => check[2]);
++                if (incompatible) {
++                    throw new Error("Cohort UUID [" + e.uuid + "]: incompatible " + incompatible[0] +
++                        "=" + String(incompatible[1]) + " (type=" + typeof incompatible[1] + ")");
++                }
+                 const g = win.frameGeometry;
+                 const desktops = (win.desktops || []).map(d => Number(d.x11DesktopNumber));
+                 if (["x", "y", "width", "height"].some(k => g[k] !== e.geometry[k]) ||
+                     JSON.stringify(desktops) !== JSON.stringify(e.desktops) ||
+-                    Boolean(win.onAllDesktops) !== e.on_all_desktops) throw new Error("Cohort frame/membership changed");
++                    Boolean(win.onAllDesktops) !== e.on_all_desktops) throw new Error("Cohort UUID [" + e.uuid + "]: frame/membership changed");
+                 return win;
+             });
+             if (typeof workspace.raiseWindow !== "function") throw new Error("KWin raiseWindow unavailable");
+-            for (const id of r.order) workspace.raiseWindow(cohort.find(w => windowUUID(w) === id));
++            for (const id of r.order) workspace.raiseWindow(cohort.find(w => layoutUUID(w) === id));
+             if (r.preferred_uuid && beforeDesktopNumber === r.entries[0].desktop) {
+-                const target = cohort.find(w => windowUUID(w) === r.preferred_uuid);
++                const target = cohort.find(w => layoutUUID(w) === r.preferred_uuid);
+                 if (!target || !(target.desktops || []).some(d => Number(d.x11DesktopNumber) === beforeDesktopNumber)) throw new Error("Preferred target is not visible on this desktop");
+                 result.focus_attempted = true;
+                 workspace.activeWindow = target;
+             }
+             // Read back after activation as activation itself may raise a window.
+-            result.order = workspace.stackingOrder.map(windowUUID).filter(id => r.order.includes(id));
++            result.order = workspace.stackingOrder.map(layoutUUID).filter(id => r.order.includes(id));
+             result.geometry_unchanged = cohort.every((w, i) =>
+                 ["x", "y", "width", "height"].every(k => w.frameGeometry[k] === r.entries[i].geometry[k]) &&
+                 JSON.stringify((w.desktops || []).map(d => Number(d.x11DesktopNumber))) === JSON.stringify(r.entries[i].desktops) &&
+                 Boolean(w.onAllDesktops) === r.entries[i].on_all_desktops);
+         } catch (err) { result.error = String(err); }
+-        result.active_uuid = windowUUID(workspace.activeWindow);
++        result.active_uuid = layoutUUID(workspace.activeWindow);
+         result.current_desktop = Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber);
+         if (String(workspace.currentDesktop && workspace.currentDesktop.id) !== beforeDesktopId ||
+             result.current_desktop !== beforeDesktopNumber) result.error = "Displayed desktop changed during initialization";
+diff --git a/libexec/joetoo-kwind b/libexec/joetoo-kwind
+--- a/libexec/joetoo-kwind
++++ b/libexec/joetoo-kwind
+@@ -598,10 +598,16 @@
+                 raise ValueError("wrong resident source")
+             # Completion is evidence from the resident, not permission to change
+             # ownership. Geometry remains independently observed by the broker.
+-            unchanged = all(self.observed_windows[e["uuid"]]["geometry"] == e["geometry"]
+-                            and self.observed_windows[e["uuid"]]["desktops"] == e["desktops"]
+-                            and self.observed_windows[e["uuid"]]["on_all_desktops"] == e["on_all_desktops"]
+-                            for e in r["entries"])
++            # A target can disappear after the active-request check. Take one
++            # guarded lookup per UUID; absence is failed evidence, not malformed
++            # resident JSON or permission to adopt another window.
++            observations = [(e, self.observed_windows.get(e["uuid"])) for e in r["entries"]]
++            missing = next((e["uuid"] for e, observed in observations if observed is None), None)
++            unchanged = all(observed is not None
++                            and observed.get("geometry") == e["geometry"]
++                            and observed.get("desktops") == e["desktops"]
++                            and observed.get("on_all_desktops") == e["on_all_desktops"]
++                            for e, observed in observations)
+             stack_ok = result.get("order") == r["order"] and result.get("geometry_unchanged") is True and unchanged
+             visible = (r["preferred_uuid"] is not None and result.get("current_desktop") == r["entries"][0]["desktop"])
+             if r["preferred_uuid"] is None:
+@@ -616,7 +622,8 @@
+             ok = stack_ok and focus_ok and not result.get("error")
+             r.update(state="SUCCEEDED" if ok else "FAILED", geometry="unchanged" if unchanged and result.get("geometry_unchanged") is True else "changed or unverified",
+                      stacking="verified" if stack_ok else "failed", focus=focus,
+-                     detail=str(result.get("error", ""))[:512], observed_active_uuid=result.get("active_uuid"),
++                     detail=("Cohort UUID [" + missing + "]: observation disappeared during completion"
++                             if missing else str(result.get("error", "")))[:512], observed_active_uuid=result.get("active_uuid"),
+                      focus_attempted=result.get("focus_attempted"), observed_order=result.get("order", []),
+                      before_active_uuid=result.get("before_active_uuid"), current_desktop=result.get("current_desktop"))
+         except (ValueError, KeyError, TypeError, AttributeError) as exc:
+diff --git a/tests/test_initial_layout.js b/tests/test_initial_layout.js
+--- a/tests/test_initial_layout.js
++++ b/tests/test_initial_layout.js
+@@ -5,10 +5,11 @@
+ const vm = require('node:vm');
+ const source = fs.readFileSync(require('node:path').join(__dirname, '..', 'joetoo-kwin-resident.js'), 'utf8');
+ const implementation = source.slice(source.indexOf('function initialLayoutFromBroker()'));
+-function harness(layers, current=3) {
++function harness(layers, current=3, nativeIds=false) {
+     const desktop = {x11DesktopNumber:3};
+-    const windows = layers.map((layer,i) => ({internalId:'w'+i, layer, deleted:false, tile:null,
+-        maximizeMode:0, fullScreen:false, desktops:[desktop], onAllDesktops:false,
++    const windows = layers.map((layer,i) => ({internalId:nativeIds ?
++        'abcdef00-0000-4000-8000-'+String(i+1).padStart(12,'0') : 'w'+i, layer, deleted:false, tile:null,
++        maximizeMode:0, fullScreen:false, keepAbove:false, keepBelow:false, desktops:[desktop], onAllDesktops:false,
+         frameGeometry:{x:i*100,y:0,width:100,height:100}}));
+     const unrelated = {internalId:'unrelated'};
+     const workspace = {activeWindow:unrelated, currentDesktop:current===3?desktop:{x11DesktopNumber:current},
+@@ -51,7 +52,65 @@
+     const h=harness(['panel']);h.context.initialLayoutFromBroker();h.workspace.activeWindow=h.windows[0];h.reply();
+     assert.match(h.result.error,/focus/);
+     const d=harness(['panel']);d.context.initialLayoutFromBroker();d.windows[0].deleted=true;d.reply();
+-    assert.match(d.result.error,/Missing/);
++    assert.match(d.result.error,/UUID \[w0\]: incompatible deleted=true \(type=boolean\)/);
++});
++
++test('ordinary floating windows remain compatible on displayed and inactive desktops',()=>{
++    for (const current of [3,1]) {
++        const h=harness(['panel','over'],current);
++        h.context.initialLayoutFromBroker();h.reply();
++        assert.equal(h.result.error,undefined);
++        assert.deepEqual(h.result.order,['w0','w1']);
++        assert.equal(h.result.geometry_unchanged,true);
++    }
++});
++
++test('canonical broker UUIDs resolve braced uppercase Qt internalIds without adopting another window',()=>{
++    const h=harness(['panel','over'],3,true);
++    const expected=h.windows.map(w=>w.internalId);
++    h.windows.forEach(w=>{w.internalId='{'+w.internalId.toUpperCase()+'}';});
++    h.context.initialLayoutFromBroker();h.reply();
++    assert.equal(h.result.error,undefined);
++    assert.deepEqual(h.result.order,expected);
++    assert.equal(h.result.active_uuid,expected[1]);
++    assert.equal(h.result.geometry_unchanged,true);
++    assert.equal(h.workspace.stackingOrder[0].internalId,'unrelated');
++});
++
++for (const [property,value,description] of [
++    ['deleted',true,'deleted'], ['fullScreen',true,'fullscreen'],
++    ['keepAbove',true,'keep-above'], ['keepBelow',true,'keep-below'],
++    ['tile',{},'tile pointer'], ['maximizeMode',1,'vertical maximize'],
++    ['maximizeMode',2,'horizontal maximize'], ['maximizeMode',3,'full maximize'],
++    ['maximizeMode',undefined,'missing maximize property'],
++    ['maximizeMode','0','string zero is not a numeric enum'],
++    ['maximizeMode',null,'null is not restore']
++]) {
++    test('exact UUID/property diagnostic without mutation: '+description,()=>{
++        const h=harness(['panel']);
++        h.windows[0][property]=value;
++        const order=h.workspace.stackingOrder.slice();
++        const active=h.workspace.activeWindow;
++        h.context.initialLayoutFromBroker();h.reply();
++        assert.ok(h.result.error.includes('UUID [w0]: incompatible '+property+'='+String(value)));
++        assert.ok(h.result.error.includes('(type='+typeof value+')'));
++        assert.deepEqual(h.workspace.stackingOrder,order);
++        assert.equal(h.workspace.activeWindow,active);
++        assert.equal(h.windows[0][property],value);
++        assert.equal(h.result.focus_attempted,false);
++    });
++}
++
++test('missing stack UUID is never adopted from windowList',()=>{
++    for (const listed of [true,false]) {
++        const h=harness(['panel']);
++        h.workspace.windowList=()=>listed?h.windows:[];
++        h.workspace.stackingOrder=h.workspace.stackingOrder.slice(0,1);
++        h.context.initialLayoutFromBroker();h.reply();
++        assert.equal(h.result.error,'Error: Cohort UUID [w0]: stackingOrder match=false; windowList match='+listed);
++        assert.equal(h.workspace.stackingOrder.length,1);
++        assert.equal(h.result.focus_attempted,false);
++    }
+ });
+ test('post-activation ordering is observed rather than inferred from raise return',()=>{
+     const h=harness(['under','panel','over']);let active=h.workspace.activeWindow;
+diff --git a/tests/test_initial_layout_broker.py b/tests/test_initial_layout_broker.py
+--- a/tests/test_initial_layout_broker.py
++++ b/tests/test_initial_layout_broker.py
+@@ -1,6 +1,7 @@
+ """Bounded initial cohort: real broker methods with mock IPC imports."""
+ import json
+ import unittest
++from unittest.mock import patch
+ import test_step1_4c_queries as queries
+ 
+ 
+@@ -98,6 +99,33 @@
+             self.assertEqual(json.loads(self.broker.InitialLayoutStatus(rid))['state'], 'RUNNING')
+         self.assertEqual(self.complete(rid)['state'], 'SUCCEEDED')
+ 
++    def test_disappearance_before_completion_is_bounded(self):
++        rid = self.submit(); self.broker.TakeInitialLayout(queries.SOURCE)
++        self.broker.observed_windows.pop(self.uuids[0])
++        with self.assertRaises(self.module.dbus.DBusException):
++            self.complete(rid)
++        state = json.loads(self.broker.InitialLayoutStatus(rid))
++        self.assertEqual(state['state'], 'FAILED')
++        self.assertFalse(self.broker._initial_layout_active())
++
++    def test_disappearance_after_completion_guard_is_failed_evidence(self):
++        rid = self.submit(); self.broker.TakeInitialLayout(queries.SOURCE)
++        active = self.broker._initial_layout_active
++
++        def disappear_after_check():
++            result = active()
++            self.broker.observed_windows.pop(self.uuids[0], None)
++            return result
++
++        with patch.object(self.broker, '_initial_layout_active', disappear_after_check):
++            state = self.complete(rid)
++        self.assertEqual(state['state'], 'FAILED')
++        self.assertEqual(state['stacking'], 'failed')
++        self.assertEqual(state['geometry'], 'changed or unverified')
++        self.assertIn(self.uuids[0], state['detail'])
++        self.assertIn('disappeared', state['detail'])
++        self.assertFalse(self.broker._initial_layout_active())
++
+ 
+ for _name in dir(queries.ReadOnlyManagedQueryTests):
+     if _name.startswith('test_') and _name not in InitialLayoutBrokerTests.__dict__:
+diff --git a/task_step1.5/HANDOFF.md b/task_step1.5/HANDOFF.md
+--- a/task_step1.5/HANDOFF.md
++++ b/task_step1.5/HANDOFF.md
+@@ -114,6 +114,8 @@
+ 
+ | 16 | Codex (2026-10-31), approved graphical layers / desktop groups / XDG implementation | Existing task branch, HEAD `584eb2e4d024215e325e00bc6b24596e2c6f3e5c`; CLI, planner/launcher, bounded broker/resident extension, exposure helper, template, focused tests and agent evidence; earlier row 15 and gate evidence preserved | 280 Python tests PASS including installed-header integration; 4 Node test files PASS; Bash syntax, Python compilation, ShellCheck and whitespace checks PASS. No native operations | Application-independent layers/budgets, planned cascade/exposure warnings, first-appearance desktop groups, owned-UUID one-shot stack/focus with independent verification, and XDG discovery implemented. See [implementation and inventory](step1.5c4-layers-implementation.md), [complete diff](step1.5c4-layers-implementation.patch), and [native acceptance](step1.5c4-layers-acceptance.md). Maintainer reviews and runs X11 acceptance, then publishes the reviewed task increment for identical Wayland testing. Native stack/focus/exposure and remembered focus remain unverified; no staging/publication/deployment. |
+ 
++| 17 | Codex (2026-11-01), initial-layout native-failure compatibility follow-up | Same task branch/HEAD `584eb2e4d024215e325e00bc6b24596e2c6f3e5c`; preserved dirty feature; resident/broker, two focused tests and agent evidence only | 282 Python PASS; focused broker 10 PASS; focused JS 19 PASS / all 4 Node files PASS; JS syntax, Python compilation and whitespace PASS. No native operations | Corrected raw Qt vs canonical broker UUID representation mismatch; retained mode checks with UUID/property/value/type diagnostics. Guarded disappearing completion observations. [Findings and focused diff](step1.5c4-initial-layout-compatibility.md). Native triggering predicate remains unproven from old aggregated error; maintainer reviews and repeats smallest native case with fresh slots. No publication. |
++
+ | C1 | ChatGPT (2026-10-29), Step 1.5a closeout | Read PR #23 merge status and reviewed the accepted Step 1.5a scope; no repository edits. | GitHub confirmed PR #23 merge; Codex-reported 165 Python tests and installed-header coverage were not rerun by ChatGPT. | Maintainer/Codex proceeded to Step 1.5b; no independent cloud testing or publication. |
+ | C2 | ChatGPT (2026-10-29), Step 1.5b native and source review | Reviewed X11/Wayland move transcripts and broker/CLI optional-move reporting, including separate Konsole PIDs and shortcut-time target selection. | Maintainer native results showed distinct X11 windows and successful right placement. Source review located the optional-move `after=[0]` placeholder and generic Busy explanation; Wayland drag/roundoff cause remained unproven. | Recommended focused corrections and controlled focus/geometry tests; no edits or native actions. |
+ | C3 | ChatGPT (2026-10-29), Codex correction tasking | Drafted the Step 1.5b focused-correction prompt: verified desktop membership, Busy/unsupported classification, announce-act-report levels, regression tests and bounded geometry-precision investigation. | Prompt was based on published candidate source, Codex reports and maintainer transcripts; no tools were run to modify files or execute tests. | Maintainer supplied tasking to Codex; implementation and test evidence belong to Codex Iteration 6. |
+diff --git a/task_step1.5/step1.5c4-initial-layout-compatibility.md b/task_step1.5/step1.5c4-initial-layout-compatibility.md
+new file mode 100644
+--- /dev/null
++++ b/task_step1.5/step1.5c4-initial-layout-compatibility.md
+@@ -0,0 +1,91 @@
++# Initial-layout compatibility: focused native-failure follow-up
++
++Branch: `task/joetoo-kwin-step1.5c4-graphical-launch`.
++HEAD: `584eb2e4d024215e325e00bc6b24596e2c6f3e5c`. The preceding uncommitted
++layer implementation and all existing evidence were preserved. No fetch or
++publication performed; the client cannot write repository metadata.
++
++## Findings and correction
++
++Maintainer-reported X11 evidence: Konsole win-001 and Dolphin win-002 were
++positively placed/present on desktop 3; initial layout failed with the old
++aggregated missing/incompatible error. That error does not identify which UUID
++or predicate failed. Native root cause is therefore not yet established.
++
++`stackingOrder.find` used exact comparison of raw `String(internalId)` against
++broker canonical UUIDs. The registry's `canonical_uuid()` uses Python UUID parsing,
++which removes braces and normalizes case. The resident's general `windowUUID()`
++returns the raw Qt string. This representation mismatch is a demonstrated code
++compatibility defect, reproduced with braced uppercase Qt IDs in the focused JS
++regression. A handler-local conversion now normalizes braces/case consistently
++for lookup, focus comparison, raising and stack readback. It changes representation,
++not identity: only the exact broker-owned UUID may match. General placement/move
++code and registry remain unchanged.
++
++KDE's [scripting reference](https://develop.kde.org/docs/plasma/kwin/api/)
++describes stackingOrder as the managed window stack, ordered bottom-to-top.
++It is not described as limited to the displayed desktop. Both cohort targets
++should be represented if still managed; their actual inclusion at the failed native
++claim was not captured. If a UUID is absent, the new diagnostic reports its absence
++and whether windowList contains it (or whether windowList is unavailable).
++windowList is diagnostic only: it never supplies an alternate stack target.
++No native enumeration was performed by Codex.
++
++Inspected installed `/usr/include/kwin-x11/window.h` and `/usr/include/kwin/window.h`:
++
++| Property | Native declaration/meaning | Preserved rejection |
++| --- | --- | --- |
++| deleted | bool; retained closed-window animation object | truthy |
++| fullScreen | bool; actual fullscreen state | truthy |
++| keepAbove / keepBelow | bool; persistent stacking flags | truthy; never clear them |
++| tile | Tile pointer, if associated; null means none | non-null/non-undefined |
++| maximizeMode | MaximizeMode enum | anything other than numeric zero |
++
++Both installed effect/globals.h enum declarations define Restore=0, Vertical=1,
++Horizontal=2, Full=3. Thus ordinary false/false/false/false/null/0 floating state
++passes these predicates. Unknown maximizeMode, null or string zero still rejects;
++no speculative numeric coercion or compatibility bypass was added. Runtime Qt JS
++property values on the failing windows remain unobserved. Each rejection now
++identifies the UUID, exact failed property, observed value and JavaScript type.
++Frame/membership mismatch also identifies its UUID. Upstream raw X11 source fetches
++were unavailable; the installed X11/Wayland headers and public reference were inspected.
++
++Broker completion now performs one guarded observation lookup per UUID instead of
++repeated dictionary indexing. A disappearing observation after the active-request
++guard produces terminal FAILED with UUID-specific detail. Disappearance before the
++guard already terminates the transaction and returns a structured InvalidRequest.
++Ownership, source/lease checks, Busy protection, geometry comparisons, relative
++layer ordering, preferred-focus rules and manual overrides are preserved.
++
++## Validation and changed paths
++
++Executed headlessly:
++
++- Full Python discovery: **282 passed**, no skips (includes installed-header integration).
++- Focused broker suite: **10 passed**, including disappearance before completion and
++  after the initial validity guard, with terminal status and released transaction state.
++- Direct focused JS suite: **19 passed**. Floating displayed/inactive windows,
++  braced/case UUIDs, each forbidden mode, unknown enum values, and missing stack
++  identity without windowList adoption are covered. Existing focus/order/manual
++  override cases remain intact.
++- Node discovery: **4 test files passed**.
++- `node --check joetoo-kwin-resident.js`, Python compilation and `git diff --check`: PASS.
++- No shell executable changed; ShellCheck/Bash checks were not rerun this iteration.
++
++Changed production: `joetoo-kwin-resident.js`, `libexec/joetoo-kwind`.
++Changed tests: `tests/test_initial_layout.js`, `tests/test_initial_layout_broker.py`.
++Evidence: this report, the focused compatibility patch and HANDOFF Section 5 row 17.
++Prior full-feature patch/logs remain historical and were not overwritten.
++
++[Focused complete diff](step1.5c4-initial-layout-compatibility.patch) is relative to
++the dirty tree at this iteration's start, not a replacement for the preceding feature.
++
++## Next native action
++
++Maintainer reviews and repeats the existing smallest two-window stacking acceptance
++procedure with fresh intended slots and the updated broker/resident installed by
++maintainer. Save the initial-layout JSON and any exact UUID/property diagnostic.
++Record placement, actual stacking and focus separately. Do not reuse occupied slots
++or adopt existing windows. No claim of repaired native acceptance is made here;
++if another property rejects, its actual value is the next evidence to review.
++No GUI, deployment, service operation, commit, push or merge was performed.
