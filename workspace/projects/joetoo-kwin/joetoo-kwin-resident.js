@@ -371,7 +371,10 @@ function reportExistingWindows() {
     // the broker validates it first, then atomically replaces its current map.
     // KWin runs this enumeration synchronously on its scripting thread.
     callDBus(BRIDGE, PATH, BRIDGE, "SyncInventory", JSON.stringify({
-        source: observerSource, revision: ++observerRevision, windows: snapshots, move_protocol: 1
+        source: observerSource, revision: ++observerRevision, windows: snapshots, move_protocol: 1,
+        initial_layout_protocol: typeof workspace.raiseWindow === "function" && workspace.stackingOrder &&
+            workspace.currentDesktop && Number.isInteger(Number(workspace.currentDesktop.x11DesktopNumber)) &&
+            typeof workspace.activeWindow !== "undefined" ? 1 : 0
     }));
 }
 
@@ -390,3 +393,212 @@ registerShortcut("joetoo_bridge_observe", "Joetoo refresh window observations",
                  "", reportExistingWindows);
 reportExistingWindows();
 // ---------------- End Step 1.3a observational extension ---------------------
+
+// Initialization-only, positively registered cohort. Never select the active
+// window as an operation target, and never subscribe to later user overrides.
+function initialLayoutFromBroker() {
+    // Broker UUIDs are canonical (lowercase, without Qt QUuid braces).
+    // Normalize representation only; never substitute a class/title/PID match.
+    function layoutUUID(win) {
+        return windowUUID(win).replace(/^\{([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\}$/i, "$1").toLowerCase();
+    }
+    const beforeActive = workspace.activeWindow;
+    const beforeDesktop = workspace.currentDesktop;
+    const beforeDesktopId = String(beforeDesktop && beforeDesktop.id);
+    const beforeDesktopNumber = Number(beforeDesktop && beforeDesktop.x11DesktopNumber);
+    const beforeActiveId = layoutUUID(beforeActive);
+    const started = Date.now();
+    callDBus(BRIDGE, PATH, BRIDGE, "TakeInitialLayout", observerSource, function(payload) {
+        if (!payload) return;
+        let r;
+        try { r = JSON.parse(payload); } catch (err) { return; }
+        const result = {source: observerSource, order: [], focus_attempted: false,
+                        before_active_uuid: beforeActiveId,
+                        active_uuid: layoutUUID(workspace.activeWindow),
+                        current_desktop: Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber),
+                        geometry_unchanged: false};
+        let done = false, timer = null, guardPending = false;
+        let focusStarted = null, focusDeadline = null;
+        const connections = [];
+        function connect(signal, callback) {
+            if (signal && typeof signal.connect === "function" && typeof signal.disconnect === "function") {
+                signal.connect(callback);
+                connections.push([signal, callback]);
+                return true;
+            }
+            return false;
+        }
+        function cleanup() {
+            if (timer) timer.stop();
+            for (const [signal, callback] of connections) {
+                try { signal.disconnect(callback); } catch (err) { /* QObject may already be destroyed. */ }
+            }
+            connections.length = 0;
+            if (timer && typeof timer.deleteLater === "function") timer.deleteLater();
+            timer = null;
+        }
+        function contextError() {
+            const elapsed = Date.now() - started;
+            if (r.source !== observerSource) return "Observer source replaced during initial layout";
+            if (!Number.isFinite(r.remaining_ms) || elapsed < 0 || elapsed >= r.remaining_ms)
+                return "Initial layout transaction expired";
+            if (String(workspace.currentDesktop && workspace.currentDesktop.id) !== beforeDesktopId ||
+                Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber) !== beforeDesktopNumber)
+                return "Displayed desktop changed during initialization";
+            return "";
+        }
+        function resolveCohort() {
+            const available = workspace.stackingOrder;
+            return r.entries.map(e => {
+                const win = available.find(w => layoutUUID(w) === e.uuid);
+                // Keep resolution anchored to the actual stack. windowList is
+                // diagnostic evidence only, never an alternate ownership path.
+                if (!win) {
+                    const listed = typeof workspace.windowList === "function" ?
+                        workspace.windowList().some(w => layoutUUID(w) === e.uuid) : "unavailable";
+                    throw new Error("Cohort UUID [" + e.uuid + "]: stackingOrder match=false; windowList match=" + listed);
+                }
+                // Do not coerce an unknown Qt enum/property into a normal mode.
+                // Include its JS type: undefined and numeric zero differ here.
+                const checks = [
+                    ["deleted", win.deleted, Boolean(win.deleted)],
+                    ["fullScreen", win.fullScreen, Boolean(win.fullScreen)],
+                    ["keepAbove", win.keepAbove, Boolean(win.keepAbove)],
+                    ["keepBelow", win.keepBelow, Boolean(win.keepBelow)],
+                    ["tile", win.tile, win.tile != null],
+                    ["maximizeMode", win.maximizeMode, win.maximizeMode !== 0]
+                ];
+                const incompatible = checks.find(check => check[2]);
+                if (incompatible) {
+                    throw new Error("Cohort UUID [" + e.uuid + "]: incompatible " + incompatible[0] +
+                        "=" + String(incompatible[1]) + " (type=" + typeof incompatible[1] + ")");
+                }
+                const g = win.frameGeometry;
+                const desktops = (win.desktops || []).map(d => Number(d.x11DesktopNumber));
+                if (["x", "y", "width", "height"].some(k => g[k] !== e.geometry[k]) ||
+                    JSON.stringify(desktops) !== JSON.stringify(e.desktops) ||
+                    Boolean(win.onAllDesktops) !== e.on_all_desktops) throw new Error("Cohort UUID [" + e.uuid + "]: frame/membership changed");
+                return win;
+            });
+        }
+        function readback() {
+            // Read back after activation as activation itself may raise a window.
+            result.active_uuid = layoutUUID(workspace.activeWindow);
+            result.current_desktop = Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber);
+            result.order = workspace.stackingOrder.map(layoutUUID).filter(id => r.order.includes(id));
+            // Keep geometry and stack evidence even when focus never converges.
+            const windows = workspace.stackingOrder;
+            result.geometry_unchanged = r.entries.every(e => {
+                const w = windows.find(win => layoutUUID(win) === e.uuid);
+                return w && !w.deleted && ["x", "y", "width", "height"].every(k => w.frameGeometry[k] === e.geometry[k]) &&
+                    JSON.stringify((w.desktops || []).map(d => Number(d.x11DesktopNumber))) === JSON.stringify(e.desktops) &&
+                    Boolean(w.onAllDesktops) === e.on_all_desktops;
+            });
+        }
+        function finish(reason, phase) {
+            if (done) return;
+            done = true; // In-flight DBus replies and queued Qt signals become inert.
+            cleanup();
+            result.focus_observation = phase;
+            result.focus_elapsed_ms = focusStarted === null ? 0 : Math.max(0, Date.now() - focusStarted);
+            try { readback(); } catch (err) { reason = reason || String(err); }
+            const invalid = contextError();
+            if (invalid) reason = invalid;
+            if (reason) result.error = reason;
+            callDBus(BRIDGE, PATH, BRIDGE, "CompleteInitialLayout", r.id, JSON.stringify(result));
+        }
+        function observe(authorised) {
+            if (done) return;
+            try {
+                const invalid = contextError();
+                if (invalid) { finish(invalid, "interrupted or expired"); return; }
+                resolveCohort(); // Never retain a vanished/incompatible QObject as a target.
+                const active = layoutUUID(workspace.activeWindow);
+                // An unchanged pre-request window is not evidence of intervention.
+                // A different activation may be a user or client: do not reclaim it.
+                if (active && active !== r.preferred_uuid && active !== beforeActiveId) {
+                    finish("Competing activation observed: UUID [" + active + "]; user/client cause unknown", "interrupted");
+                    return;
+                }
+                if (Date.now() >= focusDeadline) {
+                    finish("Focus observation timed out: preferred UUID [" + r.preferred_uuid +
+                           "] observed [" + active + "]", "timeout");
+                    return;
+                }
+                // Confirm the existing broker lease/source/ownership is still live.
+                // This read-only call never renews the lease or requests activation.
+                if (authorised) {
+                    if (active === r.preferred_uuid) finish("", "delayed");
+                } else if (!guardPending) {
+                    guardPending = true;
+                    callDBus(BRIDGE, PATH, BRIDGE, "InitialLayoutStatus", r.id, function(payload) {
+                        if (done) return;
+                        guardPending = false;
+                        let status;
+                        try { status = JSON.parse(payload); } catch (err) {
+                            finish("Initial-layout status unavailable during focus observation", "interrupted"); return;
+                        }
+                        if (status.id !== r.id || status.state !== "RUNNING") {
+                            finish("Initial-layout lease/source/ownership no longer valid: " + String(status.state), "interrupted"); return;
+                        }
+                        observe(true);
+                    });
+                }
+            } catch (err) { finish(String(err), "interrupted"); }
+        }
+        function tick() {
+            observe(false);
+            if (!done) timer.start(Math.max(1, Math.min(r.focus_poll_interval_ms, focusDeadline - Date.now(),
+                                                      r.remaining_ms - (Date.now() - started))));
+        }
+        try {
+            const invalid = contextError();
+            if (invalid || layoutUUID(workspace.activeWindow) !== beforeActiveId)
+                throw new Error(invalid || "Initial layout stale or user focus changed during claim");
+            if (!Number.isInteger(r.focus_timeout_ms) || r.focus_timeout_ms < 1 || r.focus_timeout_ms > 2000 ||
+                !Number.isInteger(r.focus_poll_interval_ms) || r.focus_poll_interval_ms < 1 ||
+                r.focus_poll_interval_ms > Math.min(250, r.focus_timeout_ms))
+                throw new Error("Invalid focus observation timing in initial-layout claim");
+            const cohort = resolveCohort();
+            if (typeof workspace.raiseWindow !== "function") throw new Error("KWin raiseWindow unavailable");
+            for (const id of r.order) workspace.raiseWindow(cohort.find(w => layoutUUID(w) === id));
+            if (!r.preferred_uuid || beforeDesktopNumber !== r.entries[0].desktop) {
+                finish("", "not attempted"); return;
+            }
+            const target = cohort.find(w => layoutUUID(w) === r.preferred_uuid);
+            if (!target || !(target.desktops || []).some(d => Number(d.x11DesktopNumber) === beforeDesktopNumber))
+                throw new Error("Preferred target is not visible on this desktop");
+            focusStarted = Date.now();
+            focusDeadline = Math.min(focusStarted + r.focus_timeout_ms, started + r.remaining_ms);
+            result.focus_attempted = true;
+            workspace.activeWindow = target; // Exactly one activation request.
+            result.initial_active_uuid = layoutUUID(workspace.activeWindow);
+            if (result.initial_active_uuid === r.preferred_uuid) {
+                finish("", "immediate"); return;
+            }
+            if (typeof QTimer !== "function") {
+                finish("KWin QTimer unavailable for bounded focus observation", "unsupported"); return;
+            }
+            timer = new QTimer();
+            timer.singleShot = true;
+            if (!connect(timer.timeout, tick)) throw new Error("KWin timer timeout signal unavailable");
+            // Event-driven observations are primary; the configurable timer is
+            // also a watchdog for source/lease loss and missed/missing signals.
+            connect(workspace.windowActivated, function(win) {
+                if (done) return;
+                const id = layoutUUID(win);
+                // Unlike unchanged polling, an activation signal is new event
+                // evidence, even if the original active window is reactivated.
+                if (id && id !== r.preferred_uuid) {
+                    finish("Competing activation event: UUID [" + id + "]; user/client cause unknown", "interrupted");
+                    return;
+                }
+                observe(false);
+            });
+            connect(workspace.currentDesktopChanged, function() { observe(false); });
+            connect(workspace.windowRemoved, function() { observe(false); });
+            tick();
+        } catch (err) { finish(String(err), "interrupted"); }
+    });
+}
+registerShortcut("joetoo_bridge_initial_layout", "Joetoo initial cohort layout", "", initialLayoutFromBroker);

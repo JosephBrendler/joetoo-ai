@@ -1,0 +1,778 @@
+diff --git a/joetoo-kwin b/joetoo-kwin
+--- a/joetoo-kwin
++++ b/joetoo-kwin
+@@ -153,6 +153,7 @@
+     # Explicit varlist avoids unrelated workflow/status-file initialization.
+     local varlist="PN BUILD config verbosity screen_width screen_height desktop_limit"
+     varlist+=" dt_win_limit min_window_exposure_px"
++    varlist+=" initial_focus_timeout_ms initial_focus_poll_interval_ms"
+     varlist+=" terminal_width_percent terminal_gap_percent terminal_height_percent"
+     varlist+=" terminal_left_percent terminal_top_percent terminal_row_gap_percent"
+     varlist+=" graphical_left_percent graphical_top_percent graphical_width_percent graphical_height_percent"
+diff --git a/joetoo-kwin-resident.js b/joetoo-kwin-resident.js
+--- a/joetoo-kwin-resident.js
++++ b/joetoo-kwin-resident.js
+@@ -413,20 +413,43 @@
+         let r;
+         try { r = JSON.parse(payload); } catch (err) { return; }
+         const result = {source: observerSource, order: [], focus_attempted: false,
+-                        before_active_uuid: layoutUUID(beforeActive),
++                        before_active_uuid: beforeActiveId,
+                         active_uuid: layoutUUID(workspace.activeWindow),
+                         current_desktop: Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber),
+                         geometry_unchanged: false};
+-        try {
+-            if (r.source !== observerSource || !Number.isFinite(r.remaining_ms) ||
+-                Date.now() - started < 0 || Date.now() - started >= r.remaining_ms ||
+-                String(workspace.currentDesktop && workspace.currentDesktop.id) !== beforeDesktopId ||
+-                Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber) !== beforeDesktopNumber ||
+-                layoutUUID(workspace.activeWindow) !== beforeActiveId) {
+-                throw new Error("Initial layout stale or user focus/desktop changed during claim");
++        let done = false, timer = null, guardPending = false;
++        let focusStarted = null, focusDeadline = null;
++        const connections = [];
++        function connect(signal, callback) {
++            if (signal && typeof signal.connect === "function" && typeof signal.disconnect === "function") {
++                signal.connect(callback);
++                connections.push([signal, callback]);
++                return true;
+             }
++            return false;
++        }
++        function cleanup() {
++            if (timer) timer.stop();
++            for (const [signal, callback] of connections) {
++                try { signal.disconnect(callback); } catch (err) { /* QObject may already be destroyed. */ }
++            }
++            connections.length = 0;
++            if (timer && typeof timer.deleteLater === "function") timer.deleteLater();
++            timer = null;
++        }
++        function contextError() {
++            const elapsed = Date.now() - started;
++            if (r.source !== observerSource) return "Observer source replaced during initial layout";
++            if (!Number.isFinite(r.remaining_ms) || elapsed < 0 || elapsed >= r.remaining_ms)
++                return "Initial layout transaction expired";
++            if (String(workspace.currentDesktop && workspace.currentDesktop.id) !== beforeDesktopId ||
++                Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber) !== beforeDesktopNumber)
++                return "Displayed desktop changed during initialization";
++            return "";
++        }
++        function resolveCohort() {
+             const available = workspace.stackingOrder;
+-            const cohort = r.entries.map(e => {
++            return r.entries.map(e => {
+                 const win = available.find(w => layoutUUID(w) === e.uuid);
+                 // Keep resolution anchored to the actual stack. windowList is
+                 // diagnostic evidence only, never an alternate ownership path.
+@@ -457,26 +480,125 @@
+                     Boolean(win.onAllDesktops) !== e.on_all_desktops) throw new Error("Cohort UUID [" + e.uuid + "]: frame/membership changed");
+                 return win;
+             });
++        }
++        function readback() {
++            // Read back after activation as activation itself may raise a window.
++            result.active_uuid = layoutUUID(workspace.activeWindow);
++            result.current_desktop = Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber);
++            result.order = workspace.stackingOrder.map(layoutUUID).filter(id => r.order.includes(id));
++            // Keep geometry and stack evidence even when focus never converges.
++            const windows = workspace.stackingOrder;
++            result.geometry_unchanged = r.entries.every(e => {
++                const w = windows.find(win => layoutUUID(win) === e.uuid);
++                return w && !w.deleted && ["x", "y", "width", "height"].every(k => w.frameGeometry[k] === e.geometry[k]) &&
++                    JSON.stringify((w.desktops || []).map(d => Number(d.x11DesktopNumber))) === JSON.stringify(e.desktops) &&
++                    Boolean(w.onAllDesktops) === e.on_all_desktops;
++            });
++        }
++        function finish(reason, phase) {
++            if (done) return;
++            done = true; // In-flight DBus replies and queued Qt signals become inert.
++            cleanup();
++            result.focus_observation = phase;
++            result.focus_elapsed_ms = focusStarted === null ? 0 : Math.max(0, Date.now() - focusStarted);
++            try { readback(); } catch (err) { reason = reason || String(err); }
++            const invalid = contextError();
++            if (invalid) reason = invalid;
++            if (reason) result.error = reason;
++            callDBus(BRIDGE, PATH, BRIDGE, "CompleteInitialLayout", r.id, JSON.stringify(result));
++        }
++        function observe(authorised) {
++            if (done) return;
++            try {
++                const invalid = contextError();
++                if (invalid) { finish(invalid, "interrupted or expired"); return; }
++                resolveCohort(); // Never retain a vanished/incompatible QObject as a target.
++                const active = layoutUUID(workspace.activeWindow);
++                // An unchanged pre-request window is not evidence of intervention.
++                // A different activation may be a user or client: do not reclaim it.
++                if (active && active !== r.preferred_uuid && active !== beforeActiveId) {
++                    finish("Competing activation observed: UUID [" + active + "]; user/client cause unknown", "interrupted");
++                    return;
++                }
++                if (Date.now() >= focusDeadline) {
++                    finish("Focus observation timed out: preferred UUID [" + r.preferred_uuid +
++                           "] observed [" + active + "]", "timeout");
++                    return;
++                }
++                // Confirm the existing broker lease/source/ownership is still live.
++                // This read-only call never renews the lease or requests activation.
++                if (authorised) {
++                    if (active === r.preferred_uuid) finish("", "delayed");
++                } else if (!guardPending) {
++                    guardPending = true;
++                    callDBus(BRIDGE, PATH, BRIDGE, "InitialLayoutStatus", r.id, function(payload) {
++                        if (done) return;
++                        guardPending = false;
++                        let status;
++                        try { status = JSON.parse(payload); } catch (err) {
++                            finish("Initial-layout status unavailable during focus observation", "interrupted"); return;
++                        }
++                        if (status.id !== r.id || status.state !== "RUNNING") {
++                            finish("Initial-layout lease/source/ownership no longer valid: " + String(status.state), "interrupted"); return;
++                        }
++                        observe(true);
++                    });
++                }
++            } catch (err) { finish(String(err), "interrupted"); }
++        }
++        function tick() {
++            observe(false);
++            if (!done) timer.start(Math.max(1, Math.min(r.focus_poll_interval_ms, focusDeadline - Date.now(),
++                                                      r.remaining_ms - (Date.now() - started))));
++        }
++        try {
++            const invalid = contextError();
++            if (invalid || layoutUUID(workspace.activeWindow) !== beforeActiveId)
++                throw new Error(invalid || "Initial layout stale or user focus changed during claim");
++            if (!Number.isInteger(r.focus_timeout_ms) || r.focus_timeout_ms < 1 || r.focus_timeout_ms > 2000 ||
++                !Number.isInteger(r.focus_poll_interval_ms) || r.focus_poll_interval_ms < 1 ||
++                r.focus_poll_interval_ms > Math.min(250, r.focus_timeout_ms))
++                throw new Error("Invalid focus observation timing in initial-layout claim");
++            const cohort = resolveCohort();
+             if (typeof workspace.raiseWindow !== "function") throw new Error("KWin raiseWindow unavailable");
+             for (const id of r.order) workspace.raiseWindow(cohort.find(w => layoutUUID(w) === id));
+-            if (r.preferred_uuid && beforeDesktopNumber === r.entries[0].desktop) {
+-                const target = cohort.find(w => layoutUUID(w) === r.preferred_uuid);
+-                if (!target || !(target.desktops || []).some(d => Number(d.x11DesktopNumber) === beforeDesktopNumber)) throw new Error("Preferred target is not visible on this desktop");
+-                result.focus_attempted = true;
+-                workspace.activeWindow = target;
++            if (!r.preferred_uuid || beforeDesktopNumber !== r.entries[0].desktop) {
++                finish("", "not attempted"); return;
+             }
+-            // Read back after activation as activation itself may raise a window.
+-            result.order = workspace.stackingOrder.map(layoutUUID).filter(id => r.order.includes(id));
+-            result.geometry_unchanged = cohort.every((w, i) =>
+-                ["x", "y", "width", "height"].every(k => w.frameGeometry[k] === r.entries[i].geometry[k]) &&
+-                JSON.stringify((w.desktops || []).map(d => Number(d.x11DesktopNumber))) === JSON.stringify(r.entries[i].desktops) &&
+-                Boolean(w.onAllDesktops) === r.entries[i].on_all_desktops);
+-        } catch (err) { result.error = String(err); }
+-        result.active_uuid = layoutUUID(workspace.activeWindow);
+-        result.current_desktop = Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber);
+-        if (String(workspace.currentDesktop && workspace.currentDesktop.id) !== beforeDesktopId ||
+-            result.current_desktop !== beforeDesktopNumber) result.error = "Displayed desktop changed during initialization";
+-        callDBus(BRIDGE, PATH, BRIDGE, "CompleteInitialLayout", r.id, JSON.stringify(result));
++            const target = cohort.find(w => layoutUUID(w) === r.preferred_uuid);
++            if (!target || !(target.desktops || []).some(d => Number(d.x11DesktopNumber) === beforeDesktopNumber))
++                throw new Error("Preferred target is not visible on this desktop");
++            focusStarted = Date.now();
++            focusDeadline = Math.min(focusStarted + r.focus_timeout_ms, started + r.remaining_ms);
++            result.focus_attempted = true;
++            workspace.activeWindow = target; // Exactly one activation request.
++            result.initial_active_uuid = layoutUUID(workspace.activeWindow);
++            if (result.initial_active_uuid === r.preferred_uuid) {
++                finish("", "immediate"); return;
++            }
++            if (typeof QTimer !== "function") {
++                finish("KWin QTimer unavailable for bounded focus observation", "unsupported"); return;
++            }
++            timer = new QTimer();
++            timer.singleShot = true;
++            if (!connect(timer.timeout, tick)) throw new Error("KWin timer timeout signal unavailable");
++            // Event-driven observations are primary; the configurable timer is
++            // also a watchdog for source/lease loss and missed/missing signals.
++            connect(workspace.windowActivated, function(win) {
++                if (done) return;
++                const id = layoutUUID(win);
++                // Unlike unchanged polling, an activation signal is new event
++                // evidence, even if the original active window is reactivated.
++                if (id && id !== r.preferred_uuid) {
++                    finish("Competing activation event: UUID [" + id + "]; user/client cause unknown", "interrupted");
++                    return;
++                }
++                observe(false);
++            });
++            connect(workspace.currentDesktopChanged, function() { observe(false); });
++            connect(workspace.windowRemoved, function() { observe(false); });
++            tick();
++        } catch (err) { finish(String(err), "interrupted"); }
+     });
+ }
+ registerShortcut("joetoo_bridge_initial_layout", "Joetoo initial cohort layout", "", initialLayoutFromBroker);
+diff --git a/joetoo-kwin-template.conf b/joetoo-kwin-template.conf
+--- a/joetoo-kwin-template.conf
++++ b/joetoo-kwin-template.conf
+@@ -9,6 +9,10 @@
+ desktop_limit=20
+ dt_win_limit=4
+ min_window_exposure_px=32
++# One activation request; bounded observation only, within the existing lease.
++# Milliseconds: timeout 1..2000; watchdog interval 1..250 and <= timeout.
++initial_focus_timeout_ms=500
++initial_focus_poll_interval_ms=25
+ # Four fields (or a blank fifth) mean implicit panel for EVERY application.
+ # Explicit panel/under/over entries bypass the implicit budget but still require
+ # valid geometry. The panel allocator supports at most four panel participants.
+diff --git a/libexec/joetoo-kwind b/libexec/joetoo-kwind
+--- a/libexec/joetoo-kwind
++++ b/libexec/joetoo-kwind
+@@ -540,8 +540,17 @@
+             if len(payload) > 65536:
+                 raise ValueError("layout payload too large")
+             message = json.loads(payload)
+-            if set(message) != {"entries"} or not 1 <= len(message["entries"]) <= 256:
++            if (not {"entries"} <= set(message) <= {"entries", "focus_timeout_ms", "focus_poll_interval_ms"}
++                    or not 1 <= len(message["entries"]) <= 256):
+                 raise ValueError("invalid cohort")
++            # Defaults retain old callers; new launchers convey effective user
++            # configuration explicitly. Never assume daemon environment values.
++            focus_timeout = message.get("focus_timeout_ms", 500)
++            focus_interval = message.get("focus_poll_interval_ms", 25)
++            if (type(focus_timeout) is not int or type(focus_interval) is not int
++                    or not 1 <= focus_timeout <= 2000
++                    or not 1 <= focus_interval <= min(250, focus_timeout)):
++                raise ValueError("invalid focus observation timing")
+             entries = []
+             for item in message["entries"]:
+                 if set(item) != {"registration_request_id", "layer"} or item["layer"] not in ("under", "panel", "over"):
+@@ -569,6 +578,7 @@
+         self.initial_layout = dict(id=uuid.uuid4().hex, state="PENDING", entries=entries,
+                                    order=ordered, preferred_uuid=preferred,
+                                    source=self.observation_source, deadline=time.monotonic() + 10,
++                                   focus_timeout_ms=focus_timeout, focus_poll_interval_ms=focus_interval,
+                                    geometry="placed", stacking="pending", focus="pending", detail="")
+         return self.initial_layout["id"]
+ 
+@@ -580,7 +590,8 @@
+         if r["state"] != "PENDING" or source != r["source"]:
+             return ""
+         r["state"] = "RUNNING"
+-        return json.dumps({key: r[key] for key in ("id", "entries", "order", "preferred_uuid", "source")} |
++        return json.dumps({key: r[key] for key in ("id", "entries", "order", "preferred_uuid", "source",
++                                                 "focus_timeout_ms", "focus_poll_interval_ms")} |
+                           {"remaining_ms": max(0, int((r["deadline"] - time.monotonic()) * 1000))})
+ 
+     @dbus.service.method(IFACE, in_signature="ss", out_signature="")
+@@ -596,6 +607,9 @@
+                 raise ValueError("invalid focus observation")
+             if result["source"] != r["source"]:
+                 raise ValueError("wrong resident source")
++            if (type(result.get("focus_elapsed_ms", 0)) is not int
++                    or not 0 <= result.get("focus_elapsed_ms", 0) <= 10000):
++                raise ValueError("invalid focus elapsed observation")
+             # Completion is evidence from the resident, not permission to change
+             # ownership. Geometry remains independently observed by the broker.
+             # A target can disappear after the active-request check. Take one
+@@ -620,10 +634,17 @@
+                 focus_ok = result.get("focus_attempted") is True and result.get("active_uuid") == r["preferred_uuid"]
+                 focus = "verified" if focus_ok else "failed"
+             ok = stack_ok and focus_ok and not result.get("error")
++            detail = str(result.get("error", ""))
++            if not detail and not focus_ok:
++                detail = ("Preferred focus did not verify: target=" + str(r["preferred_uuid"])
++                          + " observed=" + str(result.get("active_uuid")))
+             r.update(state="SUCCEEDED" if ok else "FAILED", geometry="unchanged" if unchanged and result.get("geometry_unchanged") is True else "changed or unverified",
+                      stacking="verified" if stack_ok else "failed", focus=focus,
+                      detail=("Cohort UUID [" + missing + "]: observation disappeared during completion"
+-                             if missing else str(result.get("error", "")))[:512], observed_active_uuid=result.get("active_uuid"),
++                             if missing else detail)[:512], observed_active_uuid=result.get("active_uuid"),
++                     focus_observation=str(result.get("focus_observation", "immediate"))[:64],
++                     focus_elapsed_ms=result.get("focus_elapsed_ms"),
++                     initial_active_uuid=result.get("initial_active_uuid"),
+                      focus_attempted=result.get("focus_attempted"), observed_order=result.get("order", []),
+                      before_active_uuid=result.get("before_active_uuid"), current_desktop=result.get("current_desktop"))
+         except (ValueError, KeyError, TypeError, AttributeError) as exc:
+@@ -637,7 +658,9 @@
+             return json.dumps({"state": "UNKNOWN"})
+         return json.dumps({key: r.get(key) for key in ("id", "state", "geometry", "stacking", "focus", "detail",
+                                                        "preferred_uuid", "observed_active_uuid", "focus_attempted", "order",
+-                                                       "observed_order", "before_active_uuid", "current_desktop")} |
++                                                       "observed_order", "before_active_uuid", "current_desktop",
++                                                       "focus_observation", "focus_elapsed_ms", "initial_active_uuid",
++                                                       "focus_timeout_ms", "focus_poll_interval_ms")} |
+                           {"entries": [{k: e[k] for k in ("uuid", "layer", "desktop")} for e in r["entries"]]})
+ 
+     # Step 1.3b.1: a read-only launch correlation probe. It does not replace
+diff --git a/libexec/joetoo-kwin-plan-functions b/libexec/joetoo-kwin-plan-functions
+--- a/libexec/joetoo-kwin-plan-functions
++++ b/libexec/joetoo-kwin-plan-functions
+@@ -14,6 +14,8 @@
+     desktop_limit=20
+     dt_win_limit=4
+     min_window_exposure_px=32
++    initial_focus_timeout_ms=500
++    initial_focus_poll_interval_ms=25
+     terminal_width_percent=87
+     terminal_gap_percent=2
+     terminal_height_percent=85
+@@ -83,6 +85,13 @@
+     declare -gA implicit_counts=() total_counts=() terminal_counts=() terminal_slots=() next_slot=()
+ 
+     validate_layout_geometry || return $?
++    # These new observation bounds fit inside the existing ten-second lease.
++    if [[ ! $initial_focus_timeout_ms =~ ^[1-9][0-9]{0,3}$ ||
++          ! $initial_focus_poll_interval_ms =~ ^[1-9][0-9]{0,2}$ ]] ||
++        (( initial_focus_timeout_ms > 2000 || initial_focus_poll_interval_ms > 250 ||
++           initial_focus_poll_interval_ms > initial_focus_timeout_ms )); then
++        plan_error 'invalid initial focus timing: timeout 1..2000 ms; interval 1..250 ms and <= timeout'; return 2
++    fi
+     if [[ ! $dt_win_limit =~ ^[1-9][0-9]{0,2}$ || ! $min_window_exposure_px =~ ^[1-9][0-9]{0,4}$ ]] ||
+         (( dt_win_limit > 256 || min_window_exposure_px > 32768 )); then
+         plan_error 'invalid dt_win_limit (1..256) or min_window_exposure_px (1..32768)'; return 2
+diff --git a/libexec/joetoo-kwin-launch-functions b/libexec/joetoo-kwin-launch-functions
+--- a/libexec/joetoo-kwin-launch-functions
++++ b/libexec/joetoo-kwin-launch-functions
+@@ -153,7 +153,9 @@
+         fi
+       done
+       if (( ${#_op_entries[@]} > 0 )); then
+-        _op_payload=$(printf '%s\n' "${_op_entries[@]}" | jq -sc '{entries:.}') || return 1
++        _op_payload=$(printf '%s\n' "${_op_entries[@]}" | jq -sc \
++            --argjson timeout "$initial_focus_timeout_ms" --argjson interval "$initial_focus_poll_interval_ms" \
++            '{entries:.,focus_timeout_ms:$timeout,focus_poll_interval_ms:$interval}') || return 1
+         _op_layout=$(qdbus6 "$bus" "$path" "$iface.SubmitInitialLayout" "$_op_payload") || return 1
+         qdbus6 org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut joetoo_bridge_initial_layout >/dev/null || return 1
+         _op_state=""
+diff --git a/tests/test_initial_layout.js b/tests/test_initial_layout.js
+--- a/tests/test_initial_layout.js
++++ b/tests/test_initial_layout.js
+@@ -19,14 +19,46 @@
+         geometry:{...w.frameGeometry},desktops:[3],on_all_desktops:false}));
+     const order = ['under','panel','over'].flatMap(l=>entries.filter(e=>e.layer===l).map(e=>e.uuid));
+     const preferred = [...entries].reverse().find(e=>e.layer==='over') || [...entries].reverse().find(e=>e.layer==='panel');
+-    let callback, result;
+-    const context = {workspace,observerSource:'source',BRIDGE:'b',PATH:'/b', Date:{now:()=>10},
++    function signal() {
++        const handlers=new Set();
++        return {handlers,connect(fn){handlers.add(fn);},disconnect(fn){handlers.delete(fn);},
++            emit(...args){for(const fn of [...handlers])fn(...args);}};
++    }
++    workspace.windowActivated=signal();workspace.currentDesktopChanged=signal();workspace.windowRemoved=signal();
++    let now=10, callback, result, activationRequests=0, completions=0, delayed=false;
++    let active=workspace.activeWindow;
++    Object.defineProperty(workspace,'activeWindow',{configurable:true,get(){return active;},set(w){
++        activationRequests++;if(!delayed)active=w;
++    }});
++    const timers=[];
++    class Timer {
++        constructor(){this.timeout=signal();this.active=false;timers.push(this);}
++        start(ms){this.active=true;this.due=now+ms;}
++        stop(){this.active=false;}
++        deleteLater(){this.deleted=true;}
++    }
++    const context = {workspace,observerSource:'source',BRIDGE:'b',PATH:'/b', Date:{now:()=>now},QTimer:Timer,
+         windowUUID:w=>w?w.internalId:'',registerShortcut:()=>{},
+-        callDBus(...args) {if(args[3]==='TakeInitialLayout')callback=args.at(-1); else result=JSON.parse(args[5]);}};
++        brokerState:'RUNNING',holdStatus:false,statusCallbacks:[],
++        callDBus(...args) {
++            if(args[3]==='TakeInitialLayout')callback=args.at(-1);
++            else if(args[3]==='InitialLayoutStatus'){
++                const fn=args.at(-1);
++                if(context.holdStatus)context.statusCallbacks.push(fn);
++                else fn(JSON.stringify({id:'id',state:context.brokerState}));
++            }else {result=JSON.parse(args[5]);completions++;}
++        }};
+     vm.runInNewContext(implementation, context);
+-    return {windows,workspace,context, get result(){return result;},
+-        reply() {callback(JSON.stringify({id:'id',source:'source',entries,order,
+-                                         preferred_uuid:preferred?preferred.uuid:null,remaining_ms:1000}));}};
++    return {windows,workspace,context,timers,get activationRequests(){return activationRequests;},
++        get completions(){return completions;},get result(){return result;},
++        delayActivation(){delayed=true;},
++        activate(w){active=w;workspace.windowActivated.emit(w);},
++        advance(ms){now+=ms;for(const t of timers){if(t.active && now>=t.due){t.active=false;t.timeout.emit();}}},
++        assertClean(){assert.ok(timers.every(t=>!t.active && t.timeout.handlers.size===0));
++            for(const key of ['windowActivated','currentDesktopChanged','windowRemoved'])
++                assert.equal(workspace[key].handlers.size,0);},
++        reply(overrides={}) {callback(JSON.stringify({id:'id',source:'source',entries,order,
++                                         preferred_uuid:preferred?preferred.uuid:null,remaining_ms:1000,focus_timeout_ms:500,focus_poll_interval_ms:25,...overrides}));}};
+ }
+ 
+ test('initial stack respects layers, last over, and targets only cohort UUIDs',()=>{
+@@ -120,9 +152,97 @@
+ });
+ test('expired, moved and preexisting special-mode targets fail before mutation',()=>{
+     const h=harness(['panel']);h.context.initialLayoutFromBroker();h.context.Date.now=()=>2000;h.reply();
+-    assert.match(h.result.error,/stale/);
++    assert.match(h.result.error,/expired/);
+     const moved=harness(['panel']);moved.context.initialLayoutFromBroker();moved.windows[0].frameGeometry.x=999;moved.reply();
+     assert.match(moved.result.error,/changed/);
+     const special=harness(['panel']);special.windows[0].keepBelow=true;special.context.initialLayoutFromBroker();special.reply();
+     assert.match(special.result.error,/incompatible/);assert.equal(special.windows[0].keepBelow,true);
+ });
++
++
++test('immediate success records one request and no temporary observers',()=>{
++    const h=harness(['panel','under']);h.context.initialLayoutFromBroker();h.reply();
++    assert.equal(h.result.focus_observation,'immediate');assert.equal(h.activationRequests,1);
++    h.assertClean();
++});
++test('delayed activation succeeds after one request, rechecks stack, and releases observers',()=>{
++    const h=harness(['panel','under']);h.delayActivation();h.context.initialLayoutFromBroker();h.reply();
++    assert.equal(h.result,undefined);h.advance(25);assert.equal(h.result,undefined);
++    h.activate(h.windows[0]);
++    assert.equal(h.result.focus_observation,'delayed');assert.equal(h.result.focus_elapsed_ms,25);
++    assert.equal(h.result.initial_active_uuid,'unrelated');assert.equal(h.result.active_uuid,'w0');
++    assert.equal(h.activationRequests,1);assert.deepEqual(h.result.order,['w1','w0']);h.assertClean();
++    h.activate(h.windows[1]);h.advance(1000);
++    assert.equal(h.workspace.activeWindow,h.windows[1]);assert.equal(h.completions,1);
++});
++test('nonconvergence times out, retains stack/geometry evidence, and does not reclaim focus',()=>{
++    const h=harness(['panel']);h.delayActivation();h.context.initialLayoutFromBroker();h.reply();
++    for(let i=0;i<20;i++)h.advance(25);
++    assert.equal(h.result.focus_observation,'timeout');assert.match(h.result.error,/timed out/);
++    assert.deepEqual(h.result.order,['w0']);assert.equal(h.result.geometry_unchanged,true);
++    assert.equal(h.activationRequests,1);h.assertClean();
++});
++test('unchanged preexisting active UUID is allowed; newly competing activation interrupts',()=>{
++    const h=harness(['panel','under']);h.delayActivation();h.context.initialLayoutFromBroker();h.reply();
++    h.advance(25);assert.equal(h.result,undefined);
++    h.activate(h.windows[1]);assert.match(h.result.error,/Competing activation.*w1.*unknown/);
++    assert.equal(h.activationRequests,1);h.assertClean();
++});
++for(const mode of ['desktop','deleted','removed','special','geometry','source','broker source']) {
++    test('bounded observation interruption: '+mode,()=>{
++        const h=harness(['panel','under']);h.delayActivation();h.context.initialLayoutFromBroker();h.reply();
++        if(mode==='desktop') {h.workspace.currentDesktop={x11DesktopNumber:1};h.workspace.currentDesktopChanged.emit();}
++        if(mode==='deleted')h.windows[0].deleted=true;
++        if(mode==='removed'){h.workspace.stackingOrder=h.workspace.stackingOrder.filter(w=>w!==h.windows[0]);h.workspace.windowRemoved.emit(h.windows[0]);}
++        if(mode==='special')h.windows[0].keepAbove=true;
++        if(mode==='geometry')h.windows[0].frameGeometry.x++;
++        if(mode==='source')h.context.observerSource='replacement';
++        if(mode==='broker source')h.context.brokerState='FAILED';
++        h.advance(25);
++        assert.ok(h.result.error);assert.equal(h.activationRequests,1);h.assertClean();
++    });
++}
++test('expiry and queued callbacks cannot renew lease or reactivate',()=>{
++    const h=harness(['panel']);h.delayActivation();h.context.holdStatus=true;
++    h.context.initialLayoutFromBroker();h.reply();
++    const late=h.context.statusCallbacks[0];h.advance(1000);
++    assert.match(h.result.error,/expired/);h.assertClean();
++    late(JSON.stringify({id:'id',state:'RUNNING'}));h.activate(h.windows[0]);
++    assert.equal(h.activationRequests,1);assert.equal(h.completions,1);
++});
++test('focus success returns actual post-convergence order without repairing a mismatch',()=>{
++    const h=harness(['panel','under']);h.delayActivation();h.context.initialLayoutFromBroker();h.reply();
++    h.workspace.raiseWindow(h.windows[1]);h.activate(h.windows[0]);
++    assert.equal(h.result.focus_observation,'delayed');assert.deepEqual(h.result.order,['w0','w1']);
++    assert.equal(h.activationRequests,1);h.assertClean();
++});
++test('timer polling fallback works without activation signals',()=>{
++    const h=harness(['panel']);h.delayActivation();delete h.workspace.windowActivated;
++    h.context.initialLayoutFromBroker();h.reply();
++    // Change active state without emitting a usable event, then observe on timer.
++    h.workspace.windowActivated={emit(){}};h.activate(h.windows[0]);h.advance(25);
++    assert.equal(h.result.focus_observation,'delayed');assert.equal(h.activationRequests,1);
++    assert.ok(h.timers.every(t=>!t.active));
++});
++
++test('a new activation event for the preexisting window is distinct from unchanged polling',()=>{
++    const h=harness(['panel']);h.delayActivation();const prior=h.workspace.activeWindow;
++    h.context.initialLayoutFromBroker();h.reply();h.advance(25);assert.equal(h.result,undefined);
++    h.activate(prior);assert.match(h.result.error,/Competing activation event.*unrelated/);
++    assert.equal(h.activationRequests,1);h.assertClean();
++});
++test('unavailable timer reports unsupported delay without repeatedly activating',()=>{
++    const h=harness(['panel']);h.delayActivation();delete h.context.QTimer;
++    h.context.initialLayoutFromBroker();h.reply();
++    assert.equal(h.result.focus_observation,'unsupported');assert.equal(h.activationRequests,1);h.assertClean();
++});
++
++test('effective observation timing and the remaining transaction lease both bound the wait',()=>{
++    const h=harness(['panel']);h.delayActivation();h.context.initialLayoutFromBroker();
++    h.reply({focus_timeout_ms:60,focus_poll_interval_ms:20});
++    h.advance(20);h.advance(20);assert.equal(h.result,undefined);h.advance(20);
++    assert.equal(h.result.focus_observation,'timeout');assert.equal(h.result.focus_elapsed_ms,60);h.assertClean();
++    const short=harness(['panel']);short.delayActivation();short.context.initialLayoutFromBroker();
++    short.reply({remaining_ms:40});short.advance(40);
++    assert.match(short.result.error,/expired/);assert.equal(short.activationRequests,1);short.assertClean();
++});
+diff --git a/tests/test_initial_layout_broker.py b/tests/test_initial_layout_broker.py
+--- a/tests/test_initial_layout_broker.py
++++ b/tests/test_initial_layout_broker.py
+@@ -16,9 +16,9 @@
+         self.ids = [r.request_id for r in self.broker.registry.managed_windows.values()]
+         self.uuids = list(self.broker.registry.managed_windows)
+ 
+-    def submit(self, layers=('under', 'panel')):
++    def submit(self, layers=('under', 'panel'), **timing):
+         return self.broker.SubmitInitialLayout(json.dumps({'entries': [
+-            {'registration_request_id': rid, 'layer': layer} for rid, layer in zip(self.ids, layers)]}))
++            {'registration_request_id': rid, 'layer': layer} for rid, layer in zip(self.ids, layers)], **timing}))
+ 
+     def complete(self, rid, **override):
+         r = self.broker.initial_layout
+@@ -126,6 +126,39 @@
+         self.assertIn('disappeared', state['detail'])
+         self.assertFalse(self.broker._initial_layout_active())
+ 
++    def test_focus_bounds_are_validated_and_conveyed_without_changing_lease(self):
++        for timing in ({'focus_timeout_ms': 0}, {'focus_timeout_ms': True},
++                       {'focus_timeout_ms': 2001}, {'focus_poll_interval_ms': 251},
++                       {'focus_timeout_ms': 10, 'focus_poll_interval_ms': 20},
++                       {'focus_timeout_ms': '500'}):
++            with self.assertRaises(self.module.dbus.DBusException): self.submit(**timing)
++            self.assertIsNone(self.broker.initial_layout)
++        rid = self.submit(focus_timeout_ms=1200, focus_poll_interval_ms=40)
++        request = json.loads(self.broker.TakeInitialLayout(queries.SOURCE))
++        self.assertEqual(request['focus_timeout_ms'], 1200)
++        self.assertEqual(request['focus_poll_interval_ms'], 40)
++        self.assertLessEqual(request['remaining_ms'], 10000)
++        with self.assertRaises(self.module.dbus.DBusException): self.broker.Submit(1, 0, 0, 800, 900)
++        self.assertEqual(self.complete(rid, focus_observation='delayed', focus_elapsed_ms=40)['state'], 'SUCCEEDED')
++
++    def test_focus_timeout_preserves_verified_stack_and_placement(self):
++        rid = self.submit(); self.broker.TakeInitialLayout(queries.SOURCE)
++        state = self.complete(rid, active_uuid=self.uuids[0],
++                              error='Focus observation timed out', focus_observation='timeout', focus_elapsed_ms=500)
++        self.assertEqual(state['state'], 'FAILED')
++        self.assertEqual(state['stacking'], 'verified')
++        self.assertEqual(state['geometry'], 'unchanged')
++        self.assertEqual(state['focus'], 'failed')
++        self.assertEqual(state['focus_observation'], 'timeout')
++        self.assertIn('timed out', state['detail'])
++        self.assertTrue(all(r.placement == 'succeeded' for r in self.broker.registry.managed_windows.values()))
++
++    def test_mismatch_without_resident_error_has_actionable_focus_detail(self):
++        rid = self.submit(); self.broker.TakeInitialLayout(queries.SOURCE)
++        state = self.complete(rid, active_uuid=self.uuids[0])
++        self.assertIn('Preferred focus did not verify', state['detail'])
++        self.assertIn(self.uuids[1], state['detail'])
++
+ 
+ for _name in dir(queries.ReadOnlyManagedQueryTests):
+     if _name.startswith('test_') and _name not in InitialLayoutBrokerTests.__dict__:
+diff --git a/tests/test_grouped_layers_launch.py b/tests/test_grouped_layers_launch.py
+--- a/tests/test_grouped_layers_launch.py
++++ b/tests/test_grouped_layers_launch.py
+@@ -32,6 +32,25 @@
+                          ['submit', 'submit', 'finalize', 'submit', 'finalize'])
+         self.assertEqual([line for line in stages if line.startswith('submit:')], ['submit:4', 'submit:4', 'submit:2'])
+         self.assertIn('"layer":"over"', stages[2])
++        self.assertIn('"focus_timeout_ms":500', stages[2])
++        self.assertIn('"focus_poll_interval_ms":25', stages[2])
++
++    def test_effective_focus_timing_reaches_transaction_payload(self):
++        with self.config.open('a') as config:
++            config.write('\ninitial_focus_timeout_ms=750\ninitial_focus_poll_interval_ms=30\n')
++        result = self.run_client()
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertIn('"focus_timeout_ms":750', self.calls.read_text())
++        self.assertIn('"focus_poll_interval_ms":30', self.calls.read_text())
++
++    def test_invalid_focus_timing_launches_nothing(self):
++        original = self.config.read_text()
++        for timeout, interval in [('10', '30'), ('0', '25'), ('2001', '25'),
++                                  ('500', '0'), ('500', '251'), ('2+3', '1')]:
++            self.config.write_text(original + f'\ninitial_focus_timeout_ms="{timeout}"\ninitial_focus_poll_interval_ms={interval}\n')
++            result = self.run_client()
++            self.assertNotEqual(result.returncode, 0)
++            self.assertNotIn('submit:', self.calls.read_text() if self.calls.exists() else '')
+ 
+     def test_o_without_f_selects_xdg_user_config(self):
+         selected = self.folder / 'xdg/joetoo-kwin/joetoo-kwin.conf'
+diff --git a/task_step1.5/HANDOFF.md b/task_step1.5/HANDOFF.md
+--- a/task_step1.5/HANDOFF.md
++++ b/task_step1.5/HANDOFF.md
+@@ -116,6 +116,8 @@
+ 
+ | 17 | Codex (2026-11-01), initial-layout native-failure compatibility follow-up | Same task branch/HEAD `584eb2e4d024215e325e00bc6b24596e2c6f3e5c`; preserved dirty feature; resident/broker, two focused tests and agent evidence only | 282 Python PASS; focused broker 10 PASS; focused JS 19 PASS / all 4 Node files PASS; JS syntax, Python compilation and whitespace PASS. No native operations | Corrected raw Qt vs canonical broker UUID representation mismatch; retained mode checks with UUID/property/value/type diagnostics. Guarded disappearing completion observations. [Findings and focused diff](step1.5c4-initial-layout-compatibility.md). Native triggering predicate remains unproven from old aggregated error; maintainer reviews and repeats smallest native case with fresh slots. No publication. |
+ 
++| 18 | Codex (2026-11-01), bounded delayed-focus correction | Same task branch/HEAD `584eb2e4d024215e325e00bc6b24596e2c6f3e5c`; preserved dirty implementation and maintainer instruction/architecture edits; CLI/planner/launcher, broker/resident, template and three focused tests | 287 Python PASS (no skips, installed-header integration retained); 36 focused JS cases / all 4 Node discovery files PASS; Bash/JS syntax, Python compilation, ShellCheck and whitespace PASS; no native operations | Replaced immediate-only focus decision with one activation and bounded event/timer observation; configurable 500/25 ms defaults explicitly conveyed through existing JSON, no new D-Bus signatures or lease extension. Stack/geometry/focus outcomes remain separate; handlers/timer cleaned and late callbacks inert. [Review, findings, incremental diff and exact native retest](step1.5c4-delayed-focus-review.md). Native causal timing remains unproven; maintainer reviews then repeats displayed-desktop two-Dolphin test on fresh slots. No publication/deployment. |
++
+ | C1 | ChatGPT (2026-10-29), Step 1.5a closeout | Read PR #23 merge status and reviewed the accepted Step 1.5a scope; no repository edits. | GitHub confirmed PR #23 merge; Codex-reported 165 Python tests and installed-header coverage were not rerun by ChatGPT. | Maintainer/Codex proceeded to Step 1.5b; no independent cloud testing or publication. |
+ | C2 | ChatGPT (2026-10-29), Step 1.5b native and source review | Reviewed X11/Wayland move transcripts and broker/CLI optional-move reporting, including separate Konsole PIDs and shortcut-time target selection. | Maintainer native results showed distinct X11 windows and successful right placement. Source review located the optional-move `after=[0]` placeholder and generic Busy explanation; Wayland drag/roundoff cause remained unproven. | Recommended focused corrections and controlled focus/geometry tests; no edits or native actions. |
+ | C3 | ChatGPT (2026-10-29), Codex correction tasking | Drafted the Step 1.5b focused-correction prompt: verified desktop membership, Busy/unsupported classification, announce-act-report levels, regression tests and bounded geometry-precision investigation. | Prompt was based on published candidate source, Codex reports and maintainer transcripts; no tools were run to modify files or execute tests. | Maintainer supplied tasking to Codex; implementation and test evidence belong to Codex Iteration 6. |
+diff --git a/task_step1.5/step1.5c4-delayed-focus-review.md b/task_step1.5/step1.5c4-delayed-focus-review.md
+new file mode 100644
+--- /dev/null
++++ b/task_step1.5/step1.5c4-delayed-focus-review.md
+@@ -0,0 +1,178 @@
++# Bounded initial-layout focus observation
++
++## Baseline and evidence
++
++Branch `task/joetoo-kwin-step1.5c4-graphical-launch`, HEAD
++`584eb2e4d024215e325e00bc6b24596e2c6f3e5c`. Existing dirty feature and compatibility
++work were preserved. The maintainer's changed root AGENTS, ARCHITECTURE, relocated
++architecture patch and new task/native fixtures were inspected/preserved, not edited.
++No repository metadata, native session or installed files were changed.
++
++Maintainer-reported X11 evidence: panel/under, five-window layering, interleaved
++groups, UUID placement and manual overrides worked. Two displayed-desktop Dolphin
++runs verified relative stack and geometry but immediately observed the underlay
++still active. Ctrl+L later reached the panel without a click. This supports delayed
++convergence, but does not establish which request caused the later keyboard focus.
++The immediate active UUID was the underlay, not the unmanaged control Konsole.
++
++Source establishes that our previous observation was too early to decide definitive
++failure: the resident sampled activeWindow in the same synchronous callback as the
++activation request. KDE's [X11 6.7.4 workspace wrapper](https://sources.debian.org/src/kwin-x11/4:6.7.4-1/src/scripting/workspace_wrapper.cpp/)
++forwards the setter to activateWindow; [activation code](https://raw.githubusercontent.com/KDE/kwin/master/src/activation.cpp)
++raises the window and requests focus subject to focus policy. The
++[X11 implementation](https://raw.githubusercontent.com/KDE/kwin/Plasma/6.3/src/x11window.cpp)
++uses X input-focus requests and/or WM_TAKE_FOCUS, recording an expected focus target.
++These sources explain an asynchronous path and possible rejection/policy contention;
++they do not prove the exact native run's cause. The source snapshots are identified
++versions, not a claim to have inspected gmki91's exact built binary source.
++KWin active-window observation is the approved verification criterion; it is not
++an independent raw-X-server keyboard-focus measurement or causal attribution.
++
++The [X11 scripting implementation](https://sources.debian.org/src/kwin-x11/4:6.7.4-1/src/scripting/scripting.cpp/)
++exports ScriptTimer as QTimer to QJSEngine. Installed X11 and Wayland headers and
++wrapper source expose windowActivated, currentDesktopChanged and windowRemoved.
++Temporary activation-event verification is preferred; a QTimer watchdog also handles
++missing signals, ownership/source loss and a bounded timeout. No new persistent
++component, public D-Bus signature or registry semantics were necessary.
++
++## Implemented transaction behavior
++
++1. Claim the existing broker-owned frozen cohort and validate context/UUIDs/modes.
++2. Raise each member once, in the approved order. On the displayed group, request
++   the approved preferred focus target **once**. Under-only/inactive groups do not
++   activate or wait, and no desktop switch is introduced.
++3. Read activeWindow immediately. Matching preferred UUID completes as `immediate`.
++4. Otherwise attach temporary activation/desktop/removal handlers and a nonblocking
++   single-shot QTimer, rearmed only to observe. No activation or raise is retried.
++5. Each observation re-resolves the cohort, validates geometry/membership/modes and
++   checks local source, desktop and remaining lease. Read-only InitialLayoutStatus
++   checks broker RUNNING state, so a different resident's source replacement,
++   missing ownership or superseded/expired request also terminates the wait.
++6. A target observation plus valid broker state completes as `delayed`. Geometry,
++   relative stack and active UUID are read again after activation; a focus-induced
++   stack mismatch remains a failure, with no repair or alternate focus target.
++
++Polling of the unchanged pre-request active UUID is allowed. A different active
++UUID, or a new non-target windowActivated event (even for the original window),
++reports a competing activation and stops. It cannot reliably distinguish a human
++from another client; the diagnostic states that uncertainty. A transient null
++active state is not by itself classified as an intentional intervention.
++
++All terminal paths stop the timer and disconnect its handler and temporary workspace
++handlers. A completed flag makes queued/in-flight callbacks inert. Timer destruction
++is requested when exposed by Qt. Script unload destroys its JS context; no subscription
++is installed outside the bounded operation. A stalled broker reply cannot keep the
++watchdog from timing out. Lease expiry does not renew the transaction, and the broker
++rejects an expired completion. Nothing in a late callback can reactivate or reposition.
++
++## Configuration and wire compatibility
++
++New global defaults, also explicitly assigned in `joetoo-kwin-template.conf`:
++
++| Bash configuration | Default | Supported range |
++| --- | --- | --- |
++| initial_focus_timeout_ms | 500 ms | 1..2000 ms |
++| initial_focus_poll_interval_ms | 25 ms | 1..250 ms, no greater than timeout |
++
++500 ms permits event-loop/X11/client acknowledgement without a long focus wait;
++25 ms bounds watchdog checks when signals do not arrive. These are defaults for
++native review, not a measured guarantee for every client or focus policy. The
++upper observation bound remains well inside the existing ten-second transaction
++lease and launcher polling window. Effective deadline is the earlier of the user's
++observation timeout and the remaining claim lease; there is no lease extension.
++Timing validation occurs before confirmation/provisioning/launch. Values are shown
++in effective configuration output and passed explicitly in SubmitInitialLayout's
++existing JSON as focus_timeout_ms and focus_poll_interval_ms. Broker validates them
++independently, freezes them and returns them in TakeInitialLayout. Resident validates
++the claim again; it never assumes access to Bash variables. Existing callers that
++omit these optional JSON fields retain the defaults; D-Bus signatures are unchanged.
++A matching updated resident is needed for delayed verification; an old resident
++would still make its old immediate observation. Other preexisting timers/constants
++were deliberately not migrated.
++
++InitialLayoutStatus retains geometry, stacking and focus independently. Additive
++focus_observation, focus_elapsed_ms and initial_active_uuid distinguish immediate,
++delayed, timeout, unsupported observation and interrupted/expired results. Explicit
++errors carry details; a focus mismatch without a resident error now also names the
++preferred and observed UUID. Focus timeout does not erase verified stack or successful
++window placement. Busy protection and the launcher's invocation lock remain held
++until terminal finalization; the existing pending-finalization lock test remains.
++
++## Changed files and headless verification
++
++Production: joetoo-kwin; joetoo-kwin-resident.js; joetoo-kwin-template.conf;
++libexec/joetoo-kwin-plan-functions; libexec/joetoo-kwin-launch-functions;
++libexec/joetoo-kwind. Tests: tests/test_initial_layout.js,
++tests/test_initial_layout_broker.py, tests/test_grouped_layers_launch.py.
++Evidence: this review, focused incremental patch, HANDOFF Section 5 row 18 only.
++Earlier patches and logs remain historical and unchanged.
++
++Executed: **287 Python tests PASS**, no skips (including installed-header integration);
++**36 focused JavaScript cases PASS**; **4 Node discovery files PASS**. Focused broker
++suite has 13 cases. Bash syntax, JS syntax, Python compilation, ShellCheck and
++`git diff --check` PASS. Template-only lint excludes SC2034 because assignments
++are consumed by sourcing. Final output is retained in /tmp/joetoo-focus-*.log.
++Tests exercise delayed and immediate convergence, custom observation bounds and
++remaining lease, nonconvergence, competing activation, desktop/source/ownership loss,
++deletion/mode/geometry changes, stale callbacks, cleanup, fallback observation,
++post-focus stack mismatch, config rejection and explicit timing propagation.
++No native X11/Wayland focus acceptance is claimed from these tests.
++
++```bash
++python3 -m unittest discover -s tests -p 'test_*.py'
++node tests/test_initial_layout.js
++node --test tests/test_*.js
++node --check joetoo-kwin-resident.js
++python3 -m py_compile libexec/joetoo-kwind tests/test_initial_layout_broker.py tests/test_grouped_layers_launch.py
++bash -n joetoo-kwin
++bash -n libexec/joetoo-kwin-plan-functions
++bash -n libexec/joetoo-kwin-launch-functions
++bash -n joetoo-kwin-template.conf
++shellcheck -x -s bash joetoo-kwin libexec/joetoo-kwin-plan-functions libexec/joetoo-kwin-launch-functions
++shellcheck -s bash -e SC2034 joetoo-kwin-template.conf
++git diff --check
++# End of commands
++
++```
++
++## Precise maintainer X11 retest
++
++After review, install/reload the matching CLI/helpers, broker and resident using the
++already-established maintainer procedure. Codex has not installed or restarted anything.
++Use the existing two-Dolphin `cascade_joe2.conf`, unchanged. Choose a desktop with fresh
++intended slots, manually display it first, and use an unmanaged Konsole there to start
++these commands (4 below is illustrative only; use a fresh desktop consistently):
++
++```bash
++TEST_DESKTOP=4 ./joetoo-kwin -c -f task_step1.5/layers-examples/cascade_joe2.conf
++TEST_DESKTOP=4 ./joetoo-kwin -vv -o -f task_step1.5/layers-examples/cascade_joe2.conf
++# End of commands
++
++```
++
++Confirm the displayed effective timing is 500/25 unless intentionally overridden.
++Answer y, then avoid clicking windows or changing desktops while initialization runs.
++Expected: both placements succeed, relative order is under -> panel, preferred UUID
++is the panel. Final focus must be verified with observed_active_uuid equal to that
++preferred UUID and focus_observation immediate or delayed. For delayed success,
++initial_active_uuid records the stale immediate UUID and elapsed time records the
++observation interval. Either immediate or delayed success is valid; do not force delay.
++
++After completion, press Ctrl+L without clicking first and record which Dolphin receives
++it. This supplements, rather than replaces, the saved KWin observation. Then manual
++focus/raise/move remains unrestricted. Save the full CLI outcome, including any timeout,
++interruption or stack mismatch; do not alter policy or repeatedly activate to force PASS.
++After the keyboard check, the stored transaction snapshot can be queried using the ID
++from the output (this is historical completion evidence, not a new live-focus sample):
++
++```bash
++qdbus6 org.joetoo.KWinBridge /org/joetoo/KWinBridge org.joetoo.KWinBridge.InitialLayoutStatus "$LAYOUT_REQUEST" | jq .
++# End of commands
++
++```
++
++No need to repeat the accepted full geometry/layout battery for this correction.
++Maintainer reviews this [incremental diff](step1.5c4-delayed-focus.patch) and performs
++the displayed-desktop test before continuing X11 acceptance; Wayland remains separately
++maintainer-operated against the same reviewed implementation. No commit/publication,
++deployment, native GUI/service operation or protected-repository write was performed.

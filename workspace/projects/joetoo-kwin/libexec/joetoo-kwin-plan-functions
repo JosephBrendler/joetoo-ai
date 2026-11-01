@@ -12,6 +12,10 @@ plan_defaults() {
     screen_width=""
     screen_height=""
     desktop_limit=20
+    dt_win_limit=4
+    min_window_exposure_px=32
+    initial_focus_timeout_ms=500
+    initial_focus_poll_interval_ms=25
     terminal_width_percent=87
     terminal_gap_percent=2
     terminal_height_percent=85
@@ -72,23 +76,36 @@ validate_layout_geometry() {
 
 validate_plan() {
     local _vp_name _vp_value _vp_record _vp_delimiters _vp_declaration
-    local _vp_desktop _vp_program _vp_mode _vp_target
+    local _vp_desktop _vp_program _vp_mode _vp_target _vp_layer _vp_explicit _vp_total
     # Reset all derived state so rebuilding a plan cannot accumulate old entries.
     declare -ga planned_desktop=() planned_slot=() planned_program=() planned_mode=() planned_target=()
     declare -ga planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
-    declare -gA terminal_counts=() terminal_slots=() next_slot=()
+    declare -ga planned_explicit=() desktop_groups=()
+    declare -gA preferred_slot=() planned_stack_slots=()
+    declare -gA implicit_counts=() total_counts=() terminal_counts=() terminal_slots=() next_slot=()
 
     validate_layout_geometry || return $?
+    # These new observation bounds fit inside the existing ten-second lease.
+    if [[ ! $initial_focus_timeout_ms =~ ^[1-9][0-9]{0,3}$ ||
+          ! $initial_focus_poll_interval_ms =~ ^[1-9][0-9]{0,2}$ ]] ||
+        (( initial_focus_timeout_ms > 2000 || initial_focus_poll_interval_ms > 250 ||
+           initial_focus_poll_interval_ms > initial_focus_timeout_ms )); then
+        plan_error 'invalid initial focus timing: timeout 1..2000 ms; interval 1..250 ms and <= timeout'; return 2
+    fi
+    if [[ ! $dt_win_limit =~ ^[1-9][0-9]{0,2}$ || ! $min_window_exposure_px =~ ^[1-9][0-9]{0,4}$ ]] ||
+        (( dt_win_limit > 256 || min_window_exposure_px > 32768 )); then
+        plan_error 'invalid dt_win_limit (1..256) or min_window_exposure_px (1..32768)'; return 2
+    fi
     _vp_declaration=$(declare -p desktop_session_list 2>/dev/null) || return 2
     if [[ $_vp_declaration != 'declare -a '* || ${#desktop_session_list[@]} == 0 ]]; then
         plan_error 'desktop_session_list must be a nonempty indexed Bash array'; return 2
     fi
     for _vp_record in "${desktop_session_list[@]}"; do
         _vp_delimiters=${_vp_record//[^|]/}
-        if (( ${#_vp_delimiters} != 3 )) || [[ $_vp_record == *[$'\n\r\t\e']* ]]; then
-            plan_error "expected four single-line pipe-delimited fields: [${_vp_record}]"; return 2
+        if (( ${#_vp_delimiters} != 3 && ${#_vp_delimiters} != 4 )) || [[ $_vp_record == *[$'\n\r\t\e']* ]]; then
+            plan_error "expected four or five single-line pipe-delimited fields: [${_vp_record}]"; return 2
         fi
-        IFS='|' read -r _vp_desktop _vp_program _vp_mode _vp_target <<< "$_vp_record"
+        IFS='|' read -r _vp_desktop _vp_program _vp_mode _vp_target _vp_layer <<< "$_vp_record"
         if [[ ! $_vp_desktop =~ ^[1-9][0-9]{0,2}$ ]] || (( _vp_desktop > desktop_limit )); then
             plan_error "invalid desktop or desktop exceeds limit: [${_vp_desktop}]"; return 2
         fi
@@ -102,16 +119,36 @@ validate_plan() {
         if [[ $_vp_mode != direct && -z $_vp_target && ! ( $_vp_program == dolphin && $_vp_mode == local ) ]]; then
             plan_error "missing target for mode [${_vp_mode}]"; return 2
         fi
-        if [[ $_vp_program == konsole ]]; then
+        # A blank fifth field is an implicit panel, as in the approved example.
+        _vp_explicit=0
+        if [[ -n $_vp_layer ]]; then _vp_explicit=1; else _vp_layer=panel; fi
+        case $_vp_layer in panel|under|over) ;; *) plan_error 'invalid layer'; return 2 ;; esac
+        [[ -v total_counts[$_vp_desktop] ]] || desktop_groups+=("$_vp_desktop")
+        total_counts[$_vp_desktop]=$(( ${total_counts[$_vp_desktop]:-0} + 1 ))
+        implicit_counts[$_vp_desktop]=$(( ${implicit_counts[$_vp_desktop]:-0} + 1 - _vp_explicit ))
+        if [[ $_vp_layer == panel ]]; then
             terminal_counts[$_vp_desktop]=$(( ${terminal_counts[$_vp_desktop]:-0} + 1 ))
-            if (( terminal_counts[$_vp_desktop] > 4 )); then
-                plan_error "desktop [${_vp_desktop}] has more than four Konsole windows"; return 2
-            fi
         fi
+        planned_layer+=("$_vp_layer"); planned_explicit+=("$_vp_explicit")
         planned_desktop+=("$_vp_desktop")
         planned_program+=("$_vp_program")
         planned_mode+=("$_vp_mode")
         planned_target+=("$_vp_target")
+    done
+    for _vp_desktop in "${desktop_groups[@]}"; do
+        _vp_total=${total_counts[$_vp_desktop]}
+        if (( _vp_total > 256 )); then
+            plan_error 'desktop group exceeds bounded transaction cohort (256)'; return 2
+        fi
+        if (( ${implicit_counts[$_vp_desktop]} > dt_win_limit )); then
+            plan_error "desktop [$_vp_desktop] implicit entries exceed dt_win_limit"; return 2
+        fi
+        if (( _vp_total > dt_win_limit )); then
+            j_msg "-${warn}" -p "Desktop [$_vp_desktop]: explicit layers exceed ordinary layout budget [$_vp_total/$dt_win_limit]"
+        fi
+        if (( ${terminal_counts[$_vp_desktop]:-0} > 4 )); then
+            plan_error "desktop [$_vp_desktop] has more than four panel windows; allocator limit"; return 2
+        fi
     done
     return 0
 }
@@ -143,16 +180,17 @@ terminal_geometry() {
 }
 
 calculate_plan() {
-    local _cp_i _cp_desktop _cp_slot _cp_terminal_slot
+    local _cp_i _cp_desktop _cp_slot _cp_terminal_slot _cp_key _cp_offset _cp_warning _cp_dir
+    local -A _cp_cascade=()
+    local _cp_group _cp_layer _cp_preferred
     for ((_cp_i=0; _cp_i<${#planned_desktop[@]}; _cp_i++)); do
         _cp_desktop=${planned_desktop[$_cp_i]}
         _cp_slot=$(( ${next_slot[$_cp_desktop]:-0} + 1 ))
         next_slot[$_cp_desktop]=$_cp_slot
-        if [[ ${planned_program[$_cp_i]} == konsole ]]; then
+        if [[ ${planned_layer[$_cp_i]} == panel ]]; then
             _cp_terminal_slot=$(( ${terminal_slots[$_cp_desktop]:-0} + 1 ))
             terminal_slots[$_cp_desktop]=$_cp_terminal_slot
             terminal_geometry "${terminal_counts[$_cp_desktop]}" "$_cp_terminal_slot" || return $?
-            planned_layer+=(terminal)
         else
             # Provisional graphical underlay geometry. This does not control
             # KWin stacking or focus; these require later native validation.
@@ -160,7 +198,14 @@ calculate_plan() {
             geometry_y=$(( screen_height * graphical_top_percent / 100 ))
             geometry_width=$(( screen_width * graphical_width_percent / 100 ))
             geometry_height=$(( screen_height * graphical_height_percent / 100 ))
-            planned_layer+=(underlay-proposed)
+            # Share a cascade across under/over entries in desktop-local file
+            # order, avoiding identical cross-layer rectangles where room exists.
+            _cp_key=$_cp_desktop
+            _cp_offset=$(( ${_cp_cascade[$_cp_key]:-0} * min_window_exposure_px ))
+            _cp_cascade[$_cp_key]=$(( ${_cp_cascade[$_cp_key]:-0} + 1 ))
+            geometry_x=$(( geometry_x + _cp_offset )); geometry_y=$(( geometry_y + _cp_offset ))
+            (( geometry_x + geometry_width <= screen_width )) || geometry_x=$(( screen_width - geometry_width ))
+            (( geometry_y + geometry_height <= screen_height )) || geometry_y=$(( screen_height - geometry_height ))
         fi
         if (( geometry_width < 1 || geometry_height < 1 || geometry_x < 0 || geometry_y < 0 ||
             geometry_x + geometry_width > screen_width || geometry_y + geometry_height > screen_height )); then
@@ -171,11 +216,35 @@ calculate_plan() {
         planned_width+=("$geometry_width"); planned_height+=("$geometry_height")
         j_msg "-${debug}" -p "Planned desktop [${_cp_desktop}] slot [${_cp_slot}]: ${geometry_x},${geometry_y} ${geometry_width}x${geometry_height}"
     done
+    for _cp_group in "${desktop_groups[@]}"; do
+        planned_stack_slots[$_cp_group]=""; _cp_preferred=""
+        for _cp_layer in under panel over; do
+            for ((_cp_i=0; _cp_i<${#planned_desktop[@]}; _cp_i++)); do
+                if [[ ${planned_desktop[$_cp_i]} == "$_cp_group" && ${planned_layer[$_cp_i]} == "$_cp_layer" ]]; then
+                    planned_stack_slots[$_cp_group]+="${planned_slot[$_cp_i]} "
+                    [[ $_cp_layer == under ]] || _cp_preferred=${planned_slot[$_cp_i]}
+                fi
+            done
+        done
+        preferred_slot[$_cp_group]=$_cp_preferred
+        _cp_preferred=${preferred_slot[$_cp_group]}
+        j_msg "-${info}" -m "Desktop [$_cp_group]: implicit [${implicit_counts[$_cp_group]}], explicit [$(( total_counts[$_cp_group] - implicit_counts[$_cp_group] ))]; initial stack slots bottom-to-top [${planned_stack_slots[$_cp_group]}], preferred focus slot [${_cp_preferred:-none}] (intent only)"
+    done
+    _cp_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+    _cp_warning=$(
+        for ((_cp_i=0; _cp_i<${#planned_desktop[@]}; _cp_i++)); do
+            printf '%s %s %s %s %s %s %s\n' "${planned_desktop[$_cp_i]}" "${planned_layer[$_cp_i]}" "${planned_slot[$_cp_i]}" \
+                "${planned_x[$_cp_i]}" "${planned_y[$_cp_i]}" "${planned_width[$_cp_i]}" "${planned_height[$_cp_i]}"
+        done | python3 "$_cp_dir/joetoo-kwin-exposure.py" "$min_window_exposure_px"
+    ) || return 1
+    while IFS= read -r _cp_warning; do
+        [[ -z $_cp_warning ]] || j_msg "-${warn}" -p "$_cp_warning (frame prediction; compositor/decorations may differ)"
+    done <<< "$_cp_warning"
     return 0
 }
 
 print_plan() {
-    local _pp_i _pp_col _pp_length _pp_padding _pp_line _pp_color
+    local _pp_i _pp_col _pp_length _pp_padding _pp_line _pp_color _pp_layer
     local -a _pp_cells=(Desktop Slot Program Mode Target Layer X Y Width Height)
     local -a _pp_widths=()
     if [[ ${1:-dry-run} == launch ]]; then
@@ -183,6 +252,13 @@ print_plan() {
     else
         j_msg "-${notice}" -p "DRY RUN: [${#planned_desktop[@]}] windows; planner launches no applications"
     fi
+    j_msg "-${notice}" -p "Execution desktop groups: [${desktop_groups[*]}]; preserve entry order within each group"
+    for _pp_layer in "${planned_layer[@]}"; do
+        if [[ $_pp_layer != panel ]]; then
+            j_msg "-${notice}" -p 'Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation'
+            break
+        fi
+    done
     j_msg "-${notice}" -p "The sourced trusted Bash configuration may have side effects."
     j_msg "-${notice}" -p "Configured display: [${screen_width}x${screen_height}] (not autodetected); terminal width budget: [${terminal_width_percent}%]"
     for ((_pp_i=0; _pp_i<${#planned_desktop[@]}; _pp_i++)); do

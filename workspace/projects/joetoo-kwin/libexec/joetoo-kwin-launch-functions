@@ -39,12 +39,15 @@ launch_preflight() {
         and (.placement_transaction.state == "IDLE" or .placement_transaction.state == "OK"
              or .placement_transaction.state == "ERROR")' <<< "$_lp_status" >/dev/null || {
         plan_error 'broker state unresolved or required preflight interface unavailable'; return 1; }
+    jq -e '.initial_layout_protocol == 1 and .initial_layout_active == false' <<< "$_lp_status" >/dev/null || {
+        plan_error 'compatible initial-layout resident/broker required, or initial layout Busy'; return 1; }
     _lp_managed=$(qdbus6 "$bus" "$path" "$iface.ListManaged") || return 1
     jq -e '.windows | type == "array" and all(.[]; (.intended.desktop | type == "number")
         and (.intended.slot | type == "number"))' <<< "$_lp_managed" >/dev/null || return 1
     _lp_observed=$(qdbus6 "$bus" "$path" "$iface.ListObserved") || return 1
     jq -e '.windows | type == "array"' <<< "$_lp_observed" >/dev/null || return 1
-    for ((_lp_i=${1:-0}; _lp_i<${#planned_desktop[@]}; _lp_i++)); do
+    for ((_lp_i=0; _lp_i<${#planned_desktop[@]}; _lp_i++)); do
+        [[ ! ${launch_finished[${planned_desktop[$_lp_i]}]:-} && ! ${launch_done_entry[$_lp_i]:-} ]] || continue
         _lp_conflicts=$(jq -r --argjson d "${planned_desktop[$_lp_i]}" --argjson s "${planned_slot[$_lp_i]}" \
             '.windows[] | select(.intended.desktop == $d and .intended.slot == $s) | .managed_id' <<< "$_lp_managed") || return 1
         [[ -z $_lp_conflicts ]] || { plan_error "managed desktop/slot conflict [$_lp_conflicts]"; return 2; }
@@ -87,7 +90,9 @@ lock_configured_launcher() {
 }
 
 open_plan() {
-    local _op_dir _op_i _op_failed=0 _op_rc _op_state _op_status
+    local _op_dir _op_i _op_failed=0 _op_initial_failed=0 _op_rc _op_state _op_status _op_group _op_payload _op_layout _op_try
+    local -A launch_finished=() launch_done_entry=()
+    local -a _op_entries=()
     lock_configured_launcher || return 1
     _op_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
     # When sourced, this helper's directory is libexec.
@@ -110,7 +115,10 @@ open_plan() {
     fi
     confirm_continue_or_exit || return 1
     _op_capacity=$(launch_resource provision "$_op_required" "$_op_capacity") || return 1
-    for ((_op_i=0; _op_i<${#planned_desktop[@]}; _op_i++)); do
+    for _op_group in "${desktop_groups[@]}"; do
+      _op_entries=()
+      for ((_op_i=0; _op_i<${#planned_desktop[@]}; _op_i++)); do
+        [[ ${planned_desktop[$_op_i]} == "$_op_group" ]] || continue
         # Recheck after confirmation and between entries; broker independently
         # guards each actual submission against concurrent conflicting launches.
         launch_preflight "$_op_i" || return 1
@@ -138,7 +146,43 @@ open_plan() {
         jq -e '.state == "registered" or .state == "failed"' <<< "$_op_state" >/dev/null || return 1
         _op_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$launch_placement_id") || return 1
         case $_op_status in OK*|ERROR*) ;; *) j_msg "-${err}" -p 'Unresolved placement; stopping incomplete layout'; return 1 ;; esac
+        launch_done_entry[$_op_i]=$TRUE
+        if (( _op_rc == 0 )); then
+            _op_entries+=("$(jq -cn --arg id "$launch_registration_id" --arg layer "${planned_layer[$_op_i]}" \
+                '{registration_request_id:$id,layer:$layer}')")
+        fi
+      done
+      if (( ${#_op_entries[@]} > 0 )); then
+        _op_payload=$(printf '%s\n' "${_op_entries[@]}" | jq -sc \
+            --argjson timeout "$initial_focus_timeout_ms" --argjson interval "$initial_focus_poll_interval_ms" \
+            '{entries:.,focus_timeout_ms:$timeout,focus_poll_interval_ms:$interval}') || return 1
+        _op_layout=$(qdbus6 "$bus" "$path" "$iface.SubmitInitialLayout" "$_op_payload") || return 1
+        qdbus6 org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut joetoo_bridge_initial_layout >/dev/null || return 1
+        _op_state=""
+        j_msg "-${notice}" -p "Initializing desktop [$_op_group] stack/focus; geometry remains separately verified"
+        for ((_op_try=0; _op_try<100; _op_try++)); do
+            _op_state=$(qdbus6 "$bus" "$path" "$iface.InitialLayoutStatus" "$_op_layout") || return 1
+            _op_status=$(jq -er '.state' <<< "$_op_state") || return 1
+            case $_op_status in SUCCEEDED|FAILED) break ;; PENDING|RUNNING) sleep .1 ;; *) return 1 ;; esac
+        done
+        j_msg "-${notice}" -pn "Desktop [$_op_group] initial stacking/focus result:"
+        if [[ $_op_status == SUCCEEDED ]]; then
+            report_action 0 "$notice" || return 1
+        else
+            report_action 1 "$notice" || :
+        fi
+        j_msg "-${info}" -m "Initial layout: $_op_state"
+        if [[ $_op_status != SUCCEEDED ]]; then
+            j_msg "-${err}" -p "Initial stack/focus incomplete: $_op_state"
+            [[ $_op_status == FAILED ]] || return 1
+            _op_initial_failed=$((_op_initial_failed + 1))
+        fi
+      fi
+      launch_finished[$_op_group]=$TRUE
     done
+    if (( _op_initial_failed > 0 )); then
+        j_msg "-${err}" -p "Initial stacking/focus incomplete for [$_op_initial_failed] desktop groups; window placement results remain separate"
+    fi
     j_msg "-${notice}" -pn "Configured layout: [$(( ${#planned_desktop[@]} - _op_failed ))/${#planned_desktop[@]}] windows completed ..."
-    if (( _op_failed == 0 )); then report_action 0 "$notice"; else report_action 1 "$notice"; fi
+    if (( _op_failed == 0 && _op_initial_failed == 0 )); then report_action 0 "$notice"; else report_action 1 "$notice"; fi
 }

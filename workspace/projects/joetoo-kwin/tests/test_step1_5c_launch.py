@@ -53,7 +53,7 @@ launch_resource() {
 ''')
         self.env['BROKER_STATE'] = json.dumps({'observation': {'synchronized': True},
             'presence_counts': {'uncertain': 0}, 'request_counts': {'pending': 0, 'running': 0},
-            'placement_transaction': {'state': 'IDLE'}})
+            'placement_transaction': {'state': 'IDLE'}, 'initial_layout_protocol': 1, 'initial_layout_active': False})
         self.env['MANAGED'] = '{"windows":[]}'
         self.write_config(['1|konsole|local|btop', '2|konsole|local|btop'])
         self.client.write_text(self.client.read_text().replace('#-----[ main script ]', r'''
@@ -65,6 +65,8 @@ qdbus6() {
     *.ListManaged) printf '%s\n' "$MANAGED" ;;
     *.ListObserved) printf '%s\n' '{"windows":[]}' ;;
     *.PollManagedLaunch) printf '%s\n' "{\"state\":\"${REG_STATE:-registered}\"}" ;;
+    *.SubmitInitialLayout) printf 'initial-layout-id\n' ;;
+    *.InitialLayoutStatus) printf '{"state":"SUCCEEDED","stacking":"verified","focus":"verified"}\n' ;;
     *.Status) printf '%s\n' "${PLACEMENT_STATE:-OK}" ;;
     esac
 }

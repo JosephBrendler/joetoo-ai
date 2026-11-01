@@ -1,0 +1,12 @@
+✔ tests/test_initial_layout.js (50.435276ms)
+✔ tests/test_step1_3a.js (45.881434ms)
+✔ tests/test_step1_4d_placement.js (45.037177ms)
+✔ tests/test_step1_5b_move.js (46.391479ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 58.451126

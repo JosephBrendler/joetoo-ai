@@ -26,12 +26,15 @@ class PlannerHarness:
         self.addCleanup(self.tmp.cleanup)
         self.folder = Path(self.tmp.name)
         (self.folder / 'libexec').mkdir()
+        shutil.copyfile(ROOT / 'libexec/joetoo-kwin-exposure.py', self.folder / 'libexec/joetoo-kwin-exposure.py')
         shutil.copyfile(ROOT / 'libexec/joetoo-kwin-plan-functions',
                         self.folder / 'libexec/joetoo-kwin-plan-functions')
         self.client = self.folder / 'joetoo-kwin'
         self.config = self.folder / 'layout.conf'
         self.calls = self.folder / 'calls'
+        (self.folder / 'home').mkdir()
         self.env = {**os.environ, 'TRACE': str(self.calls), 'verbosity': '5',
+                    'HOME': str(self.folder / 'home'), 'XDG_CONFIG_HOME': str(self.folder / 'xdg'),
                     'INTERACTIVE': '', 'QUIET': '', 'DEBUG': '', 'LOGGING': '',
                     'TERM': 'dumb', 'JOETOO_HEADER_DIR': '/usr/sbin',
                     'PATH': str(self.folder) + os.pathsep + os.environ['PATH']}
@@ -77,17 +80,16 @@ class PlannerHarness:
         plain = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', output)
         lines = plain.splitlines()
         header = next(line for line in lines if 'Desktop' in line and 'Target' in line)
-        data = [line for line in lines if target in line or 'underlay-proposed' in line]
+        data = [line for line in lines if re.search(r'\b(?:konsole|vncviewer)\s+(?:ssh|via-ssh)\s+', line)]
         # Ignore diagnostics/config lines; these two rows carry geometry cells.
-        data = [line for line in data if re.search(r'\b(?:terminal|underlay-proposed)\s+\d+', line)]
+        data = [line for line in data if re.search(r'\b(?:panel|under|over)\s+\d+', line)]
         self.assertEqual(len(data), 2)
         self.assertIn(target, data[0])
         self.assertEqual(data[0].index(target), header.index('Target'))
         for line in data:
             self.assertEqual(line.index('konsole') if 'konsole' in line else line.index('vncviewer'),
                              header.index('Program'))
-            self.assertEqual(line.index('terminal') if 'underlay-proposed' not in line
-                             else line.index('underlay-proposed'), header.index('Layer'))
+            self.assertEqual(line.index('panel'), header.index('Layer'))
             fields = line[header.index('Layer'):].split()
             self.assertEqual(len(fields), 5)
             self.assertEqual(line.index(fields[1], header.index('Layer')), header.index('X'))
@@ -143,13 +145,13 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
                     self.assertGreater(rects[2][1], rects[0][1] + rects[0][3])
 
     def test_graphical_windows_do_not_consume_terminal_slots(self):
-        self.write_config(['1|konsole|ssh|unreachable.invalid', '1|vncviewer|via-ssh|host',
+        self.write_config(['1|konsole|ssh|unreachable.invalid', '1|vncviewer|via-ssh|host|under',
                            '1|konsole|direct|', '2|konsole|direct|'])
         rows = self.rows(self.plan())
         self.assertEqual([row[1] for row in rows], ['1', '2', '3', '1'])
         self.assertEqual(rows[0][-4:], ['19', '54', '816', '918'])
         self.assertEqual(rows[2][-4:], ['873', '54', '816', '918'])
-        self.assertEqual(rows[1][5], 'underlay-proposed')
+        self.assertEqual(rows[1][5], 'under')
         self.assertEqual(rows[3][-2:], ['1670', '918'])
 
     def test_custom_offsets_height_and_row_gutters(self):
@@ -180,7 +182,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
         for records in ([], ['1|konsole|direct|'] * 5, ['0|konsole|direct|'],
                         ['257|konsole|direct|'], ['01|konsole|direct|'],
                         ['1|konsole|ssh|'], ['1|konsole|bad|host'],
-                        ['1|konsole|direct'], ['1|konsole|direct||'],
+                        ['1|konsole|direct'], ['1|konsole|direct||invalid'],
                         ['1|/usr/bin/konsole|direct|'], ['1|konsole|local|a\nb']):
             with self.subTest(records=records):
                 self.write_config(records)
@@ -213,7 +215,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
         reads = self.folder / 'config-reads'
         self.write_config(extra=f'printf "read\\n" >> "{reads}"')
         self.client.write_text(self.client.read_text().replace(
-            'config=/etc/joetoo-kwin/joetoo-kwin.conf', f'config="{self.config}"'))
+            '/etc/joetoo-kwin/joetoo-kwin.conf', str(self.config)))
         self.run_cli('-c')
         self.assertEqual(reads.read_text(), 'read\n')
 

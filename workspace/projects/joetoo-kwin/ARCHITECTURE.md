@@ -54,6 +54,16 @@ The `joetoo-kwin` CLI must not run as root or initiate root-level SSH.
 
 **Synchronization of current window inventory:** When the broker starts or reconnects to an already-running KWin resident, it must automatically request a complete current-window inventory. This synchronization must be idempotent, tolerate concurrent window events, and must not confer managed ownership on observed windows. The existing manual joetoo_bridge_observe shortcut remains available for diagnostics. Managed-window checkpoint recovery is a separate responsibility addressed in Step 1.7.
 
+**Configuration discovery and packaging contract (accepted):**
+
+The joetoo-kwin user configuration is resolved from `${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf`, falling back to `/etc/joetoo-kwin/joetoo-kwin.conf` when the user configuration is absent. An explicit `-f` takes precedence. Existing validation and unreadable-configuration error semantics remain authoritative.
+
+`XDG_CONFIG_HOME` will resolve the preferred config file if set, but it need not be defined; `$HOME/.config` is its standard default. The package shall not require users to set this variable or modify shell initialization files.
+
+Packaging shall provide a documented configuration template and explain how users can create an optional per-user override. The ebuild should communicate this through a post-install informational message. Package installation shall not automatically write into individual users' home directories or replace their configurations.
+
+The exact installed template path and ebuild implementation belong to the packaging integration task.
+
 ## 4. Identity, ownership; launch configuration and transactions
 
 **Runtime identities:** joetoo-assigned logical identifiers and
@@ -131,6 +141,16 @@ launch becomes managed. Uncertain matches must not become close targets.
 4. Record matched `window_uuid` and current metadata, request KWin placement, verify readback when settled, and complete the transaction with a structured result. Keep launch and placement outcomes distinct.
 5. On timeout or ambiguous matches, report **unmatched/ambiguous** and never take ownership of an arbitrary class-matching window.
 
+### Configuration and operational bounds
+
+**Requirement:** User-adjustable operational parameters shall govern joetoo-kwin's layout planning, resource limits, timing, and transaction behavior rather than relying on unnecessarily hardcoded implementation values.
+
+- **Layout and capacity:** Parameters such as `desktop_limit`, `dt_win_limit`, geometry percentages, gutters, and `min_window_exposure_px` shall be configurable.
+- **Timing and coordination:** Operational timeouts, polling intervals, retry delays, observation windows, transaction leases, and similar timing parameters shall be configurable.
+- **Defaults:** Each user-adjustable parameter shall have a documented default assignment in `joetoo-kwin-template.conf`, allowing ordinary operation without mandatory customization.
+- **Validation:** Parameters shall have defined units, supported ranges, and appropriate cross-parameter constraints. Invalid settings must fail predictably; configurable limits must not defeat bounded execution, resource safeguards, or ownership protections.
+- **Component boundaries:** The CLI shall validate effective configuration values and convey relevant parameters explicitly to the broker or KWin resident as needed; independently running components must not assume access to the launcher's Bash variables.
+- **Compatibility:** New parameters shall follow these requirements. Existing hardcoded operational values should be inventoried and migrated through focused, reviewable increments without unnecessarily changing established behavior.
 
 ## 5. Working registry and operation outcomes
 

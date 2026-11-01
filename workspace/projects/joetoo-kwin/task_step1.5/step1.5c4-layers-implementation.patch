@@ -1,0 +1,2068 @@
+diff --git a/joetoo-kwin b/joetoo-kwin
+index e6b684f..b514855 100755
+--- a/joetoo-kwin
++++ b/joetoo-kwin
+@@ -28,14 +28,15 @@ iface=org.joetoo.KWinBridge
+ 
+ usage() {
+     j_msg "-${notice}" -p "Usage: ${PN} [-v|-q ...] -c [-f CONFIG]  (dry run; trusted Bash config)"
+-    j_msg "-${notice}" -p "       CONFIG defaults to /etc/joetoo-kwin/joetoo-kwin.conf; set screen_width/screen_height explicitly"
++    j_msg "-${notice}" -p "       CONFIG: XDG user configuration, then /etc/joetoo-kwin/joetoo-kwin.conf; set screen_width/screen_height explicitly"
++    j_msg "-${notice}" -p "       User file: \${XDG_CONFIG_HOME:-\$HOME/.config}/joetoo-kwin/joetoo-kwin.conf (relative XDG values ignored)"
+     j_msg "-${notice}" -p "Usage: ${PN} [-f CONFIG] -m [DESKTOP] l|r"
+     j_msg "-${notice}" -p "       ${PN} -m DESKTOP | DESKTOP X Y | [DESKTOP] X Y WIDTH HEIGHT"
+     j_msg "-${notice}" -p "       ${PN} move DESKTOP X Y WIDTH HEIGHT  (compatibility)"
+     j_msg "-${notice}" -p "       ${PN} test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]"
+     j_msg "-${notice}" -p "       ${PN} test-multi-launch  (TEST ONLY: register 4 local Konsoles)"
+     j_msg "-${notice}" -p "       ${PN} -h"
+-    j_msg "-${notice}" -p "       ${PN} -o [-f CONFIG] (confirm and launch configured Konsoles)"
++    j_msg "-${notice}" -p "       ${PN} -o [-f CONFIG] (confirm and initialize configured desktop groups)"
+ }
+ 
+ # Retain the positional move/test grammar. getopts handles common options and
+@@ -44,7 +45,7 @@ parse_cmdline() {
+     local _pc_opt
+     OPTIND=1
+     cli_operation=""
+-    config=/etc/joetoo-kwin/joetoo-kwin.conf
++    config=""
+     CONFIG_SELECTED=$FALSE
+     cli_verbosity=()
+     case ${1:-} in
+@@ -75,6 +76,19 @@ parse_cmdline() {
+     return 0
+ }
+ 
++select_config() {
++    [[ ! $CONFIG_SELECTED ]] || return 0
++    local _sc_home=${XDG_CONFIG_HOME:-$HOME/.config} _sc_user _sc_system=/etc/joetoo-kwin/joetoo-kwin.conf
++    [[ $_sc_home == /* ]] || _sc_home=$HOME/.config
++    _sc_user=$_sc_home/joetoo-kwin/joetoo-kwin.conf
++    if [[ -e $_sc_user || -L $_sc_user ]]; then config=$_sc_user
++    elif [[ -e $_sc_system || -L $_sc_system ]]; then config=$_sc_system
++    else
++        j_msg "-${err}" -p "No configuration: create [$_sc_user] or select -f CONFIG; system fallback [$_sc_system] absent"
++        return 2
++    fi
++}
++
+ apply_cli_verbosity() {
+     local _acv_opt
+     if [[ ! $verbosity =~ ^[0-7]$ ]]; then
+@@ -125,6 +139,7 @@ check_plan() {
+     # Candidate helper is colocated under libexec; no installed-file changes.
+     source "${_cp_script_dir}/libexec/joetoo-kwin-plan-functions" || return 1
+     plan_defaults
++    select_config || return $?
+     if [[ ! -f $config || ! -r $config ]]; then
+         j_msg "-${err}" -p "${PN}: configuration unreadable [${config}]"; return 2
+     fi
+@@ -137,6 +152,7 @@ check_plan() {
+     plan_stage "$info" 'Calculating shared geometry' calculate_plan || return $?
+     # Explicit varlist avoids unrelated workflow/status-file initialization.
+     local varlist="PN BUILD config verbosity screen_width screen_height desktop_limit"
++    varlist+=" dt_win_limit min_window_exposure_px"
+     varlist+=" terminal_width_percent terminal_gap_percent terminal_height_percent"
+     varlist+=" terminal_left_percent terminal_top_percent terminal_row_gap_percent"
+     varlist+=" graphical_left_percent graphical_top_percent graphical_width_percent graphical_height_percent"
+@@ -296,6 +312,7 @@ move_window() {
+         _mw_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+         source "${_mw_dir}/libexec/joetoo-kwin-plan-functions" || return 1
+         plan_defaults
++        select_config || return $?
+         [[ -f $config && -r $config ]] || { bad_args 'layout configuration unreadable'; return 2; }
+         # Trusted Bash config; CLI verbosity takes precedence after sourcing.
+         # shellcheck source=/dev/null
+diff --git a/joetoo-kwin-resident.js b/joetoo-kwin-resident.js
+index 8c4d177..d10e681 100644
+--- a/joetoo-kwin-resident.js
++++ b/joetoo-kwin-resident.js
+@@ -371,7 +371,10 @@ function reportExistingWindows() {
+     // the broker validates it first, then atomically replaces its current map.
+     // KWin runs this enumeration synchronously on its scripting thread.
+     callDBus(BRIDGE, PATH, BRIDGE, "SyncInventory", JSON.stringify({
+-        source: observerSource, revision: ++observerRevision, windows: snapshots, move_protocol: 1
++        source: observerSource, revision: ++observerRevision, windows: snapshots, move_protocol: 1,
++        initial_layout_protocol: typeof workspace.raiseWindow === "function" && workspace.stackingOrder &&
++            workspace.currentDesktop && Number.isInteger(Number(workspace.currentDesktop.x11DesktopNumber)) &&
++            typeof workspace.activeWindow !== "undefined" ? 1 : 0
+     }));
+ }
+ 
+@@ -390,3 +393,65 @@ registerShortcut("joetoo_bridge_observe", "Joetoo refresh window observations",
+                  "", reportExistingWindows);
+ reportExistingWindows();
+ // ---------------- End Step 1.3a observational extension ---------------------
++
++// Initialization-only, positively registered cohort. Never select the active
++// window as an operation target, and never subscribe to later user overrides.
++function initialLayoutFromBroker() {
++    const beforeActive = workspace.activeWindow;
++    const beforeDesktop = workspace.currentDesktop;
++    const beforeDesktopId = String(beforeDesktop && beforeDesktop.id);
++    const beforeDesktopNumber = Number(beforeDesktop && beforeDesktop.x11DesktopNumber);
++    const beforeActiveId = windowUUID(beforeActive);
++    const started = Date.now();
++    callDBus(BRIDGE, PATH, BRIDGE, "TakeInitialLayout", observerSource, function(payload) {
++        if (!payload) return;
++        let r;
++        try { r = JSON.parse(payload); } catch (err) { return; }
++        const result = {source: observerSource, order: [], focus_attempted: false,
++                        before_active_uuid: windowUUID(beforeActive),
++                        active_uuid: windowUUID(workspace.activeWindow),
++                        current_desktop: Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber),
++                        geometry_unchanged: false};
++        try {
++            if (r.source !== observerSource || !Number.isFinite(r.remaining_ms) ||
++                Date.now() - started < 0 || Date.now() - started >= r.remaining_ms ||
++                String(workspace.currentDesktop && workspace.currentDesktop.id) !== beforeDesktopId ||
++                Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber) !== beforeDesktopNumber ||
++                windowUUID(workspace.activeWindow) !== beforeActiveId) {
++                throw new Error("Initial layout stale or user focus/desktop changed during claim");
++            }
++            const available = workspace.stackingOrder;
++            const cohort = r.entries.map(e => {
++                const win = available.find(w => windowUUID(w) === e.uuid);
++                if (!win || win.deleted || win.fullScreen || win.keepAbove || win.keepBelow ||
++                    win.tile != null || win.maximizeMode !== 0) throw new Error("Missing/incompatible cohort window");
++                const g = win.frameGeometry;
++                const desktops = (win.desktops || []).map(d => Number(d.x11DesktopNumber));
++                if (["x", "y", "width", "height"].some(k => g[k] !== e.geometry[k]) ||
++                    JSON.stringify(desktops) !== JSON.stringify(e.desktops) ||
++                    Boolean(win.onAllDesktops) !== e.on_all_desktops) throw new Error("Cohort frame/membership changed");
++                return win;
++            });
++            if (typeof workspace.raiseWindow !== "function") throw new Error("KWin raiseWindow unavailable");
++            for (const id of r.order) workspace.raiseWindow(cohort.find(w => windowUUID(w) === id));
++            if (r.preferred_uuid && beforeDesktopNumber === r.entries[0].desktop) {
++                const target = cohort.find(w => windowUUID(w) === r.preferred_uuid);
++                if (!target || !(target.desktops || []).some(d => Number(d.x11DesktopNumber) === beforeDesktopNumber)) throw new Error("Preferred target is not visible on this desktop");
++                result.focus_attempted = true;
++                workspace.activeWindow = target;
++            }
++            // Read back after activation as activation itself may raise a window.
++            result.order = workspace.stackingOrder.map(windowUUID).filter(id => r.order.includes(id));
++            result.geometry_unchanged = cohort.every((w, i) =>
++                ["x", "y", "width", "height"].every(k => w.frameGeometry[k] === r.entries[i].geometry[k]) &&
++                JSON.stringify((w.desktops || []).map(d => Number(d.x11DesktopNumber))) === JSON.stringify(r.entries[i].desktops) &&
++                Boolean(w.onAllDesktops) === r.entries[i].on_all_desktops);
++        } catch (err) { result.error = String(err); }
++        result.active_uuid = windowUUID(workspace.activeWindow);
++        result.current_desktop = Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber);
++        if (String(workspace.currentDesktop && workspace.currentDesktop.id) !== beforeDesktopId ||
++            result.current_desktop !== beforeDesktopNumber) result.error = "Displayed desktop changed during initialization";
++        callDBus(BRIDGE, PATH, BRIDGE, "CompleteInitialLayout", r.id, JSON.stringify(result));
++    });
++}
++registerShortcut("joetoo_bridge_initial_layout", "Joetoo initial cohort layout", "", initialLayoutFromBroker);
+diff --git a/libexec/joetoo-kwin-launch-functions b/libexec/joetoo-kwin-launch-functions
+index 2f93075..da7f22a 100644
+--- a/libexec/joetoo-kwin-launch-functions
++++ b/libexec/joetoo-kwin-launch-functions
+@@ -39,12 +39,15 @@ launch_preflight() {
+         and (.placement_transaction.state == "IDLE" or .placement_transaction.state == "OK"
+              or .placement_transaction.state == "ERROR")' <<< "$_lp_status" >/dev/null || {
+         plan_error 'broker state unresolved or required preflight interface unavailable'; return 1; }
++    jq -e '.initial_layout_protocol == 1 and .initial_layout_active == false' <<< "$_lp_status" >/dev/null || {
++        plan_error 'compatible initial-layout resident/broker required, or initial layout Busy'; return 1; }
+     _lp_managed=$(qdbus6 "$bus" "$path" "$iface.ListManaged") || return 1
+     jq -e '.windows | type == "array" and all(.[]; (.intended.desktop | type == "number")
+         and (.intended.slot | type == "number"))' <<< "$_lp_managed" >/dev/null || return 1
+     _lp_observed=$(qdbus6 "$bus" "$path" "$iface.ListObserved") || return 1
+     jq -e '.windows | type == "array"' <<< "$_lp_observed" >/dev/null || return 1
+-    for ((_lp_i=${1:-0}; _lp_i<${#planned_desktop[@]}; _lp_i++)); do
++    for ((_lp_i=0; _lp_i<${#planned_desktop[@]}; _lp_i++)); do
++        [[ ! ${launch_finished[${planned_desktop[$_lp_i]}]:-} && ! ${launch_done_entry[$_lp_i]:-} ]] || continue
+         _lp_conflicts=$(jq -r --argjson d "${planned_desktop[$_lp_i]}" --argjson s "${planned_slot[$_lp_i]}" \
+             '.windows[] | select(.intended.desktop == $d and .intended.slot == $s) | .managed_id' <<< "$_lp_managed") || return 1
+         [[ -z $_lp_conflicts ]] || { plan_error "managed desktop/slot conflict [$_lp_conflicts]"; return 2; }
+@@ -87,7 +90,9 @@ lock_configured_launcher() {
+ }
+ 
+ open_plan() {
+-    local _op_dir _op_i _op_failed=0 _op_rc _op_state _op_status
++    local _op_dir _op_i _op_failed=0 _op_initial_failed=0 _op_rc _op_state _op_status _op_group _op_payload _op_layout _op_try
++    local -A launch_finished=() launch_done_entry=()
++    local -a _op_entries=()
+     lock_configured_launcher || return 1
+     _op_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+     # When sourced, this helper's directory is libexec.
+@@ -110,7 +115,10 @@ open_plan() {
+     fi
+     confirm_continue_or_exit || return 1
+     _op_capacity=$(launch_resource provision "$_op_required" "$_op_capacity") || return 1
+-    for ((_op_i=0; _op_i<${#planned_desktop[@]}; _op_i++)); do
++    for _op_group in "${desktop_groups[@]}"; do
++      _op_entries=()
++      for ((_op_i=0; _op_i<${#planned_desktop[@]}; _op_i++)); do
++        [[ ${planned_desktop[$_op_i]} == "$_op_group" ]] || continue
+         # Recheck after confirmation and between entries; broker independently
+         # guards each actual submission against concurrent conflicting launches.
+         launch_preflight "$_op_i" || return 1
+@@ -138,7 +146,41 @@ open_plan() {
+         jq -e '.state == "registered" or .state == "failed"' <<< "$_op_state" >/dev/null || return 1
+         _op_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$launch_placement_id") || return 1
+         case $_op_status in OK*|ERROR*) ;; *) j_msg "-${err}" -p 'Unresolved placement; stopping incomplete layout'; return 1 ;; esac
++        launch_done_entry[$_op_i]=$TRUE
++        if (( _op_rc == 0 )); then
++            _op_entries+=("$(jq -cn --arg id "$launch_registration_id" --arg layer "${planned_layer[$_op_i]}" \
++                '{registration_request_id:$id,layer:$layer}')")
++        fi
++      done
++      if (( ${#_op_entries[@]} > 0 )); then
++        _op_payload=$(printf '%s\n' "${_op_entries[@]}" | jq -sc '{entries:.}') || return 1
++        _op_layout=$(qdbus6 "$bus" "$path" "$iface.SubmitInitialLayout" "$_op_payload") || return 1
++        qdbus6 org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut joetoo_bridge_initial_layout >/dev/null || return 1
++        _op_state=""
++        j_msg "-${notice}" -p "Initializing desktop [$_op_group] stack/focus; geometry remains separately verified"
++        for ((_op_try=0; _op_try<100; _op_try++)); do
++            _op_state=$(qdbus6 "$bus" "$path" "$iface.InitialLayoutStatus" "$_op_layout") || return 1
++            _op_status=$(jq -er '.state' <<< "$_op_state") || return 1
++            case $_op_status in SUCCEEDED|FAILED) break ;; PENDING|RUNNING) sleep .1 ;; *) return 1 ;; esac
++        done
++        j_msg "-${notice}" -pn "Desktop [$_op_group] initial stacking/focus result:"
++        if [[ $_op_status == SUCCEEDED ]]; then
++            report_action 0 "$notice" || return 1
++        else
++            report_action 1 "$notice" || :
++        fi
++        j_msg "-${info}" -m "Initial layout: $_op_state"
++        if [[ $_op_status != SUCCEEDED ]]; then
++            j_msg "-${err}" -p "Initial stack/focus incomplete: $_op_state"
++            [[ $_op_status == FAILED ]] || return 1
++            _op_initial_failed=$((_op_initial_failed + 1))
++        fi
++      fi
++      launch_finished[$_op_group]=$TRUE
+     done
++    if (( _op_initial_failed > 0 )); then
++        j_msg "-${err}" -p "Initial stacking/focus incomplete for [$_op_initial_failed] desktop groups; window placement results remain separate"
++    fi
+     j_msg "-${notice}" -pn "Configured layout: [$(( ${#planned_desktop[@]} - _op_failed ))/${#planned_desktop[@]}] windows completed ..."
+-    if (( _op_failed == 0 )); then report_action 0 "$notice"; else report_action 1 "$notice"; fi
++    if (( _op_failed == 0 && _op_initial_failed == 0 )); then report_action 0 "$notice"; else report_action 1 "$notice"; fi
+ }
+diff --git a/libexec/joetoo-kwin-plan-functions b/libexec/joetoo-kwin-plan-functions
+index ce6c2b4..979c71b 100644
+--- a/libexec/joetoo-kwin-plan-functions
++++ b/libexec/joetoo-kwin-plan-functions
+@@ -12,6 +12,8 @@ plan_defaults() {
+     screen_width=""
+     screen_height=""
+     desktop_limit=20
++    dt_win_limit=4
++    min_window_exposure_px=32
+     terminal_width_percent=87
+     terminal_gap_percent=2
+     terminal_height_percent=85
+@@ -72,23 +74,29 @@ validate_layout_geometry() {
+ 
+ validate_plan() {
+     local _vp_name _vp_value _vp_record _vp_delimiters _vp_declaration
+-    local _vp_desktop _vp_program _vp_mode _vp_target
++    local _vp_desktop _vp_program _vp_mode _vp_target _vp_layer _vp_explicit _vp_total
+     # Reset all derived state so rebuilding a plan cannot accumulate old entries.
+     declare -ga planned_desktop=() planned_slot=() planned_program=() planned_mode=() planned_target=()
+     declare -ga planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
+-    declare -gA terminal_counts=() terminal_slots=() next_slot=()
++    declare -ga planned_explicit=() desktop_groups=()
++    declare -gA preferred_slot=() planned_stack_slots=()
++    declare -gA implicit_counts=() total_counts=() terminal_counts=() terminal_slots=() next_slot=()
+ 
+     validate_layout_geometry || return $?
++    if [[ ! $dt_win_limit =~ ^[1-9][0-9]{0,2}$ || ! $min_window_exposure_px =~ ^[1-9][0-9]{0,4}$ ]] ||
++        (( dt_win_limit > 256 || min_window_exposure_px > 32768 )); then
++        plan_error 'invalid dt_win_limit (1..256) or min_window_exposure_px (1..32768)'; return 2
++    fi
+     _vp_declaration=$(declare -p desktop_session_list 2>/dev/null) || return 2
+     if [[ $_vp_declaration != 'declare -a '* || ${#desktop_session_list[@]} == 0 ]]; then
+         plan_error 'desktop_session_list must be a nonempty indexed Bash array'; return 2
+     fi
+     for _vp_record in "${desktop_session_list[@]}"; do
+         _vp_delimiters=${_vp_record//[^|]/}
+-        if (( ${#_vp_delimiters} != 3 )) || [[ $_vp_record == *[$'\n\r\t\e']* ]]; then
+-            plan_error "expected four single-line pipe-delimited fields: [${_vp_record}]"; return 2
++        if (( ${#_vp_delimiters} != 3 && ${#_vp_delimiters} != 4 )) || [[ $_vp_record == *[$'\n\r\t\e']* ]]; then
++            plan_error "expected four or five single-line pipe-delimited fields: [${_vp_record}]"; return 2
+         fi
+-        IFS='|' read -r _vp_desktop _vp_program _vp_mode _vp_target <<< "$_vp_record"
++        IFS='|' read -r _vp_desktop _vp_program _vp_mode _vp_target _vp_layer <<< "$_vp_record"
+         if [[ ! $_vp_desktop =~ ^[1-9][0-9]{0,2}$ ]] || (( _vp_desktop > desktop_limit )); then
+             plan_error "invalid desktop or desktop exceeds limit: [${_vp_desktop}]"; return 2
+         fi
+@@ -102,17 +110,37 @@ validate_plan() {
+         if [[ $_vp_mode != direct && -z $_vp_target && ! ( $_vp_program == dolphin && $_vp_mode == local ) ]]; then
+             plan_error "missing target for mode [${_vp_mode}]"; return 2
+         fi
+-        if [[ $_vp_program == konsole ]]; then
++        # A blank fifth field is an implicit panel, as in the approved example.
++        _vp_explicit=0
++        if [[ -n $_vp_layer ]]; then _vp_explicit=1; else _vp_layer=panel; fi
++        case $_vp_layer in panel|under|over) ;; *) plan_error 'invalid layer'; return 2 ;; esac
++        [[ -v total_counts[$_vp_desktop] ]] || desktop_groups+=("$_vp_desktop")
++        total_counts[$_vp_desktop]=$(( ${total_counts[$_vp_desktop]:-0} + 1 ))
++        implicit_counts[$_vp_desktop]=$(( ${implicit_counts[$_vp_desktop]:-0} + 1 - _vp_explicit ))
++        if [[ $_vp_layer == panel ]]; then
+             terminal_counts[$_vp_desktop]=$(( ${terminal_counts[$_vp_desktop]:-0} + 1 ))
+-            if (( terminal_counts[$_vp_desktop] > 4 )); then
+-                plan_error "desktop [${_vp_desktop}] has more than four Konsole windows"; return 2
+-            fi
+         fi
++        planned_layer+=("$_vp_layer"); planned_explicit+=("$_vp_explicit")
+         planned_desktop+=("$_vp_desktop")
+         planned_program+=("$_vp_program")
+         planned_mode+=("$_vp_mode")
+         planned_target+=("$_vp_target")
+     done
++    for _vp_desktop in "${desktop_groups[@]}"; do
++        _vp_total=${total_counts[$_vp_desktop]}
++        if (( _vp_total > 256 )); then
++            plan_error 'desktop group exceeds bounded transaction cohort (256)'; return 2
++        fi
++        if (( ${implicit_counts[$_vp_desktop]} > dt_win_limit )); then
++            plan_error "desktop [$_vp_desktop] implicit entries exceed dt_win_limit"; return 2
++        fi
++        if (( _vp_total > dt_win_limit )); then
++            j_msg "-${warn}" -p "Desktop [$_vp_desktop]: explicit layers exceed ordinary layout budget [$_vp_total/$dt_win_limit]"
++        fi
++        if (( ${terminal_counts[$_vp_desktop]:-0} > 4 )); then
++            plan_error "desktop [$_vp_desktop] has more than four panel windows; allocator limit"; return 2
++        fi
++    done
+     return 0
+ }
+ 
+@@ -143,16 +171,17 @@ terminal_geometry() {
+ }
+ 
+ calculate_plan() {
+-    local _cp_i _cp_desktop _cp_slot _cp_terminal_slot
++    local _cp_i _cp_desktop _cp_slot _cp_terminal_slot _cp_key _cp_offset _cp_warning _cp_dir
++    local -A _cp_cascade=()
++    local _cp_group _cp_layer _cp_preferred
+     for ((_cp_i=0; _cp_i<${#planned_desktop[@]}; _cp_i++)); do
+         _cp_desktop=${planned_desktop[$_cp_i]}
+         _cp_slot=$(( ${next_slot[$_cp_desktop]:-0} + 1 ))
+         next_slot[$_cp_desktop]=$_cp_slot
+-        if [[ ${planned_program[$_cp_i]} == konsole ]]; then
++        if [[ ${planned_layer[$_cp_i]} == panel ]]; then
+             _cp_terminal_slot=$(( ${terminal_slots[$_cp_desktop]:-0} + 1 ))
+             terminal_slots[$_cp_desktop]=$_cp_terminal_slot
+             terminal_geometry "${terminal_counts[$_cp_desktop]}" "$_cp_terminal_slot" || return $?
+-            planned_layer+=(terminal)
+         else
+             # Provisional graphical underlay geometry. This does not control
+             # KWin stacking or focus; these require later native validation.
+@@ -160,7 +189,14 @@ calculate_plan() {
+             geometry_y=$(( screen_height * graphical_top_percent / 100 ))
+             geometry_width=$(( screen_width * graphical_width_percent / 100 ))
+             geometry_height=$(( screen_height * graphical_height_percent / 100 ))
+-            planned_layer+=(underlay-proposed)
++            # Share a cascade across under/over entries in desktop-local file
++            # order, avoiding identical cross-layer rectangles where room exists.
++            _cp_key=$_cp_desktop
++            _cp_offset=$(( ${_cp_cascade[$_cp_key]:-0} * min_window_exposure_px ))
++            _cp_cascade[$_cp_key]=$(( ${_cp_cascade[$_cp_key]:-0} + 1 ))
++            geometry_x=$(( geometry_x + _cp_offset )); geometry_y=$(( geometry_y + _cp_offset ))
++            (( geometry_x + geometry_width <= screen_width )) || geometry_x=$(( screen_width - geometry_width ))
++            (( geometry_y + geometry_height <= screen_height )) || geometry_y=$(( screen_height - geometry_height ))
+         fi
+         if (( geometry_width < 1 || geometry_height < 1 || geometry_x < 0 || geometry_y < 0 ||
+             geometry_x + geometry_width > screen_width || geometry_y + geometry_height > screen_height )); then
+@@ -171,11 +207,35 @@ calculate_plan() {
+         planned_width+=("$geometry_width"); planned_height+=("$geometry_height")
+         j_msg "-${debug}" -p "Planned desktop [${_cp_desktop}] slot [${_cp_slot}]: ${geometry_x},${geometry_y} ${geometry_width}x${geometry_height}"
+     done
++    for _cp_group in "${desktop_groups[@]}"; do
++        planned_stack_slots[$_cp_group]=""; _cp_preferred=""
++        for _cp_layer in under panel over; do
++            for ((_cp_i=0; _cp_i<${#planned_desktop[@]}; _cp_i++)); do
++                if [[ ${planned_desktop[$_cp_i]} == "$_cp_group" && ${planned_layer[$_cp_i]} == "$_cp_layer" ]]; then
++                    planned_stack_slots[$_cp_group]+="${planned_slot[$_cp_i]} "
++                    [[ $_cp_layer == under ]] || _cp_preferred=${planned_slot[$_cp_i]}
++                fi
++            done
++        done
++        preferred_slot[$_cp_group]=$_cp_preferred
++        _cp_preferred=${preferred_slot[$_cp_group]}
++        j_msg "-${info}" -m "Desktop [$_cp_group]: implicit [${implicit_counts[$_cp_group]}], explicit [$(( total_counts[$_cp_group] - implicit_counts[$_cp_group] ))]; initial stack slots bottom-to-top [${planned_stack_slots[$_cp_group]}], preferred focus slot [${_cp_preferred:-none}] (intent only)"
++    done
++    _cp_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
++    _cp_warning=$(
++        for ((_cp_i=0; _cp_i<${#planned_desktop[@]}; _cp_i++)); do
++            printf '%s %s %s %s %s %s %s\n' "${planned_desktop[$_cp_i]}" "${planned_layer[$_cp_i]}" "${planned_slot[$_cp_i]}" \
++                "${planned_x[$_cp_i]}" "${planned_y[$_cp_i]}" "${planned_width[$_cp_i]}" "${planned_height[$_cp_i]}"
++        done | python3 "$_cp_dir/joetoo-kwin-exposure.py" "$min_window_exposure_px"
++    ) || return 1
++    while IFS= read -r _cp_warning; do
++        [[ -z $_cp_warning ]] || j_msg "-${warn}" -p "$_cp_warning (frame prediction; compositor/decorations may differ)"
++    done <<< "$_cp_warning"
+     return 0
+ }
+ 
+ print_plan() {
+-    local _pp_i _pp_col _pp_length _pp_padding _pp_line _pp_color
++    local _pp_i _pp_col _pp_length _pp_padding _pp_line _pp_color _pp_layer
+     local -a _pp_cells=(Desktop Slot Program Mode Target Layer X Y Width Height)
+     local -a _pp_widths=()
+     if [[ ${1:-dry-run} == launch ]]; then
+@@ -183,6 +243,13 @@ print_plan() {
+     else
+         j_msg "-${notice}" -p "DRY RUN: [${#planned_desktop[@]}] windows; planner launches no applications"
+     fi
++    j_msg "-${notice}" -p "Execution desktop groups: [${desktop_groups[*]}]; preserve entry order within each group"
++    for _pp_layer in "${planned_layer[@]}"; do
++        if [[ $_pp_layer != panel ]]; then
++            j_msg "-${notice}" -p 'Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation'
++            break
++        fi
++    done
+     j_msg "-${notice}" -p "The sourced trusted Bash configuration may have side effects."
+     j_msg "-${notice}" -p "Configured display: [${screen_width}x${screen_height}] (not autodetected); terminal width budget: [${terminal_width_percent}%]"
+     for ((_pp_i=0; _pp_i<${#planned_desktop[@]}; _pp_i++)); do
+diff --git a/libexec/joetoo-kwind b/libexec/joetoo-kwind
+index 36b7d91..42e1d0e 100755
+--- a/libexec/joetoo-kwind
++++ b/libexec/joetoo-kwind
+@@ -127,6 +127,8 @@ class Broker(dbus.service.Object):
+         self.observation_source = None
+         self.observation_revision = -1
+         self.observation_synced = False
++        self.initial_layout = None
++        self.initial_layout_protocol = 0
+         self.move_protocol = 0  # Advertised by the synchronized resident, not inferred.
+         # Step 1.3b diagnostic-only: one pending correlation probe. This is
+         # deliberately NOT the managed-window registry of Step 1.4.
+@@ -137,6 +139,8 @@ class Broker(dbus.service.Object):
+         self._managed_correlation = None
+ 
+     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
++        if self._initial_layout_active():
++            raise dbus.DBusException("Initial layout is still active", name=IFACE + ".Busy")
+         # Shared implementation for Submit (move) and SubmitLaunch (launch).
+         # `_submit` is an internal Python method, not an exported D-Bus name.
+         # In-flight verification is still a placement request: never allow a
+@@ -505,6 +509,130 @@ class Broker(dbus.service.Object):
+         return json.dumps(self._poll_managed_launch(request_id), sort_keys=True)
+ 
+ 
++    def _initial_layout_active(self):
++        r = self.initial_layout
++        if r is None or r["state"] not in ("PENDING", "RUNNING"):
++            return False
++        if (time.monotonic() >= r["deadline"] or not self.observation_synced
++                or r["source"] != self.observation_source
++                or any(item["uuid"] not in self.observed_windows
++                       or (record := self.registry.get_window(item["uuid"])) is None
++                       or record.presence != "present"
++                       for item in r["entries"])):
++            r.update(state="FAILED", detail="Initial layout expired or cohort/source disappeared")
++            return False
++        return True
++
++    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
++    def SubmitInitialLayout(self, payload):
++        """Freeze broker-owned registrations, never accept launcher-selected UUIDs."""
++        self._advance_placement()
++        self._expire_managed_correlation()
++        if (self._initial_layout_active() or
++                (self.request and self.request["state"] in ("PENDING", "RUNNING", "VERIFYING")) or
++                any(r.state in ("pending", "running") for r in self.registry.requests.values()) or
++                (self.correlation and self.correlation["state"] == "PENDING"
++                 and time.monotonic() < self.correlation["deadline"])):
++            raise dbus.DBusException("Another transaction is active", name=IFACE + ".Busy")
++        if not self.observation_synced or self.initial_layout_protocol != 1:
++            raise dbus.DBusException("Resident lacks initial-layout protocol 1", name=IFACE + ".Unsupported")
++        try:
++            if len(payload) > 65536:
++                raise ValueError("layout payload too large")
++            message = json.loads(payload)
++            if set(message) != {"entries"} or not 1 <= len(message["entries"]) <= 256:
++                raise ValueError("invalid cohort")
++            entries = []
++            for item in message["entries"]:
++                if set(item) != {"registration_request_id", "layer"} or item["layer"] not in ("under", "panel", "over"):
++                    raise ValueError("invalid layer entry")
++                launch = self.registry.requests[item["registration_request_id"]]
++                record = self.registry.get_window(launch.result) if launch.state == "succeeded" else None
++                if (record is None or record.presence != "present" or record.placement != "succeeded"
++                        or launch.source != self.observation_source):
++                    raise ValueError("registration not positively placed/present")
++                observed = self.observed_windows[record.window_uuid]
++                if observed["desktops"] != [record.recipe["desktop"]] or observed["on_all_desktops"]:
++                    raise ValueError("cohort moved away from intended desktop before initialization")
++                entries.append({"uuid": record.window_uuid, "layer": item["layer"],
++                                "desktop": record.recipe["desktop"],
++                                "geometry": dict(observed["geometry"]),
++                                "desktops": list(observed["desktops"]),
++                                "on_all_desktops": observed["on_all_desktops"]})
++            if len({e["uuid"] for e in entries}) != len(entries) or len({e["desktop"] for e in entries}) != 1:
++                raise ValueError("duplicate UUID or mixed desktop groups")
++        except (ValueError, KeyError, TypeError, AttributeError, RegistryError) as exc:
++            raise dbus.DBusException(str(exc), name=IFACE + ".BadArguments") from exc
++        preferred = next((e["uuid"] for layer in ("over", "panel")
++                          for e in reversed(entries) if e["layer"] == layer), None)
++        ordered = [e["uuid"] for layer in ("under", "panel", "over") for e in entries if e["layer"] == layer]
++        self.initial_layout = dict(id=uuid.uuid4().hex, state="PENDING", entries=entries,
++                                   order=ordered, preferred_uuid=preferred,
++                                   source=self.observation_source, deadline=time.monotonic() + 10,
++                                   geometry="placed", stacking="pending", focus="pending", detail="")
++        return self.initial_layout["id"]
++
++    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
++    def TakeInitialLayout(self, source):
++        if not self._initial_layout_active():
++            return ""
++        r = self.initial_layout
++        if r["state"] != "PENDING" or source != r["source"]:
++            return ""
++        r["state"] = "RUNNING"
++        return json.dumps({key: r[key] for key in ("id", "entries", "order", "preferred_uuid", "source")} |
++                          {"remaining_ms": max(0, int((r["deadline"] - time.monotonic()) * 1000))})
++
++    @dbus.service.method(IFACE, in_signature="ss", out_signature="")
++    def CompleteInitialLayout(self, request_id, payload):
++        if not self._initial_layout_active() or self.initial_layout["id"] != request_id or self.initial_layout["state"] != "RUNNING":
++            raise dbus.DBusException("Inactive initial layout", name=IFACE + ".InvalidRequest")
++        r = self.initial_layout
++        try:
++            if len(payload) > 65536:
++                raise ValueError("completion too large")
++            result = json.loads(payload)
++            if type(result.get("current_desktop")) is not int or type(result.get("focus_attempted")) is not bool:
++                raise ValueError("invalid focus observation")
++            if result["source"] != r["source"]:
++                raise ValueError("wrong resident source")
++            # Completion is evidence from the resident, not permission to change
++            # ownership. Geometry remains independently observed by the broker.
++            unchanged = all(self.observed_windows[e["uuid"]]["geometry"] == e["geometry"]
++                            and self.observed_windows[e["uuid"]]["desktops"] == e["desktops"]
++                            and self.observed_windows[e["uuid"]]["on_all_desktops"] == e["on_all_desktops"]
++                            for e in r["entries"])
++            stack_ok = result.get("order") == r["order"] and result.get("geometry_unchanged") is True and unchanged
++            visible = (r["preferred_uuid"] is not None and result.get("current_desktop") == r["entries"][0]["desktop"])
++            if r["preferred_uuid"] is None:
++                focus_ok = result.get("focus_attempted") is False and result.get("active_uuid") == result.get("before_active_uuid")
++                focus = "no automatic target" if focus_ok else "failed"
++            elif not visible:
++                focus_ok = result.get("focus_attempted") is False and result.get("active_uuid") == result.get("before_active_uuid")
++                focus = "preferred target retained; inactive desktop" if focus_ok else "failed"
++            else:
++                focus_ok = result.get("focus_attempted") is True and result.get("active_uuid") == r["preferred_uuid"]
++                focus = "verified" if focus_ok else "failed"
++            ok = stack_ok and focus_ok and not result.get("error")
++            r.update(state="SUCCEEDED" if ok else "FAILED", geometry="unchanged" if unchanged and result.get("geometry_unchanged") is True else "changed or unverified",
++                     stacking="verified" if stack_ok else "failed", focus=focus,
++                     detail=str(result.get("error", ""))[:512], observed_active_uuid=result.get("active_uuid"),
++                     focus_attempted=result.get("focus_attempted"), observed_order=result.get("order", []),
++                     before_active_uuid=result.get("before_active_uuid"), current_desktop=result.get("current_desktop"))
++        except (ValueError, KeyError, TypeError, AttributeError) as exc:
++            raise dbus.DBusException("Invalid initial-layout completion", name=IFACE + ".BadArguments") from exc
++
++    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
++    def InitialLayoutStatus(self, request_id):
++        self._initial_layout_active()
++        r = self.initial_layout
++        if r is None or r["id"] != request_id:
++            return json.dumps({"state": "UNKNOWN"})
++        return json.dumps({key: r.get(key) for key in ("id", "state", "geometry", "stacking", "focus", "detail",
++                                                       "preferred_uuid", "observed_active_uuid", "focus_attempted", "order",
++                                                       "observed_order", "before_active_uuid", "current_desktop")} |
++                          {"entries": [{k: e[k] for k in ("uuid", "layer", "desktop")} for e in r["entries"]]})
++
+     # Step 1.3b.1: a read-only launch correlation probe. It does not replace
+     # SubmitLaunch/TakeLaunch, move a window or grant managed ownership.
+     @dbus.service.method(IFACE, in_signature="ss", out_signature="s")
+@@ -518,6 +646,8 @@ class Broker(dbus.service.Object):
+         if not self.observation_synced or not self.observation_source:
+             raise dbus.DBusException("Wait for KWin inventory synchronization",
+                                      name=IFACE + ".NotSynchronized")
++        if self._initial_layout_active():
++            raise dbus.DBusException("Initial layout is still active", name=IFACE + ".Busy")
+         now = time.monotonic()
+         self._expire_managed_correlation(now)
+         if (self._managed_correlation is not None
+@@ -958,6 +1088,7 @@ class Broker(dbus.service.Object):
+         self.observation_source = source
+         self.observation_revision = revision
+         self.observation_synced = True
++        self.initial_layout_protocol = (1 if type(message.get("initial_layout_protocol")) is int and message.get("initial_layout_protocol") == 1 else 0)
+         self.move_protocol = move_protocol
+         # Do not invent "removed" events for entries absent in the snapshot:
+         # such entries could predate a broker restart or a missed notification.
+@@ -1073,6 +1204,8 @@ class Broker(dbus.service.Object):
+             # verification. Clients conservatively stop on nonterminal snapshots.
+             "placement_transaction": ({"id": self.request["id"], "state": self.request["state"]}
+                                       if self.request is not None else {"id": None, "state": "IDLE"}),
++            "initial_layout_protocol": self.initial_layout_protocol,
++            "initial_layout_active": self._initial_layout_active(),
+             "managed_count": len(self.registry.managed_windows),
+             "presence_counts": presence,
+             "request_count": len(self.registry.requests),
+diff --git a/task_step1.5/HANDOFF.md b/task_step1.5/HANDOFF.md
+index 1bb7c37..790908f 100644
+--- a/task_step1.5/HANDOFF.md
++++ b/task_step1.5/HANDOFF.md
+@@ -110,6 +110,10 @@ This handoff records permissions; it does not override governing policy. Histori
+ 
+ | 14 | Codex (2026-10-31), native acceptance review and focused corrections | Clean approved task branch at 35d1b072b763df8126c602d9840c0ad243a9a656; narrow CLI/resource/launcher changes, directly affected tests and agent evidence | 258 Python tests PASS without skips including installed-header coverage; 3 JS files PASS; syntax/compile, ShellCheck and whitespace PASS. [Focused review/inventory](step1.5c4-corrections-review.md) | HOME-relative Dolphin paths; readable validator AAR; accurate adequate/missing capacity notice; added live mock Dolphin lock-lifetime regression. Maintainer-reported X11/Wayland acceptance recorded, including completed Wayland concurrency/cancellation PASS; no further native concurrency required. Layer proposal is separate and unimplemented. Maintainer reviews and checks revised paths/messages next; no native operations or publication. |
+ 
++| 15 | Codex (2026-10-31), graphical-layer architectural gate (Outcome B) | Clean existing task branch at 584eb2e4d024215e325e00bc6b24596e2c6f3e5c; agent interface/native-plan evidence and this Section 5 row only | Unchanged baseline: 258 Python tests PASS, 3 Node files PASS; Bash syntax/Python compile, ShellCheck and whitespace PASS. Inspected planner, orchestration, ownership/query/placement contracts, resident observations and KWin scripting APIs | Genuine cohort stack/focus operation and observation are absent from existing contracts. [Bounded interface proposal](step1.5c4-layers-interface-review.md) and future native plan prepared. No executable or feature-test edits. Maintainer must approve broker/resident transaction/capability extensions and proposed focus/exposure details before implementation; no native operations or publication. |
++
++| 16 | Codex (2026-10-31), approved graphical layers / desktop groups / XDG implementation | Existing task branch, HEAD `584eb2e4d024215e325e00bc6b24596e2c6f3e5c`; CLI, planner/launcher, bounded broker/resident extension, exposure helper, template, focused tests and agent evidence; earlier row 15 and gate evidence preserved | 280 Python tests PASS including installed-header integration; 4 Node test files PASS; Bash syntax, Python compilation, ShellCheck and whitespace checks PASS. No native operations | Application-independent layers/budgets, planned cascade/exposure warnings, first-appearance desktop groups, owned-UUID one-shot stack/focus with independent verification, and XDG discovery implemented. See [implementation and inventory](step1.5c4-layers-implementation.md), [complete diff](step1.5c4-layers-implementation.patch), and [native acceptance](step1.5c4-layers-acceptance.md). Maintainer reviews and runs X11 acceptance, then publishes the reviewed task increment for identical Wayland testing. Native stack/focus/exposure and remembered focus remain unverified; no staging/publication/deployment. |
++
+ | C1 | ChatGPT (2026-10-29), Step 1.5a closeout | Read PR #23 merge status and reviewed the accepted Step 1.5a scope; no repository edits. | GitHub confirmed PR #23 merge; Codex-reported 165 Python tests and installed-header coverage were not rerun by ChatGPT. | Maintainer/Codex proceeded to Step 1.5b; no independent cloud testing or publication. |
+ | C2 | ChatGPT (2026-10-29), Step 1.5b native and source review | Reviewed X11/Wayland move transcripts and broker/CLI optional-move reporting, including separate Konsole PIDs and shortcut-time target selection. | Maintainer native results showed distinct X11 windows and successful right placement. Source review located the optional-move `after=[0]` placeholder and generic Busy explanation; Wayland drag/roundoff cause remained unproven. | Recommended focused corrections and controlled focus/geometry tests; no edits or native actions. |
+ | C3 | ChatGPT (2026-10-29), Codex correction tasking | Drafted the Step 1.5b focused-correction prompt: verified desktop membership, Busy/unsupported classification, announce-act-report levels, regression tests and bounded geometry-precision investigation. | Prompt was based on published candidate source, Codex reports and maintainer transcripts; no tools were run to modify files or execute tests. | Maintainer supplied tasking to Codex; implementation and test evidence belong to Codex Iteration 6. |
+diff --git a/tests/test_step1_5a_plan.py b/tests/test_step1_5a_plan.py
+index cc2f786..6b0e67b 100644
+--- a/tests/test_step1_5a_plan.py
++++ b/tests/test_step1_5a_plan.py
+@@ -26,12 +26,15 @@ class PlannerHarness:
+         self.addCleanup(self.tmp.cleanup)
+         self.folder = Path(self.tmp.name)
+         (self.folder / 'libexec').mkdir()
++        shutil.copyfile(ROOT / 'libexec/joetoo-kwin-exposure.py', self.folder / 'libexec/joetoo-kwin-exposure.py')
+         shutil.copyfile(ROOT / 'libexec/joetoo-kwin-plan-functions',
+                         self.folder / 'libexec/joetoo-kwin-plan-functions')
+         self.client = self.folder / 'joetoo-kwin'
+         self.config = self.folder / 'layout.conf'
+         self.calls = self.folder / 'calls'
++        (self.folder / 'home').mkdir()
+         self.env = {**os.environ, 'TRACE': str(self.calls), 'verbosity': '5',
++                    'HOME': str(self.folder / 'home'), 'XDG_CONFIG_HOME': str(self.folder / 'xdg'),
+                     'INTERACTIVE': '', 'QUIET': '', 'DEBUG': '', 'LOGGING': '',
+                     'TERM': 'dumb', 'JOETOO_HEADER_DIR': '/usr/sbin',
+                     'PATH': str(self.folder) + os.pathsep + os.environ['PATH']}
+@@ -77,17 +80,16 @@ class PlannerHarness:
+         plain = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', output)
+         lines = plain.splitlines()
+         header = next(line for line in lines if 'Desktop' in line and 'Target' in line)
+-        data = [line for line in lines if target in line or 'underlay-proposed' in line]
++        data = [line for line in lines if re.search(r'\b(?:konsole|vncviewer)\s+(?:ssh|via-ssh)\s+', line)]
+         # Ignore diagnostics/config lines; these two rows carry geometry cells.
+-        data = [line for line in data if re.search(r'\b(?:terminal|underlay-proposed)\s+\d+', line)]
++        data = [line for line in data if re.search(r'\b(?:panel|under|over)\s+\d+', line)]
+         self.assertEqual(len(data), 2)
+         self.assertIn(target, data[0])
+         self.assertEqual(data[0].index(target), header.index('Target'))
+         for line in data:
+             self.assertEqual(line.index('konsole') if 'konsole' in line else line.index('vncviewer'),
+                              header.index('Program'))
+-            self.assertEqual(line.index('terminal') if 'underlay-proposed' not in line
+-                             else line.index('underlay-proposed'), header.index('Layer'))
++            self.assertEqual(line.index('panel'), header.index('Layer'))
+             fields = line[header.index('Layer'):].split()
+             self.assertEqual(len(fields), 5)
+             self.assertEqual(line.index(fields[1], header.index('Layer')), header.index('X'))
+@@ -143,13 +145,13 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
+                     self.assertGreater(rects[2][1], rects[0][1] + rects[0][3])
+ 
+     def test_graphical_windows_do_not_consume_terminal_slots(self):
+-        self.write_config(['1|konsole|ssh|unreachable.invalid', '1|vncviewer|via-ssh|host',
++        self.write_config(['1|konsole|ssh|unreachable.invalid', '1|vncviewer|via-ssh|host|under',
+                            '1|konsole|direct|', '2|konsole|direct|'])
+         rows = self.rows(self.plan())
+         self.assertEqual([row[1] for row in rows], ['1', '2', '3', '1'])
+         self.assertEqual(rows[0][-4:], ['19', '54', '816', '918'])
+         self.assertEqual(rows[2][-4:], ['873', '54', '816', '918'])
+-        self.assertEqual(rows[1][5], 'underlay-proposed')
++        self.assertEqual(rows[1][5], 'under')
+         self.assertEqual(rows[3][-2:], ['1670', '918'])
+ 
+     def test_custom_offsets_height_and_row_gutters(self):
+@@ -180,7 +182,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
+         for records in ([], ['1|konsole|direct|'] * 5, ['0|konsole|direct|'],
+                         ['257|konsole|direct|'], ['01|konsole|direct|'],
+                         ['1|konsole|ssh|'], ['1|konsole|bad|host'],
+-                        ['1|konsole|direct'], ['1|konsole|direct||'],
++                        ['1|konsole|direct'], ['1|konsole|direct||invalid'],
+                         ['1|/usr/bin/konsole|direct|'], ['1|konsole|local|a\nb']):
+             with self.subTest(records=records):
+                 self.write_config(records)
+@@ -213,7 +215,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
+         reads = self.folder / 'config-reads'
+         self.write_config(extra=f'printf "read\\n" >> "{reads}"')
+         self.client.write_text(self.client.read_text().replace(
+-            'config=/etc/joetoo-kwin/joetoo-kwin.conf', f'config="{self.config}"'))
++            '/etc/joetoo-kwin/joetoo-kwin.conf', str(self.config)))
+         self.run_cli('-c')
+         self.assertEqual(reads.read_text(), 'read\n')
+ 
+diff --git a/tests/test_step1_5c_launch.py b/tests/test_step1_5c_launch.py
+index adee523..08f1608 100644
+--- a/tests/test_step1_5c_launch.py
++++ b/tests/test_step1_5c_launch.py
+@@ -53,7 +53,7 @@ launch_resource() {
+ ''')
+         self.env['BROKER_STATE'] = json.dumps({'observation': {'synchronized': True},
+             'presence_counts': {'uncertain': 0}, 'request_counts': {'pending': 0, 'running': 0},
+-            'placement_transaction': {'state': 'IDLE'}})
++            'placement_transaction': {'state': 'IDLE'}, 'initial_layout_protocol': 1, 'initial_layout_active': False})
+         self.env['MANAGED'] = '{"windows":[]}'
+         self.write_config(['1|konsole|local|btop', '2|konsole|local|btop'])
+         self.client.write_text(self.client.read_text().replace('#-----[ main script ]', r'''
+@@ -65,6 +65,8 @@ qdbus6() {
+     *.ListManaged) printf '%s\n' "$MANAGED" ;;
+     *.ListObserved) printf '%s\n' '{"windows":[]}' ;;
+     *.PollManagedLaunch) printf '%s\n' "{\"state\":\"${REG_STATE:-registered}\"}" ;;
++    *.SubmitInitialLayout) printf 'initial-layout-id\n' ;;
++    *.InitialLayoutStatus) printf '{"state":"SUCCEEDED","stacking":"verified","focus":"verified"}\n' ;;
+     *.Status) printf '%s\n' "${PLACEMENT_STATE:-OK}" ;;
+     esac
+ }
+diff --git a/joetoo-kwin-template.conf b/joetoo-kwin-template.conf
+new file mode 100644
+index 0000000..3fab808
+--- /dev/null
++++ b/joetoo-kwin-template.conf
+@@ -0,0 +1,39 @@
++# Copyright 2025-2026 Joseph Brendler
++# SPDX-License-Identifier: GPL-3.0-or-later
++# Trusted Bash configuration template. Copy manually to:
++# ${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf
++# Relative XDG_CONFIG_HOME is ignored; explicit -f selects exactly that file.
++# No automatic user-file creation/migration is performed by the CLI.
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++# Four fields (or a blank fifth) mean implicit panel for EVERY application.
++# Explicit panel/under/over entries bypass the implicit budget but still require
++# valid geometry. The panel allocator supports at most four panel participants.
++# Desktops execute in first-appearance order; entries retain desktop-local order.
++# Dolphin relative paths resolve from HOME, not the config location.
++# Replace illustrative SSH hosts; no graphical network transports are supported.
++desktop_session_list=(
++    '4|dolphin|local||panel'
++    '4|konsole|ssh|example.invalid|panel'
++    '4|konsole|ssh|example.invalid|over'
++    '2|konsole|local|btop|'
++    '4|dolphin|local||under'
++)
++# Panel/graphical regions and gutters can be overridden using existing settings:
++terminal_width_percent=87
++terminal_gap_percent=2
++terminal_height_percent=85
++terminal_left_percent=1
++terminal_top_percent=5
++terminal_row_gap_percent=3
++graphical_left_percent=5
++graphical_top_percent=3
++graphical_width_percent=94
++graphical_height_percent=90
++# Initial order is under -> panel -> over, file order inside each layer.
++# Preferred focus: last successful over, else last successful panel, never under.
++# It is applied only on the currently displayed desktop, with no desktop switch.
++# Exposure predictions concern frame rectangles, not compositor hit-test proof.
+diff --git a/libexec/joetoo-kwin-exposure.py b/libexec/joetoo-kwin-exposure.py
+new file mode 100644
+index 0000000..4e5bbdf
+--- /dev/null
++++ b/libexec/joetoo-kwin-exposure.py
+@@ -0,0 +1,50 @@
++#!/usr/bin/env python3
++# Copyright 2025-2026 Joseph Brendler
++# SPDX-License-Identifier: GPL-3.0-or-later
++"""Frame-rectangle exposure prediction, not compositor hit-test verification."""
++import sys
++
++
++def exposed(rect, above, n):
++    x, y, w, h = rect
++    if w < n or h < n:
++        return False
++    # Search candidate square origins at rectangle edges. For each horizontal
++    # position, sweep forbidden vertical intervals instead of testing a cubic
++    # grid of all X/Y combinations against all occluders.
++    xs = {x, x + w - n}
++    for a, b, c, d in above:
++        xs.update((a - n, a + c))
++    for a in xs:
++        if not x <= a <= x + w - n:
++            continue
++        intervals = sorted((b - n, b + d) for c, b, e, d in above
++                           if a < c + e and a + n > c)
++        candidate = y
++        for low, high in intervals:
++            if low >= candidate:
++                break
++            if candidate < high:
++                candidate = high
++        if candidate <= y + h - n:
++            return True
++    return False
++
++
++
++def main():
++    n = int(sys.argv[1])
++    rows = [line.split() for line in sys.stdin if line.strip()]
++    for i, row in enumerate(rows):
++        desktop, layer, slot = row[:3]
++        if layer == 'panel':
++            continue
++        rank = {'under': 0, 'panel': 1, 'over': 2}
++        higher = [list(map(int, other[3:])) for j, other in enumerate(rows)
++                  if other[0] == desktop and (rank[other[1]], j) > (rank[layer], i)]
++        if not exposed(list(map(int, row[3:])), higher, n):
++            print(f'desktop [{desktop}] slot [{slot}]: overlap; desired {n}x{n} logical-pixel exposure cannot be maintained')
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/task_step1.5/layers-examples/allocator-reject.conf b/task_step1.5/layers-examples/allocator-reject.conf
+new file mode 100644
+index 0000000..671a683
+--- /dev/null
++++ b/task_step1.5/layers-examples/allocator-reject.conf
+@@ -0,0 +1,14 @@
++# Maintainer-native fixture; do not run as an agent GUI test.
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++D=${TEST_DESKTOP:-2}
++desktop_session_list=(
++    "$D|dolphin|local||panel"
++    "$D|dolphin|local||panel"
++    "$D|dolphin|local||panel"
++    "$D|dolphin|local||panel"
++    "$D|dolphin|local||panel"
++)
+diff --git a/task_step1.5/layers-examples/budget-reject.conf b/task_step1.5/layers-examples/budget-reject.conf
+new file mode 100644
+index 0000000..0eb565b
+--- /dev/null
++++ b/task_step1.5/layers-examples/budget-reject.conf
+@@ -0,0 +1,14 @@
++# Maintainer-native fixture; do not run as an agent GUI test.
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++D=${TEST_DESKTOP:-2}
++desktop_session_list=(
++    "$D|dolphin|local|"
++    "$D|dolphin|local|"
++    "$D|dolphin|local|"
++    "$D|dolphin|local|"
++    "$D|dolphin|local|"
++)
+diff --git a/task_step1.5/layers-examples/budget-warn.conf b/task_step1.5/layers-examples/budget-warn.conf
+new file mode 100644
+index 0000000..fe81558
+--- /dev/null
++++ b/task_step1.5/layers-examples/budget-warn.conf
+@@ -0,0 +1,14 @@
++# Maintainer-native fixture; do not run as an agent GUI test.
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++D=${TEST_DESKTOP:-2}
++desktop_session_list=(
++    "$D|konsole|local|btop"
++    "$D|konsole|local|btop"
++    "$D|konsole|local|btop"
++    "$D|konsole|local|btop"
++    "$D|dolphin|local||under"
++)
+diff --git a/task_step1.5/layers-examples/cascade.conf b/task_step1.5/layers-examples/cascade.conf
+new file mode 100644
+index 0000000..c19faa6
+--- /dev/null
++++ b/task_step1.5/layers-examples/cascade.conf
+@@ -0,0 +1,14 @@
++# Maintainer-native fixture; do not run as an agent GUI test.
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++D=${TEST_DESKTOP:-2}
++desktop_session_list=(
++    "$D|dolphin|local||under"
++    "$D|dolphin|local||over"
++    "$D|konsole|local|btop|panel"
++    "$D|dolphin|local||under"
++    "$D|dolphin|local||over"
++)
+diff --git a/task_step1.5/layers-examples/exposure-warn.conf b/task_step1.5/layers-examples/exposure-warn.conf
+new file mode 100644
+index 0000000..3d8c56c
+--- /dev/null
++++ b/task_step1.5/layers-examples/exposure-warn.conf
+@@ -0,0 +1,13 @@
++# Maintainer-native fixture; do not run as an agent GUI test.
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++D=${TEST_DESKTOP:-2}
++min_window_exposure_px=1000
++desktop_session_list=(
++    "$D|dolphin|local||under"
++    "$D|dolphin|local||under"
++    "$D|dolphin|local||under"
++)
+diff --git a/task_step1.5/layers-examples/final-under.conf b/task_step1.5/layers-examples/final-under.conf
+new file mode 100644
+index 0000000..844b87e
+--- /dev/null
++++ b/task_step1.5/layers-examples/final-under.conf
+@@ -0,0 +1,11 @@
++# Maintainer-native fixture; do not run as an agent GUI test.
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++D=${TEST_DESKTOP:-2}
++desktop_session_list=(
++    "$D|konsole|local|btop|panel"
++    "$D|dolphin|local||under"
++)
+diff --git a/task_step1.5/layers-examples/interleaved.conf b/task_step1.5/layers-examples/interleaved.conf
+new file mode 100644
+index 0000000..15739da
+--- /dev/null
++++ b/task_step1.5/layers-examples/interleaved.conf
+@@ -0,0 +1,16 @@
++# Maintainer-native fixture; do not run as an agent GUI test.
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++D=${TEST_DESKTOP:-2}
++S=${SECOND_DESKTOP:-4}
++min_window_exposure_px=8
++desktop_session_list=(
++    "$D|dolphin|local||panel"
++    "$D|konsole|local|btop|panel"
++    "$D|konsole|local|btop|over"
++    "$S|konsole|local|btop|"
++    "$D|dolphin|local||over"
++)
+diff --git a/task_step1.5/layers-examples/invalid-region.conf b/task_step1.5/layers-examples/invalid-region.conf
+new file mode 100644
+index 0000000..395b765
+--- /dev/null
++++ b/task_step1.5/layers-examples/invalid-region.conf
+@@ -0,0 +1,11 @@
++# Maintainer-native fixture; do not run as an agent GUI test.
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++D=${TEST_DESKTOP:-2}
++terminal_top_percent=30
++desktop_session_list=(
++    "$D|dolphin|local|"
++)
+diff --git a/task_step1.5/layers-examples/under-only.conf b/task_step1.5/layers-examples/under-only.conf
+new file mode 100644
+index 0000000..b574f19
+--- /dev/null
++++ b/task_step1.5/layers-examples/under-only.conf
+@@ -0,0 +1,11 @@
++# Maintainer-native fixture; do not run as an agent GUI test.
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++D=${TEST_DESKTOP:-2}
++desktop_session_list=(
++    "$D|dolphin|local||under"
++    "$D|dolphin|local||under"
++)
+diff --git a/task_step1.5/step1.5c4-layers-acceptance.md b/task_step1.5/step1.5c4-layers-acceptance.md
+new file mode 100644
+index 0000000..8733d2f
+--- /dev/null
++++ b/task_step1.5/step1.5c4-layers-acceptance.md
+@@ -0,0 +1,141 @@
++# Maintainer-operated layer/group/XDG acceptance
++
++New layer behavior has **NOT BEEN TESTED NATIVELY by Codex**. Prior first-increment
++acceptance remains in step1.5c4-native-acceptance.md and is not replaced by mocks.
++Use the same reviewed implementation on gmki91 X11 and q552u01 Wayland. X11 may
++first test an uncommitted diff: record HEAD plus the exact reviewed diff, then link
++the accepted commit to that tested content; Wayland must fast-forward that commit.
++Do not claim identical tested SHAs where X11 tested uncommitted content.
++
++## Preparation and compatibility
++
++Maintainer installs/reloads matching broker/resident by existing human procedure;
++no agent installation/restart is authorized. A reused old resident must fail launch
++preflight clearly: RegistryStatus must advertise initial_layout_protocol=1 before
++new -o runs. Keep the checkout's libexec helpers colocated with its CLI. Ordinary
++-c remains available without KWin. CLI no longer defaults straight to /etc.
++
++All fixtures use local Dolphin and local btop, with no network connection. Adapt
++explicit dimensions to the configured test display; no work-area discovery was added.
++TEST_DESKTOP/SECOND_DESKTOP are fixture inputs, not new CLI flags. Each successful
++fixture needs unused intended slots: choose unused desktops below desktop_limit.
++Closing a window does not release its reservation. Never erase ownership or adopt
++surviving windows just to bypass a conflict. Human installation/session preparation
++must account for that existing registry policy. Unrelated windows remain isolated.
++
++From the project root, inspect the template and the files under layers-examples first.
++Example interleaved case, choosing fresh desktops 4 then 2:
++
++```bash
++git rev-parse HEAD
++git diff --stat
++TEST_DESKTOP=4 SECOND_DESKTOP=2 ./joetoo-kwin -c -f task_step1.5/layers-examples/interleaved.conf
++TEST_DESKTOP=4 SECOND_DESKTOP=2 ./joetoo-kwin -vv -o -f task_step1.5/layers-examples/interleaved.conf
++# End of commands
++
++```
++
++Expected execution: group 4 slots 1/2/3/4, finalize group 4, then group 2 slot 1,
++finalize group 2. Plan table retains original entry order; the group notice and
++per-group stack/focus intent disambiguate execution order. Logical slots are unchanged.
++Final focus preference in group 4 is slot 4 (last over), group 2 slot 1 (panel).
++Run once with 4 currently displayed and once with another fresh group configuration
++while those desktops are inactive. No automatic desktop switch is allowed.
++
++## Per-fixture commands and expected outcomes
++
++Use the exact command pair below for each row, replacing FIXTURE and D with its
++reviewed filename and a fresh desktop. The examples are real configuration files,
++not an automated GUI test or a bypass of confirmation.
++
++```bash
++TEST_DESKTOP="$D" ./joetoo-kwin -c -f "task_step1.5/layers-examples/$FIXTURE.conf"
++TEST_DESKTOP="$D" ./joetoo-kwin -vv -o -f "task_step1.5/layers-examples/$FIXTURE.conf"
++# End of commands
++
++```
++
++| FIXTURE | Expected result on each backend |
++| --- | --- |
++| final-under | Panel launches first, under last; initialization puts under below panel and prefers panel |
++| under-only | Two cascaded under windows; preferred_uuid null, focus_attempted false; no automatic focus selection |
++| cascade | Two under, one panel, two over: relative stack under1/under2/panel/over1/over2 despite interleaved launch order; focus prefers last over |
++| budget-reject | Five implicit entries reject before confirmation/side effects |
++| budget-warn | N=4, E=1, T=5 warns and accepts budget; four panels in 2x2 layout, explicit under window |
++| allocator-reject | Five explicit panels pass budget with warning, then reject allocator limit before confirmation |
++| exposure-warn | Valid rectangles; desired 1000x1000 exposure impossible; warn but allow review/confirmation |
++| invalid-region | Invalid region rejects before confirmation/side effects |
++
++For an explicit 1–4 panel progression, use four-field local Dolphin/Konsole entries
++on a fresh desktop; mix applications in both orders. Panels share exactly the same
++allocator independent of application. Use cascade as a basis for all six under/panel/
++over order permutations, preserving entries' relative order inside a layer. Confirm
++later over entries appear above earlier over entries. Inspect exposure at screen edges,
++small gutters and decorations; click a safe exposed content/title region of every
++window rather than assuming an offset gives a hit target. If no such region exists,
++record actual exposure failure separately from geometry and stack order.
++
++For every successful cohort record these independent outcomes:
++
++1. Geometry and membership: GetManaged's observed frame/desktop/UUID and placement state.
++2. Stacking: InitialLayoutStatus.order must equal observed_order for success; entries
++   map UUIDs to layers and intended desktop. Compare with actual visual overlap.
++3. Focus: preferred_uuid vs focus_attempted vs observed_active_uuid. On an inactive
++   desktop focus is reported as retained intent, not successful activation. Under-only
++   does not choose a target, although ordinary application startup may naturally focus
++   a window before initialization. Observe before_active_uuid at the initialization point.
++
++The info result includes the transaction ID and complete per-group outcome. Save
++-vv output to retain each group's record. The bounded broker keeps only the latest
++initial-layout transaction; an earlier group's ID becomes UNKNOWN after the next
++group is submitted. Query the latest group ID (use saved CLI JSON for earlier groups):
++
++```bash
++qdbus6 org.joetoo.KWinBridge /org/joetoo/KWinBridge org.joetoo.KWinBridge.InitialLayoutStatus "$LAYOUT_REQUEST" | jq .
++qdbus6 org.joetoo.KWinBridge /org/joetoo/KWinBridge org.joetoo.KWinBridge.GetManaged "$MANAGED_ID" | jq .
++qdbus6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current
++# End of commands
++
++```
++
++Test manual click-to-raise/focus, move/resize, and manual lower after completion. Wait:
++no subscriptions or flags should restore old order. No keepAbove/keepBelow or persistent
++constraints are set. Check unrelated windows' identities/geometry; they may naturally
++be obscured but are not explicit operation targets. A focus-induced stack mismatch must
++report failure; it must not silently focus another window to force a success.
++
++Manually switch to an inactive desktop after its group finishes and record which
++window KWin naturally remembers as active. This is investigation, not an asserted
++per-desktop focus guarantee. No subscription is installed to make it happen.
++
++Cancellation and competing -o retain the prior native lock contract. New headless
++coverage verifies the lock stays held through pending group initialization. Do not
++repeat destructive KWin/session/capacity races. Partial missing/ambiguous target scenarios
++are headless-covered; collect naturally occurring native failures without touching
++unrelated windows or weakening ownership checks.
++
++## XDG selection (read-only planning)
++
++Demonstrate a personal config with a temporary absolute XDG root, then /etc fallback
++with an absent user config. These commands create only temporary test configuration
++files as the maintainer; the CLI does not create or migrate them.
++
++```bash
++NATIVE_CONFIG_TEST=$(mktemp -d)
++mkdir -p "$NATIVE_CONFIG_TEST/user/joetoo-kwin"
++cp joetoo-kwin-template.conf "$NATIVE_CONFIG_TEST/user/joetoo-kwin/joetoo-kwin.conf"
++XDG_CONFIG_HOME="$NATIVE_CONFIG_TEST/user" ./joetoo-kwin -c
++XDG_CONFIG_HOME="$NATIVE_CONFIG_TEST/absent" ./joetoo-kwin -c
++# End of commands
++
++```
++
++First displayed config must be the temporary user file. Second must select
++/etc/joetoo-kwin/joetoo-kwin.conf if available and valid; if absent or invalid, report
++the actual failure instead of a PASS. An explicit -f still wins over discovery.
++User-unreadable/invalid config must fail rather than fall back. Relative XDG values
++are ignored in favor of HOME/.config. Configuration-free numeric -m/help stay independent.
++
++Record PASS/FAIL/NOT TESTED by backend and SHA/diff for each case, with geometry,
++stack and focus as separate columns. Do not merge or claim native acceptance from
++these instructions or the headless suite.
+diff --git a/task_step1.5/step1.5c4-layers-implementation.md b/task_step1.5/step1.5c4-layers-implementation.md
+new file mode 100644
+index 0000000..95c8ea8
+--- /dev/null
++++ b/task_step1.5/step1.5c4-layers-implementation.md
+@@ -0,0 +1,186 @@
++# Graphical layers, desktop groups and XDG implementation
++
++## Authority, baseline and status
++
++Branch task/joetoo-kwin-step1.5c4-graphical-launch, starting HEAD
++584eb2e4d024215e325e00bc6b24596e2c6f3e5c. Existing local evidence (HANDOFF row 15,
++interface-review/native-plan documents and gate patch) was preserved. No fetch,
++branch creation, staging or publication. Latest maintainer task explicitly approves
++the bounded broker/resident extension, revised grouping/focus and XDG migration.
++Earlier exclusions and proposals remain historical where superseded by that task.
++No new architectural extension beyond the approved transaction was necessary.
++
++Status: implemented and headless-tested; new native stack/focus behavior is NOT TESTED.
++Prior first-increment native PASS records remain valid for that tested commit and
++are not relabeled as acceptance of this feature. This document supersedes the old
++gate proposal for actual implemented semantics. No SFTP/VNC/RDP/VPN gate added.
++
++## Planner and compatibility
++
++Four fields, or a blank fifth field as in the approved example, mean implicit panel.
++A nonempty fifth field must be panel/under/over. Layer does not depend on program.
++planned_explicit stores numeric explicitness separately for budget arithmetic.
++Desktop-local logical slots still enumerate every entry. desktop_groups records
++first appearance; planned_stack_slots and preferred_slot record complete initial
++intent before confirmation. Plan table retains original entry order and now prints
++execution group order explicitly. Info shows N/E counts, desired stack and focus slot.
++
++Defaults: dt_win_limit=4, min_window_exposure_px=32. Bounded decimal validation
++rejects negative/expression/overflow values. Per desktop: N>limit rejects; N<=limit
++and T>limit warns; otherwise budget passes. Explicit panel counts toward E.
++The existing terminal_geometry calculation now serves every panel application;
++1–3 participants share the width region, four use 2x2, >4 panels reject independently
++of a successful budget check. Cohorts are bounded to 256 entries by the approved
++transaction implementation. -m l/r continues using its unchanged two-window geometry.
++
++Under/over use existing graphical_* base dimensions, with deterministic shared
++non-panel cascading in desktop-local file order. Offsets advance by exposure pixels
++and clamp at display edges without shrinking base windows. The new stdlib-only
++joetoo-kwin-exposure.py checks whether an N-by-N square in each non-panel frame can
++avoid higher cohort rectangles according to the planned stack order. It sweeps
++forbidden intervals, not just X/Y offsets. If valid rectangles cannot provide that
++square, warn and permit confirmation; invalid rectangles reject. Decorations are
++included in frame geometry; real decoration hit targets, external occlusion and
++compositor visibility are not proven. The plan explicitly labels this as prediction.
++Client minimum-size refusal still produces placement failure; no speculative resize
++or verification tolerance was added. -c now uses Python3 for this pure offline check.
++
++Migration is intentional: a four-field Dolphin entry now gets panel geometry,
++not the old large graphical rectangle. Append under/over for a large graphical
++window. Global file-order execution becomes first-appearance desktop-group execution;
++within each group, original relative order and logical slots remain unchanged.
++
++## Group orchestration and initial transaction
++
++All entries/modes, budgets, geometries, desktop capacity and managed conflicts are
++preflighted before confirmation/provisioning. After confirmation/provisioning, the
++existing managed launcher registers and verifies each group's entries sequentially.
++Known isolated entry failures keep prior windows and continue safely. Ambiguous or
++nonterminal ownership/placement stops. Successful group entries supply registration
++request IDs plus layers to finalization; failed entries never become stack targets.
++
++The four additive D-Bus methods are:
++
++- SubmitInitialLayout(s JSON) -> s ID, payload {entries:[{registration_request_id,layer}]}.
++- TakeInitialLayout(s resident_source) -> s JSON frozen cohort, expected order,
++  preferred_uuid and remaining_ms.
++- CompleteInitialLayout(ss ID, JSON observation) -> void.
++- InitialLayoutStatus(s ID) -> s JSON, independent geometry/stack/focus outcome,
++  expected/observed order, cohort mapping, preferred/attempted/observed focus.
++
++Existing D-Bus signatures are unchanged. Broker resolves succeeded registration IDs
++through its own managed registry, requiring present, positively placed UUIDs from the
++current observation source on the intended desktop. Arbitrary supplied UUIDs, duplicate
++cohort entries, mixed groups and unverified registrations reject before mutation.
++Registration IDs prevent stale managed-ID reuse across broker lifetimes; they are
++not secrets or an independent authentication boundary. The launcher submits only its
++newly succeeded cohort. No layer fields or broader schema were added to the registry.
++
++Initial transaction state is a single bounded in-memory record with a ten-second
++lease. Shared Busy checks prevent placement/correlation work overlapping initial
++layout and vice versa. RegistryStatus adds initial_layout_protocol and active state;
++SyncInventory advertises support only with available stack/raise/current-desktop/focus
++interfaces. New -o rejects an old/incompatible running broker or resident during
++preflight. Query/source refresh keeps legacy schemas compatible through additive fields.
++No runtime KWin version string is assumed to establish capability.
++
++The dedicated joetoo_bridge_initial_layout shortcut claims only frozen broker work.
++Resident captures desktop/focus at claim time, validates source/lease and every cohort
++UUID/frame/membership before acting, and refuses disappeared or special-mode windows.
++It raises cohort windows once in under→panel→over order, preserving file order inside
++each layer. It never uses an active-window-dependent lower action, sets keepAbove/
++keepBelow, installs constraints, switches desktops, or subscribes to future stack repair.
++Unrelated windows are never explicit mutation targets, though normal raising can cover them.
++
++Preferred focus is last successful over, else last successful panel, never under.
++Only a target on the currently displayed desktop is activated. An inactive group
++retains preference as intent; under-only reports no automatic target. Ordinary app
++startup may already have focused a window before this initialization point. Focus
++selection is not a configuration field and no simultaneous per-desktop focus is claimed.
++Native remembered-focus behavior after manual desktop switching remains an observation
++question, not a guarantee or background policy.
++
++After activation the resident reads actual stack/focus and unchanged frame/membership.
++Broker compares cohort ordering and eligible focus separately from geometry. A wrong
++post-focus order, changed frame, disappearance, source mismatch or expiry yields
++failure rather than silently repairing or choosing another target. Immediate KWin
++readback may expose native asynchronous nonconvergence; the implementation reports it
++and performs no persistent retries. This is a deliberate initial snapshot, not a claim
++that users or later client events cannot change the result. Unknown API/special modes
++fail conservatively; native API availability/result correctness still need acceptance.
++
++The invocation lock stays held through group finalization. Groups report individual
++results; final window placement count and incomplete stack/focus groups remain distinct.
++A definitive failed finalization permits the next independent group; pending/unknown
++state stops. The broker retains only the latest initial transaction. Save -v/-vv CLI
++JSON to retain earlier group results; earlier IDs become UNKNOWN after replacement.
++Manual overrides after completion are not re-enforced.
++
++## Configuration discovery and template
++
++-f uses exactly the selected file. Otherwise choose an existing user file at
++${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf, with empty/unset or
++relative XDG_CONFIG_HOME using HOME/.config. Only absence permits /etc fallback.
++Unreadable, malformed or invalid user config fails; no silent fallback. Missing both
++reports both expected locations and -f. -c, -o and layout-based -m share this rule;
++numeric moves and help do not discover/source config. No configuration files are
++created or migrated. Existing trusted Bash sourcing and CLI verbosity precedence stay.
++The displayed config is the selected path. Tests isolate HOME/XDG to avoid reading a
++maintainer's actual personal config.
++
++joetoo-kwin-template.conf is project-root sample data for eventual maintainer packaging;
++see [packaging recommendations](step1.5c4-layers-packaging.md). The ebuild and protected
++repositories were not edited. Examples and [native instructions](step1.5c4-layers-acceptance.md)
++cover migration, interleaved groups, layers, warnings and XDG discovery.
++
++## Validation and inventory
++
++Final counts and command output are in step1.5c4-layers-{python,node,syntax,shellcheck}.log.
++Python suite: 280 tests passed without skips, including installed-header integration.
++Node: four test files passed (this runner reports files; native Node may enumerate cases).
++Bash syntax/template checks, Python compile, ShellCheck and whitespace checks passed.
++Template-only lint excludes SC2034 because its assignments are consumed when sourced.
++Initial failures were missing new helper copies/protocol doubles and old application-
++dependent expected geometry; those were updated to the approved semantics. An unused
++planner-output lint finding was corrected. Final regressions were rerun.
++Tests cover budgets/grammar/group order, pure region occlusion versus offsets, XDG
++variants and error behavior, real orchestration with mocked IPC/processes, capability
++rejection, ownership/expiry/source/disappearance, post-activation stack mismatch,
++no automatic under/inactive focus and live-lock duration. Existing SSH/geometry/native
++acceptance evidence is preserved. No native GUI/SSH/KWin operations performed.
++
++Modified tracked executable files: joetoo-kwin; joetoo-kwin-resident.js;
++libexec/joetoo-kwind; libexec/joetoo-kwin-plan-functions;
++libexec/joetoo-kwin-launch-functions. Modified tracked tests: test_step1_5a_plan.py,
++test_step1_5c_launch.py. HANDOFF modification is Section 5 only; earlier local row 15
++was preserved, new row 16 records this iteration.
++
++New implementation/data: libexec/joetoo-kwin-exposure.py; joetoo-kwin-template.conf.
++New tests: test_initial_layout_broker.py, test_initial_layout.js,
++test_grouped_layers_launch.py, test_layers_and_xdg.py. New evidence: this report,
++acceptance/packaging notes, layers-examples/*.conf, four layers logs and complete
++implementation patch. Preexisting gate/interface/native-plan evidence remains intact;
++its gate patch is historical and excluded from the implementation patch to avoid nested
++patch duplication. Temporary intermediate logs/scripts under /tmp are excluded.
++
++Next actor: maintainer reviews, independently tests and runs X11 acceptance; then
++maintainer-committed/pushed implementation is tested identically on Wayland. No further
++interface approval is requested. Stage/commit/push/PR/merge/deploy remain separately gated.
++
++Reproduce headless checks from the project directory:
++
++```bash
++python3 -m unittest discover -s tests -p 'test_*.py'
++node --test tests/test_*.js
++bash -n joetoo-kwin
++bash -n libexec/joetoo-kwin-plan-functions
++bash -n libexec/joetoo-kwin-launch-functions
++bash -n libexec/joetoo-kwin-session.bashrc
++bash -n joetoo-kwin-template.conf
++python3 -m py_compile libexec/joetoo-kwind libexec/joetoo_kwin_launch_resources.py libexec/joetoo-kwin-exposure.py
++shellcheck -x -s bash joetoo-kwin libexec/joetoo-kwin-plan-functions libexec/joetoo-kwin-launch-functions libexec/joetoo-kwin-session.bashrc
++shellcheck -s bash -e SC2034 joetoo-kwin-template.conf
++git diff --check
++# End of commands
++
++```
+diff --git a/task_step1.5/step1.5c4-layers-interface-review.md b/task_step1.5/step1.5c4-layers-interface-review.md
+new file mode 100644
+index 0000000..aca5ed6
+--- /dev/null
++++ b/task_step1.5/step1.5c4-layers-interface-review.md
+@@ -0,0 +1,185 @@
++# Graphical layers: architectural approval gate (Outcome B)
++
++Branch: task/joetoo-kwin-step1.5c4-graphical-launch.
++Inspected starting HEAD: 584eb2e4d024215e325e00bc6b24596e2c6f3e5c; tree initially clean.
++Current task permits investigation but requires approval before consequential
++interfaces change. No executable code, tests, broker/resident or registry edited.
++
++## Existing contract and demonstrated gap
++
++- Planner validate_plan accepts exactly four fields. Logical slots enumerate all
++  entries, but geometry counts only Konsole; terminal_geometry accepts 1–4. Changing
++  those internal arrays/algorithms and presentation is ordinary feature work.
++- SubmitManagedLaunch(siiiiii) carries class, desktop/slot and rectangle. TakeLaunch(ss)
++  claims by new-window class; registration and _sync_managed_placement bind the actual
++  positive PID/new UUID. These interfaces carry no initial stack/focus transaction.
++- Complete(sss) VERIFY and _advance_placement verify exact frame/desktop for a UUID.
++  They cannot establish stack order or focus. Geometry success must retain its meaning.
++- captureWindow and ListObserved/GetManaged omit stack order/active-window state.
++  Extending their JSON to claim stack/focus success is itself a consequential contract
++  change, not a cosmetic new field.
++- The resident can move the captured active window or place a newly added window.
++  There is no work path to order the entire successfully registered launch cohort
++  after a final under window has appeared. Changing launch order would violate policy.
++
++[KWin scripting wrapper source](https://github.com/KDE/kwin/blob/master/src/scripting/workspace_wrapper.h)
++exposes stackingOrder, writable activeWindow and UUID-resolvable window lists; it
++exposes raiseWindow and constrain/unconstrain (latter since 6.5). No window-argument
++lowerWindow is declared there; slotWindowLower acts on active state. Installed Window
++headers expose keepBelow/keepAbove. Persistent constraints/flags conflict with free
++manual overrides. Upstream availability does not establish deployed capabilities.
++
++## Recommended bounded extension, for approval
++
++Keep all existing D-Bus signatures and placement/registration semantics intact.
++Add a separate, single-flight initial-layout transaction after sequential launches:
++
++| Proposed method | Input / output | Purpose |
++| --- | --- | --- |
++| SubmitInitialLayout | s JSON -> s request ID | Validate and freeze the positively registered cohort and its requested layer order |
++| TakeInitialLayout | s resident source -> s JSON | Resident claims exact cohort UUIDs, deadline and focus intent |
++| CompleteInitialLayout | ss request ID, JSON -> void | Return source-bound actual stack/focus observation or explicit failure |
++| InitialLayoutStatus | s request ID -> s JSON | Bounded pending/running/succeeded/failed status, geometry/stack/focus reported separately |
++
++These names/signatures are proposals, not existing APIs. Dedicated status avoids
++changing Status's placement-only semantics. A small bounded in-memory transaction
++record is needed in the broker; no durable record, new managed registry or broad
++registry schema is proposed.
++
++Submit JSON protocol 1: ordered entries {registration_request_id, layer}, plus the
++explicit no-desktop-switch focus policy below. The launcher supplies no arbitrary
++window UUIDs. Broker resolves registration IDs to its own succeeded requests and
++present managed records with successful placement; freezes exact UUIDs, intended
++slots, current observer source and deadline. Reject duplicates, unknown/stale IDs,
++unknown layers, mismatched current presence/source or conflicting active transactions.
++Do not use managed_id alone: IDs may be reused after broker restart. Registration
++UUIDs also scope the cohort to this actual launch rather than earlier managed windows.
++
++Resident advertises initial_layout_protocol=1 and required KWin capabilities in
++SyncInventory. Broker validates/forwards an allowlisted readiness summary in
++RegistryStatus. Launcher checks compatibility before confirmation or side effects;
++old broker/resident must reject the layered executable plan clearly, not silently
++place geometry while claiming layer success. Offline -c remains available.
++
++After verified launches, submit successful cohort only. Definitively failed entries
++remain failures in final layout; never include an unregistered/ambiguous target.
++Keep the invocation lock until layer completion. Extend the broker's shared Busy
++gate in both directions: layer submission rejects active placement/correlation,
++and placement/move submissions reject a pending/running initial-layout transaction.
++Observation/query traffic continues. Claim the request via a distinct
++named shortcut whose callback uses the frozen UUID cohort, never active-window
++selection. This is an additional resident request schema and trigger, requiring approval.
++
++Resolve/check every cohort UUID before mutation, recheck source/deadline/presence,
++and validate that desktops/frames have not changed since the accepted snapshot.
++Raise cohort windows once, bottom-to-top: under in file order, panel in file order,
++over in file order. Later entries within a group are above earlier entries. This
++changes initial Z-order, not configuration application-launch order. Only cohort
++windows are targets; unrelated windows may naturally become covered but must not
++be explicitly activated, lowered, moved or adopted.
++
++Read stackingOrder and activeWindow after the synchronous operation. Compare the
++cohort's relative ordering per desktop and the selected focus UUID; geometry result
++remains distinct. A successful API return is not proof of either result. If the
++snapshot does not establish convergence, report a bounded nonconvergence/failure;
++do not loop indefinitely or re-enforce ordering later. Native tests must establish
++whether a supported bounded follow-up observation is needed for asynchronous focus;
++any such callback schema belongs to this approved transaction, not a background policy.
++Report partial application truthfully if a window disappears during application;
++never undo user actions or touch unrelated windows as rollback.
++
++No persistent keepAbove/keepBelow, constraints or stack-repair subscriptions. Preexisting
++special modes/flags that prevent requested order should be reported as incompatible
++rather than silently cleared. No new KWin API/privileged host service is proposed:
++resident capability detection must fail closed on unsupported deployed versions.
++Existing observer labels are instance/staleness checks, not authentication secrets;
++this does not make the session-bus service a new security boundary.
++
++### Proposed initial focus policy (decision required)
++
++Never switch displayed virtual desktop merely to focus a hidden window. On the
++currently displayed desktop, choose the last over entry, else last panel, else last
++under entry; if no cohort member is visible there, leave focus unchanged. Thus a final
++under entry does not steal focus from a panel/over window. Freeze/check displayed
++desktop and active focus state when claiming; if user/session changes invalidate the
++operation, stop rather than force stale focus intent. Do not activate windows on all
++planned desktops successively. No cohort member on current desktop is a valid
++unchanged-focus outcome, not a failure. Clarify activity/multiple-output behavior
++before promising semantics beyond the current configured-display scope.
++
++## Alternatives
++
++1. Extend each launch request with layer intent: smaller-looking wire change, but
++   cannot finalize arbitrary order when under is launched last without cohort state
++   and extra completion reporting. Not recommended.
++2. Add optional fields to placement VERIFY: conflates geometry with stack/focus and
++   still lacks a final ordering request. Not recommended.
++3. Load an ad-hoc KWin script or bypass the broker with another control path: bypasses
++   established ownership/lifecycle checks. Not recommended.
++4. Geometry-only labels/cascades: can be useful planning, but do not implement the
++   required feature. Do not ship them as successful layered launching.
++
++## Internal implementation plan once the interface is approved
++
++Four fields imply panel; optional fifth must be a nonempty panel/under/over. Preserve
++file order, logical slots and current application/mode validation. Track explicitness
++separately from effective layer. dt_win_limit defaults to 4; N implicit > limit rejects;
++T > limit with N <= limit warns; otherwise budget passes. Explicit panel belongs to E.
++Validate bounded decimal limit before arithmetic. Budget acceptance is separate from
++geometry feasibility: reuse the 1–4 panel allocator for all panel applications and
++reject >4 panels with a clear allocator-limit error until another allocator is approved.
++Explicit under/over entries can exceed the budget with warnings and feasible rectangles.
++
++Recommend min_window_exposure_px=32 logical pixels initially (approval requested).
++Define desired exposure as a 32x32 square within a window's frame, clipped to usable
++display bounds and uncovered by higher cohort rectangles; decorations can count only
++where native hit testing confirms useful interaction. Deterministic right/down cascading
++uses file order within each layer, base graphical region and edge-constrained offsets.
++Keep valid base sizes; if available offset room is inadequate, warn that minimum exposure
++cannot be achieved and allow confirmation. Do not shrink arbitrarily or label offsets
++as verified exposure. Invalid dimensions/out-of-display rectangles reject. Track planned
++cohort exposure separately from actual compositor visibility; unmanaged obstruction and
++native decorations can prevent actual exposure and must not produce false success.
++Several over windows use the same ordered cascade and later-over-on-top policy.
++
++This intentionally migrates every four-field graphical entry from the old graphical
++rectangle to shared panel geometry. Users wanting a large window must append under/over.
++Keep -m l/r geometry unchanged; panel allocation should reuse its common calculation.
++Update plan columns/effective-config display and warnings with consistent terminology.
++No new syntax or geometry was partially implemented before this gate.
++
++## Required approval and verification
++
++Authorize the four additive broker methods, the resident claim/completion schema and
++named trigger, additive capability reporting, plus bounded broker transaction state.
++Authorize broker/resident edits specifically for this purpose. Approve the proposed
++focus and relative-order scope, and select the exposure default/criterion (32x32 suggested).
++No registry data-model or persistent stacking changes are requested.
++
++Compatibility: existing move/launch clients keep their signatures and behavior. New
++layer-aware launcher requires matching capability for -o. X11/Wayland use the same
++resident path but each deployed API set and compositor result must pass native tests.
++Manual moves/focus after initialization are never repaired. Test source replacement,
++expired claims, deleted UUIDs, registration-ID reuse prevention, unsupported capabilities,
++user-focus interference, partial failures and live-child lock release headlessly.
++
++Outcome B: await maintainer decision; no executable edits. The native matrix/configs
++below are future acceptance preparation only and are not valid in the current parser.
++
++
++## Baseline validation and changed-file inventory
++
++Unchanged code: 258 Python tests PASS without skips (installed-header coverage retained),
++3 JavaScript test files PASS, Bash syntax/Python compile PASS, ShellCheck PASS.
++Commands: python3 -m unittest discover -s tests -p 'test_*.py'; node --test tests/test_*.js;
++bash -n on CLI/planner/launcher/startup; shellcheck -x on CLI/planner/launcher; compile
++resource helper; git diff --check. Raw baseline logs remain under /tmp/joetoo-layers-baseline-*;
++no duplicate historical logs were added to the repository. No feature tests or native
++runs occurred. Prior maintainer native evidence remains in the existing acceptance record.
++
++Only modified tracked file: HANDOFF.md Section 5. New files: this interface review,
++step1.5c4-layers-native-plan.md and step1.5c4-layers-gate.patch. The patch includes
++new evidence explicitly. No executable, scope, architecture or historical record edit.
++[Future native plan](step1.5c4-layers-native-plan.md) gives proposed configurations/actions;
++these are review artifacts, not current parser support. Stage/commit/push/PR/merge/deploy
++remain separately gated after the architecture decision and subsequent implementation.
+diff --git a/task_step1.5/step1.5c4-layers-native-plan.md b/task_step1.5/step1.5c4-layers-native-plan.md
+new file mode 100644
+index 0000000..0778fde
+--- /dev/null
++++ b/task_step1.5/step1.5c4-layers-native-plan.md
+@@ -0,0 +1,83 @@
++# Future graphical-layer native acceptance preparation
++
++NOT executable against the current parser. Use only after interface approval,
++implementation/headless review, and a maintainer-committed implementation. Run X11
++first, then fast-forward Wayland to exactly the same commit; no new branch required.
++No native results are claimed here. Do not repeat provisioning/destructive session
++races already covered or separately deferred.
++
++Proposed common configuration header (setting names/default still require approval):
++
++```bash
++screen_width=1920
++screen_height=1080
++desktop_limit=20
++dt_win_limit=4
++min_window_exposure_px=32
++# End of configuration
++
++```
++
++Use a currently available desktop D; replace the example desktop 2 as needed. Fresh
++slots must not conflict with earlier managed windows. Preserve the broker history:
++changing test configs does not release previously occupied intended slots. Choose
++fresh available desktops/slots between accepted cases; do not restart the broker to
++bypass ownership and treat surviving windows as fresh managed windows.
++
++Each row supplies desktop_session_list values, in exact file order:
++
++| Case | Entries | Expected future result |
++| --- | --- | --- |
++| Implicit application-independent panels | `2\|konsole\|local\|btop`, `2\|dolphin\|local\|` | Two panel rectangles; no application-based underlay |
++| Explicit layers | `2\|dolphin\|local\|\|under`, `2\|konsole\|local\|btop\|panel`, `2\|dolphin\|local\|\|over` | Under below panel below over; over focused only if desktop currently displayed |
++| Final under | `2\|konsole\|local\|btop\|panel`, `2\|dolphin\|local\|\|under` | Launch order unchanged; panel above final under, focus follows approved policy |
++| Cascades | Two Dolphin-under entries, one Konsole-panel, two Dolphin-over entries | Configuration-order cascades; later within each layer above earlier; inspect every exposed target |
++| Implicit budget rejection | Five four-field Dolphin-local entries on desktop 2 | N=5 rejects before confirmation; zero windows |
++| Explicit budget excess | Four implicit panel entries, one explicit Dolphin-under | Budget warns and accepts; panel allocator remains feasible |
++| Explicit panel allocator excess | Five explicit panel entries | Budget passes with warning, geometry rejects >4 panels under recommended allocator policy |
++| Insufficient exposure | Cascade case with a reviewed large min_window_exposure_px | Valid geometry warns and permits confirmation; never claims minimum exposure succeeded |
++| Invalid geometry | Cascade case with invalid display/region percentage | Reject before confirmation; no windows |
++| Invalid grammar | Empty fifth field, unknown layer, six fields | Reject before confirmation |
++
++Create each trusted config manually with the common header and an indexed Bash
++array, e.g. the explicit-layers case:
++
++```bash
++desktop_session_list=(
++    '2|dolphin|local||under'
++    '2|konsole|local|btop|panel'
++    '2|dolphin|local||over'
++)
++# End of configuration
++
++```
++
++Future per-case commands (TEST_CONFIG is the exact reviewed file path):
++
++```bash
++git rev-parse HEAD
++./joetoo-kwin -c -f "$TEST_CONFIG"
++./joetoo-kwin -vv -o -f "$TEST_CONFIG"
++# End of commands
++
++```
++
++For a valid plan first decline and verify no side effects, then rerun and confirm.
++For every case separately record geometry, actual cohort stack order, focus UUID,
++logical slots, and displayed desktop. Compare the future transaction's recorded
++observations with visual KWin behavior; headless results do not establish native Z-order.
++
++Repeat the explicit-layer cases in all six layer permutations and both application
++orders, retaining launch file order. Repeat with 1–4 panels and multiple under/over
++windows. Test a final under entry on current desktop and on a different desktop;
++no automatic desktop switch is proposed. Verify under/over identity with unrelated
++Dolphin/Konsole already open: they must not be adopted or explicitly manipulated.
++
++For each cascade click the exposed area of every window to raise/focus it, then move,
++resize and manually lower/raise windows. Wait beyond initialization: no repair or
++persistent always-on-top/below constraint should restore old policy. Check decorations,
++clipping, small usable areas and later overlapping windows; offsets alone do not PASS.
++Verify the lock is released with living windows, and that a competing invocation is
++Busy while initial stacking finishes. Collect missing/unsupported capability diagnostics
++rather than falling back to active-window-dependent actions. No destructive desktop
++capacity or KWin replacement tests are requested.
+diff --git a/task_step1.5/step1.5c4-layers-node.log b/task_step1.5/step1.5c4-layers-node.log
+new file mode 100644
+index 0000000..9070e5c
+--- /dev/null
++++ b/task_step1.5/step1.5c4-layers-node.log
+@@ -0,0 +1,12 @@
++✔ tests/test_initial_layout.js (50.435276ms)
++✔ tests/test_step1_3a.js (45.881434ms)
++✔ tests/test_step1_4d_placement.js (45.037177ms)
++✔ tests/test_step1_5b_move.js (46.391479ms)
++ℹ tests 4
++ℹ suites 0
++ℹ pass 4
++ℹ fail 0
++ℹ cancelled 0
++ℹ skipped 0
++ℹ todo 0
++ℹ duration_ms 58.451126
+diff --git a/task_step1.5/step1.5c4-layers-packaging.md b/task_step1.5/step1.5c4-layers-packaging.md
+new file mode 100644
+index 0000000..c6b8038
+--- /dev/null
++++ b/task_step1.5/step1.5c4-layers-packaging.md
+@@ -0,0 +1,21 @@
++# Packaging recommendations for maintainer integration
++
++No ebuild, protected repository, installed file or user configuration was changed.
++
++- Install joetoo-kwin-template.conf as readable template data, for example under
++  /usr/share/joetoo-kwin/. Do not automatically populate or overwrite HOME/.config.
++- The user may copy/edit it at ${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf.
++  Empty/unset/relative XDG roots follow the documented HOME fallback.
++- /etc/joetoo-kwin/joetoo-kwin.conf remains an optional system fallback only when no
++  user file exists. Any system-config installation/CONFIG_PROTECT policy is a human
++  ebuild decision; do not replace a user's selection with the template.
++- Install the exposure helper with the existing CLI helpers, preserving their expected
++  relative libexec location or adapting that location explicitly during integration.
++  Pure offline planning now requires Python3 for rectangle exposure prediction.
++  Existing dbus-python, jq, flock and application dependencies remain relevant.
++- Broker and resident must be upgraded together for initial_layout_protocol=1; older
++  clients keep their existing D-Bus contracts, but a new -o must not run layered geometry
++  against an old resident and imply full initialization. Native reload/install is human work.
++- Announce migration: four-field graphical entries now mean panel; explicit under/over
++  preserves large-graphical intent. Desktop groups execute by first occurrence, not global
++  file order. The template uses illustrative targets and must be reviewed before real SSH.
+diff --git a/task_step1.5/step1.5c4-layers-python.log b/task_step1.5/step1.5c4-layers-python.log
+new file mode 100644
+index 0000000..94e83cf
+--- /dev/null
++++ b/task_step1.5/step1.5c4-layers-python.log
+@@ -0,0 +1,9 @@
++...................................................................joetoo-kwind: KWin resident reused: joetoo-bridge
++joetoo-kwind: KWin resident reused: joetoo-bridge
++.joetoo-kwind: KWin resident reused: joetoo-bridge
++joetoo-kwind: KWin resident started: joetoo-bridge
++....................................................................................................................................................................................................................
++----------------------------------------------------------------------
++Ran 280 tests in 32.718s
++
++OK
+diff --git a/task_step1.5/step1.5c4-layers-shellcheck.log b/task_step1.5/step1.5c4-layers-shellcheck.log
+new file mode 100644
+index 0000000..e69de29
+diff --git a/task_step1.5/step1.5c4-layers-syntax.log b/task_step1.5/step1.5c4-layers-syntax.log
+new file mode 100644
+index 0000000..726aa59
+--- /dev/null
++++ b/task_step1.5/step1.5c4-layers-syntax.log
+@@ -0,0 +1 @@
++Bash syntax (including template) and Python compilation: PASS
+diff --git a/tests/test_grouped_layers_launch.py b/tests/test_grouped_layers_launch.py
+new file mode 100644
+index 0000000..eeae8b6
+--- /dev/null
++++ b/tests/test_grouped_layers_launch.py
+@@ -0,0 +1,72 @@
++"""Real orchestration with fake broker/processes; no GUI or bus."""
++import unittest
++import subprocess
++import time
++from test_step1_5c_corrections import CorrectionsTests as _Base
++
++
++class GroupedLaunchTests(_Base):
++    def setUp(self):
++        super().setUp()
++        self.write_config(['4|konsole|local|btop|panel', '2|konsole|local|btop',
++                           '4|konsole|local|btop|over'])
++        # Observe group finalization without replacing production orchestration.
++        marker = '#-----[ main script ]'
++        self.client.write_text(self.client.read_text().replace(marker, r'''
++eval "$(declare -f qdbus6 | sed '1s/qdbus6/layer_base_bus/')"
++qdbus6() {
++    case $3 in
++        *.SubmitInitialLayout) printf 'finalize:%s\n' "$4" >> "$TRACE"; printf 'layout-id\n' ;;
++        *.InitialLayoutStatus) printf '{"state":"%s"}\n' "${INITIAL_STATE:-SUCCEEDED}" ;;
++        *) layer_base_bus "$@" ;;
++    esac
++}
++#-----[ main script ]'''))
++
++    def test_first_appearance_group_order_and_finalize_before_next_group(self):
++        result = self.run_client()
++        self.assertEqual(result.returncode, 0, result.stderr)
++        lines = self.calls.read_text().splitlines()
++        stages = [line for line in lines if line.startswith(('submit:', 'finalize:'))]
++        self.assertEqual([line.split(':')[0] for line in stages],
++                         ['submit', 'submit', 'finalize', 'submit', 'finalize'])
++        self.assertEqual([line for line in stages if line.startswith('submit:')], ['submit:4', 'submit:4', 'submit:2'])
++        self.assertIn('"layer":"over"', stages[2])
++
++    def test_o_without_f_selects_xdg_user_config(self):
++        selected = self.folder / 'xdg/joetoo-kwin/joetoo-kwin.conf'
++        selected.parent.mkdir(parents=True)
++        selected.write_text(self.config.read_text())
++        result = subprocess.run(['bash', str(self.client), '-o'],
++            env={**self.env, 'XDG_CONFIG_HOME': str(self.folder / 'xdg')}, capture_output=True, text=True, timeout=20)
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertIn(str(selected), result.stdout)
++
++    def test_nonterminal_initial_layout_stops_next_group_and_holds_lock(self):
++        # Shorten only test polling, retaining actual state decisions.
++        self.client.write_text(self.client.read_text().replace('_op_try<100', '_op_try<1'))
++        result = self.run_client(INITIAL_STATE='RUNNING')
++        self.assertNotEqual(result.returncode, 0)
++        self.assertNotIn('submit:2', self.calls.read_text())
++        self.assertIn('Initial stack/focus incomplete', result.stdout + result.stderr)
++
++    def test_lock_is_held_while_initial_layout_is_pending(self):
++        process = subprocess.Popen(['bash', str(self.client), '-o', '-f', str(self.config)],
++            env={**self.env, 'INITIAL_STATE': 'RUNNING'}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++        try:
++            deadline = time.monotonic() + 5
++            while not self.calls.exists() or 'finalize:' not in self.calls.read_text():
++                self.assertIsNone(process.poll())
++                self.assertLess(time.monotonic(), deadline); time.sleep(.02)
++            competitor = self.run_client()
++            self.assertNotEqual(competitor.returncode, 0)
++            self.assertIn('Busy:', competitor.stdout + competitor.stderr)
++        finally:
++            if process.poll() is None: process.terminate()
++            process.wait(timeout=5)
++
++
++for _name in dir(_Base):
++    if _name.startswith('test_') and _name not in GroupedLaunchTests.__dict__:
++        setattr(GroupedLaunchTests, _name, None)
++del _Base
+diff --git a/tests/test_initial_layout.js b/tests/test_initial_layout.js
+new file mode 100644
+index 0000000..d6a7407
+--- /dev/null
++++ b/tests/test_initial_layout.js
+@@ -0,0 +1,69 @@
++'use strict';
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const vm = require('node:vm');
++const source = fs.readFileSync(require('node:path').join(__dirname, '..', 'joetoo-kwin-resident.js'), 'utf8');
++const implementation = source.slice(source.indexOf('function initialLayoutFromBroker()'));
++function harness(layers, current=3) {
++    const desktop = {x11DesktopNumber:3};
++    const windows = layers.map((layer,i) => ({internalId:'w'+i, layer, deleted:false, tile:null,
++        maximizeMode:0, fullScreen:false, desktops:[desktop], onAllDesktops:false,
++        frameGeometry:{x:i*100,y:0,width:100,height:100}}));
++    const unrelated = {internalId:'unrelated'};
++    const workspace = {activeWindow:unrelated, currentDesktop:current===3?desktop:{x11DesktopNumber:current},
++        stackingOrder:[unrelated,...windows],
++        raiseWindow(w) {this.stackingOrder=this.stackingOrder.filter(x=>x!==w).concat(w);}};
++    const entries = windows.map(w => ({uuid:w.internalId,layer:w.layer,desktop:3,
++        geometry:{...w.frameGeometry},desktops:[3],on_all_desktops:false}));
++    const order = ['under','panel','over'].flatMap(l=>entries.filter(e=>e.layer===l).map(e=>e.uuid));
++    const preferred = [...entries].reverse().find(e=>e.layer==='over') || [...entries].reverse().find(e=>e.layer==='panel');
++    let callback, result;
++    const context = {workspace,observerSource:'source',BRIDGE:'b',PATH:'/b', Date:{now:()=>10},
++        windowUUID:w=>w?w.internalId:'',registerShortcut:()=>{},
++        callDBus(...args) {if(args[3]==='TakeInitialLayout')callback=args.at(-1); else result=JSON.parse(args[5]);}};
++    vm.runInNewContext(implementation, context);
++    return {windows,workspace,context, get result(){return result;},
++        reply() {callback(JSON.stringify({id:'id',source:'source',entries,order,
++                                         preferred_uuid:preferred?preferred.uuid:null,remaining_ms:1000}));}};
++}
++
++test('initial stack respects layers, last over, and targets only cohort UUIDs',()=>{
++    const h=harness(['over','under','panel','over','under']);
++    h.context.initialLayoutFromBroker(); h.reply();
++    assert.deepEqual(h.result.order,['w1','w4','w2','w0','w3']);
++    assert.equal(h.result.active_uuid,'w3'); assert.equal(h.result.focus_attempted,true);
++    assert.equal(h.workspace.stackingOrder[0].internalId,'unrelated');
++    assert.equal(h.result.geometry_unchanged,true);
++    // Manual raise/focus after completion has no subscription that repairs it.
++    h.workspace.raiseWindow(h.windows[1]);h.workspace.activeWindow=h.windows[1];
++    assert.equal(h.workspace.stackingOrder.at(-1),h.windows[1]);
++});
++test('last panel beats a final under; under-only and inactive groups do not activate',()=>{
++    const h=harness(['panel','panel','under']);h.context.initialLayoutFromBroker();h.reply();
++    assert.equal(h.result.active_uuid,'w1');
++    for(const [layers,current] of [[['under','under'],3],[['over','panel'],1]]) {
++        const other=harness(layers,current);other.context.initialLayoutFromBroker();other.reply();
++        assert.equal(other.result.focus_attempted,false);assert.equal(other.result.active_uuid,'unrelated');
++    }
++});
++test('focus changes during claim and deleted cohort fail before stack mutation',()=>{
++    const h=harness(['panel']);h.context.initialLayoutFromBroker();h.workspace.activeWindow=h.windows[0];h.reply();
++    assert.match(h.result.error,/focus/);
++    const d=harness(['panel']);d.context.initialLayoutFromBroker();d.windows[0].deleted=true;d.reply();
++    assert.match(d.result.error,/Missing/);
++});
++test('post-activation ordering is observed rather than inferred from raise return',()=>{
++    const h=harness(['under','panel','over']);let active=h.workspace.activeWindow;
++    Object.defineProperty(h.workspace,'activeWindow',{get(){return active;},set(w){active=w;h.workspace.raiseWindow(h.windows[0]);}});
++    h.context.initialLayoutFromBroker();h.reply();
++    assert.deepEqual(h.result.order,['w1','w2','w0']); // broker must reject this order
++});
++test('expired, moved and preexisting special-mode targets fail before mutation',()=>{
++    const h=harness(['panel']);h.context.initialLayoutFromBroker();h.context.Date.now=()=>2000;h.reply();
++    assert.match(h.result.error,/stale/);
++    const moved=harness(['panel']);moved.context.initialLayoutFromBroker();moved.windows[0].frameGeometry.x=999;moved.reply();
++    assert.match(moved.result.error,/changed/);
++    const special=harness(['panel']);special.windows[0].keepBelow=true;special.context.initialLayoutFromBroker();special.reply();
++    assert.match(special.result.error,/incompatible/);assert.equal(special.windows[0].keepBelow,true);
++});
+diff --git a/tests/test_initial_layout_broker.py b/tests/test_initial_layout_broker.py
+new file mode 100644
+index 0000000..e06563a
+--- /dev/null
++++ b/tests/test_initial_layout_broker.py
+@@ -0,0 +1,104 @@
++"""Bounded initial cohort: real broker methods with mock IPC imports."""
++import json
++import unittest
++import test_step1_4c_queries as queries
++
++
++class InitialLayoutBrokerTests(queries.ReadOnlyManagedQueryTests):
++    def setUp(self):
++        super().setUp()
++        self.sync(); self.register(); self.register(queries.SECOND, pid=43)
++        for index, record in enumerate(self.broker.registry.managed_windows.values(), 1):
++            record.recipe['slot'] = index
++            record.placement = 'succeeded'
++        self.broker.initial_layout_protocol = 1
++        self.ids = [r.request_id for r in self.broker.registry.managed_windows.values()]
++        self.uuids = list(self.broker.registry.managed_windows)
++
++    def submit(self, layers=('under', 'panel')):
++        return self.broker.SubmitInitialLayout(json.dumps({'entries': [
++            {'registration_request_id': rid, 'layer': layer} for rid, layer in zip(self.ids, layers)]}))
++
++    def complete(self, rid, **override):
++        r = self.broker.initial_layout
++        result = dict(source=queries.SOURCE, order=r['order'], current_desktop=3,
++                      before_active_uuid=self.uuids[0], active_uuid=r['preferred_uuid'],
++                      focus_attempted=True, geometry_unchanged=True)
++        result.update(override)
++        self.broker.CompleteInitialLayout(rid, json.dumps(result))
++        return json.loads(self.broker.InitialLayoutStatus(rid))
++
++    def test_owned_cohort_and_focus_preference(self):
++        for layers, expected in [(('under', 'panel'), 1), (('over', 'panel'), 0), (('panel', 'over'), 1)]:
++            rid = self.submit(layers)
++            self.assertEqual(self.broker.TakeInitialLayout('wrong-source'), '')
++            request = json.loads(self.broker.TakeInitialLayout(queries.SOURCE))
++            self.assertEqual(request['preferred_uuid'], self.uuids[expected])
++            self.assertEqual(self.complete(rid)['state'], 'SUCCEEDED')
++
++    def test_under_only_and_inactive_focus_are_not_claimed_as_activation(self):
++        rid = self.submit(('under', 'under')); self.broker.TakeInitialLayout(queries.SOURCE)
++        state = self.complete(rid, focus_attempted=False, active_uuid=self.uuids[0])
++        self.assertEqual(state['focus'], 'no automatic target')
++        rid = self.submit(); self.broker.TakeInitialLayout(queries.SOURCE)
++        state = self.complete(rid, current_desktop=1, focus_attempted=False, active_uuid=self.uuids[0])
++        self.assertIn('inactive desktop', state['focus'])
++        self.assertEqual(state['state'], 'SUCCEEDED')
++
++    def test_no_arbitrary_or_duplicate_identity(self):
++        for payload in ({'entries': [{'uuid': self.uuids[0], 'layer': 'panel'}]},
++                        {'entries': [{'registration_request_id': 'unknown', 'layer': 'panel'}]},
++                        {'entries': [{'registration_request_id': self.ids[0], 'layer': 'panel'}]*2}):
++            with self.assertRaises(self.module.dbus.DBusException):
++                self.broker.SubmitInitialLayout(json.dumps(payload))
++        self.broker.initial_layout_protocol = 0
++        with self.assertRaises(self.module.dbus.DBusException): self.submit()
++
++    def test_shared_busy_and_expiration(self):
++        rid = self.submit()
++        with self.assertRaises(self.module.dbus.DBusException): self.broker.Submit(1, 0, 0, 800, 900)
++        with self.assertRaises(self.module.dbus.DBusException): self.submit()
++        self.clock[0] += 11
++        self.assertEqual(self.broker.TakeInitialLayout(queries.SOURCE), '')
++        self.assertEqual(json.loads(self.broker.InitialLayoutStatus(rid))['state'], 'FAILED')
++        self.broker.Submit(3, 0, 0, 800, 900)
++        with self.assertRaises(self.module.dbus.DBusException): self.submit()
++
++    def test_stack_focus_geometry_independent_and_post_focus_mismatch_fails(self):
++        rid = self.submit(); self.broker.TakeInitialLayout(queries.SOURCE)
++        state = self.complete(rid, order=list(reversed(self.broker.initial_layout['order'])))
++        self.assertEqual(state['state'], 'FAILED')
++        self.assertEqual(state['geometry'], 'unchanged')
++        self.assertEqual(state['focus'], 'verified')
++        rid = self.submit(); self.broker.TakeInitialLayout(queries.SOURCE)
++        self.broker.observed_windows[self.uuids[0]]['geometry']['x'] += 1
++        self.assertEqual(self.complete(rid)['state'], 'FAILED')
++
++    def test_source_disappearance_and_stale_completion(self):
++        rid = self.submit(); self.broker.TakeInitialLayout(queries.SOURCE)
++        self.broker.observation_source = 'new-source'
++        self.assertEqual(json.loads(self.broker.InitialLayoutStatus(rid))['state'], 'FAILED')
++        with self.assertRaises(self.module.dbus.DBusException): self.complete(rid)
++
++    def test_disappearing_target_and_unverified_registration_reject(self):
++        first = self.broker.registry.managed_windows[self.uuids[0]]
++        first.placement = 'pending'
++        with self.assertRaises(self.module.dbus.DBusException): self.submit()
++        first.placement = 'succeeded'
++        rid = self.submit()
++        self.broker.observed_windows.pop(self.uuids[0])
++        self.assertEqual(self.broker.TakeInitialLayout(queries.SOURCE), '')
++        self.assertEqual(json.loads(self.broker.InitialLayoutStatus(rid))['state'], 'FAILED')
++
++    def test_malformed_completion_cannot_finish_a_request(self):
++        rid = self.submit(); self.broker.TakeInitialLayout(queries.SOURCE)
++        for payload in ('[]', '{"source":"wrong"}', 'null'):
++            with self.assertRaises(self.module.dbus.DBusException):
++                self.broker.CompleteInitialLayout(rid, payload)
++            self.assertEqual(json.loads(self.broker.InitialLayoutStatus(rid))['state'], 'RUNNING')
++        self.assertEqual(self.complete(rid)['state'], 'SUCCEEDED')
++
++
++for _name in dir(queries.ReadOnlyManagedQueryTests):
++    if _name.startswith('test_') and _name not in InitialLayoutBrokerTests.__dict__:
++        setattr(InitialLayoutBrokerTests, _name, None)
+diff --git a/tests/test_layers_and_xdg.py b/tests/test_layers_and_xdg.py
+new file mode 100644
+index 0000000..0100648
+--- /dev/null
++++ b/tests/test_layers_and_xdg.py
+@@ -0,0 +1,124 @@
++"""Planner contracts and isolated XDG filesystem discovery, without a live bus."""
++import os
++import subprocess
++from pathlib import Path
++import unittest
++from test_step1_5a_plan import PlannerHarness, ROOT
++
++
++class LayerPlanTests(PlannerHarness, unittest.TestCase):
++    def test_default_panels_and_explicit_layers(self):
++        self.write_config(['4|dolphin|local|Documents|panel', '4|konsole|ssh|host|panel',
++                           '4|konsole|ssh|host|over', '2|konsole|ssh|host|',
++                           '4|konsole|ssh|host|over'], extra='verbosity=6\nmin_window_exposure_px=8')
++        output = self.plan()
++        rows = self.rows(output)
++        self.assertEqual([r[1] for r in rows], ['1', '2', '3', '1', '4'])
++        self.assertEqual([r[5] for r in rows], ['panel', 'panel', 'over', 'panel', 'over'])
++        self.assertEqual(rows[0][-4:], ['19', '54', '816', '918'])
++        self.assertIn('preferred focus slot [4]', output)
++        self.assertIn('preferred focus slot [1]', output)
++
++    def test_budget_thresholds_and_allocator_constraint(self):
++        cases = [(['1|dolphin|local|']*5, '', 2),
++                 (['1|dolphin|local||under']*5, '', 0),
++                 (['1|dolphin|local|']*4+['1|dolphin|local||under'], '', 0),
++                 (['1|dolphin|local||panel']*5, '', 2),
++                 (['1|dolphin|local|']*5, 'dt_win_limit=5', 2)]
++        for records, extra, rc in cases:
++            with self.subTest(records=records, extra=extra):
++                self.write_config(records, extra)
++                output = self.plan(expected=rc)
++                if rc == 0 and len(records) > 4:
++                    self.assertIn('explicit layers exceed ordinary layout budget', output)
++        for value in ('0', '-1', '999999999999999999999', '1+2'):
++            self.write_config(['1|konsole|local|btop'], 'dt_win_limit='+value)
++            self.plan(expected=2)
++
++    def test_invalid_layers_and_field_counts(self):
++        for value in ('1|dolphin|local||wrong', '1|dolphin|local||over|panel',
++                      '1|dolphin|local', '1|dolphin|local||panel|'):
++            self.write_config([value]); self.plan(expected=2)
++
++    def test_cascades_preserve_dimensions_and_exposure_warns_not_rejects(self):
++        self.write_config(['1|dolphin|local||under']*3)
++        rows = self.rows(self.plan())
++        self.assertEqual(rows[0][-2:], rows[1][-2:])
++        self.assertLess(int(rows[0][-4]), int(rows[1][-4]))
++        self.write_config(['1|dolphin|local||under', '1|dolphin|local||over'], 'min_window_exposure_px=8')
++        mixed = self.rows(self.plan())
++        self.assertNotEqual(mixed[0][-4:], mixed[1][-4:])
++        self.write_config(['1|dolphin|local||under']*3, 'min_window_exposure_px=1000')
++        output = self.plan()
++        self.assertEqual(len(self.rows(output)), 3)
++        self.assertIn('desired 1000x1000 logical-pixel exposure cannot be maintained', output)
++
++    def test_exposure_geometry_checker_uses_regions_not_offsets(self):
++        import importlib.util
++        spec = importlib.util.spec_from_file_location('exposure', ROOT / 'libexec/joetoo-kwin-exposure.py')
++        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
++        self.assertTrue(module.exposed((0, 0, 100, 100), [(32, 0, 100, 100)], 32))
++        self.assertFalse(module.exposed((0, 0, 100, 100), [(8, 0, 100, 100)], 32))
++        self.assertFalse(module.exposed((0, 0, 20, 20), [], 32))
++        import random
++        rng = random.Random(4)
++        for _ in range(100):
++            above = [(rng.randrange(10), rng.randrange(10), rng.randrange(1, 8), rng.randrange(1, 8)) for _ in range(4)]
++            brute = any(all(a+3 <= c or a >= c+w or b+3 <= d or b >= d+h
++                            for c, d, w, h in above) for a in range(8) for b in range(8))
++            self.assertEqual(module.exposed((0, 0, 10, 10), above, 3), brute)
++
++
++class XdgDiscoveryTests(PlannerHarness, unittest.TestCase):
++    def setUp(self):
++        super().setUp()
++        self.env['HOME'] = str(self.folder / 'home')
++        self.env.pop('XDG_CONFIG_HOME', None)
++        self.user = Path(self.env['HOME']) / '.config/joetoo-kwin/joetoo-kwin.conf'
++        self.user.parent.mkdir(parents=True)
++        self.system = self.folder / 'system.conf'
++        self.system.write_text(self.config.read_text())
++        self.client.write_text(self.client.read_text().replace('/etc/joetoo-kwin/joetoo-kwin.conf', str(self.system)))
++
++    def test_user_precedes_system_and_explicit_precedes_user(self):
++        self.user.write_text(self.config.read_text())
++        self.assertIn('config='+str(self.user), self.run_cli('-c'))
++        self.assertIn('config='+str(self.config), self.run_cli('-c', '-f', str(self.config)))
++
++    def test_relative_empty_unset_xdg_and_absolute_override(self):
++        self.user.write_text(self.config.read_text())
++        for value in ('', 'relative'):
++            self.env['XDG_CONFIG_HOME'] = value
++            self.assertIn('config='+str(self.user), self.run_cli('-c'))
++        absolute = self.folder / 'xdg'
++        selected = absolute / 'joetoo-kwin/joetoo-kwin.conf'
++        selected.parent.mkdir(parents=True); selected.write_text(self.config.read_text())
++        self.env['XDG_CONFIG_HOME'] = str(absolute)
++        self.assertIn('config='+str(selected), self.run_cli('-c'))
++
++    def test_system_fallback_and_missing_locations(self):
++        self.assertIn('config='+str(self.system), self.run_cli('-c'))
++        self.system.unlink()
++        self.assertIn('No configuration:', self.run_cli('-c', expected=2))
++        self.run_cli('-h')  # No configuration is needed for help.
++
++    def test_bad_user_config_never_falls_back(self):
++        self.user.write_text('return 1\n'); self.run_cli('-c', expected=2)
++        self.user.write_text(self.config.read_text() + '\nscreen_width=0\n')
++        self.run_cli('-c', expected=2)
++        self.user.write_text(self.config.read_text()); self.user.chmod(0)
++        try:
++            self.assertIn('configuration unreadable', self.run_cli('-c', expected=2))
++        finally: self.user.chmod(0o600)
++
++    def test_user_discovery_for_layout_move_and_no_config_for_numeric_move(self):
++        self.user.write_text(self.config.read_text())
++        self.client.write_text(self.client.read_text().replace('#-----[ main script ]', r'''
++qdbus6() { printf 'CALL:%s\n' "$*" >> "$TRACE"; case $3 in *.SubmitMove) printf 'rid\n';; *.Status) printf 'OK verified\n';; esac; }
++#-----[ main script ]'''))
++        result = subprocess.run(['bash', str(self.client), '-m', 'r'], env=self.env, text=True, capture_output=True)
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertIn('SubmitMove', self.calls.read_text())
++        self.user.unlink(); self.system.unlink(); self.calls.unlink()
++        result = subprocess.run(['bash', str(self.client), '-m', '2'], env=self.env, text=True, capture_output=True)
++        self.assertEqual(result.returncode, 0, result.stderr)
