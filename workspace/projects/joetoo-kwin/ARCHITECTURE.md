@@ -3,8 +3,9 @@
 This is the project-specific design record for `joetoo-ai/workspace/projects/joetoo-kwin/`.
 It distinguishes accepted requirements, implemented and accepted contracts, proposed
 future capabilities, and open design questions. The [project README](README.md)
-records implementation status; the [Step 1.5c.4 closure](task_step1.5/HANDOFF.md)
-and associated acceptance records retain test history.
+records current implementation status. The [active Step 1.5c.5 handoff](task_step1.5/HANDOFF.md)
+records current task permissions, while [Step 1.5c.4 native closure](task_step1.5/step1.5c4-native-acceptance.md)
+and other task evidence retain the earlier acceptance history.
 
 Repository-root, workspace and project `AGENTS.md` instructions govern AI collaboration.
 Official sources and Gentoo packaging belong in `joetoo-upstream` and `joetoo`,
@@ -408,7 +409,7 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.2** | Sequential managed launches, positive UUID registration, geometry and duplicate-slot safety | Accepted |
 | **1.5c.3** | Original local Bash, `ssh_wrapper` and unavailable SSH placeholders | Accepted |
 | **1.5c.4** | Desktop capacity, Dolphin local launches, XDG discovery, application-independent `under/panel/over`, grouped launches, bounded initial stack/focus | Accepted, merged; native X11/Wayland closure evidence in Step 1.5 task |
-| **1.5c.5a** | Dolphin SFTP integration | Proposed next increment; approved endpoint/URI grammar and separate remote-access status before implementation |
+| **1.5c.5a** | Dolphin SFTP integration | Implemented on the task branch; maintainer demonstrated managed X11 and Wayland launches, UUID placement/stacking and remote browsing. Separate post-confirmation DNS/TCP advisories remain a follow-up correction under review; see task evidence |
 | **1.5c.5b** | TigerVNC viewer over authenticated SSH | Proposed next increment; inspect existing functioning KDE launcher/POC, verify compatibility, then approve minimal managed-launch translation |
 | **1.5c.5c** | Comparative RDP feasibility and decision | Evaluate installed candidates, security, capability and user value; an accepted secure/reliable RDP workflow may supersede legacy VNC as primary graphical remote access; implementation requires explicit follow-up authorization |
 | **1.5d** | add -L, -l; conduct integrated native X11/Wayland regression of completed Step 1.5 capabilities | Cross-feature ownership, Busy, focus, desktop membership, failures and completeness; not an implicit feature-development gate |
@@ -417,7 +418,7 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.8** | Restorable `.conf` snapshot, `-S`, `-r` | New-window recovery from validated last-good intent |
 | **1.9** | `eselect`, installation/ebuild and complete integration | Maintainer-led joetoo/joetoo-upstream packaging, template guidance and version 1 lifecycle |
 
-### 1.5c.5 — Remote resource and desktop integration (proposed; not yet authorized)
+### 1.5c.5 — Remote resource and desktop integration (incrementally authorized)
 
 **Common contract:** Each approved new `program|mode|target` combination
 must define exact parsing, local process invocation, authentication and
@@ -428,13 +429,47 @@ interfaces wherever possible. Do not introduce a generic remote-access
 framework or unnecessary broker expansion. Unsupported recipes reject before
 confirmation and before process or network side effects.
 
-**1.5c.5a — Dolphin SFTP (first).** Investigate installed Dolphin/KIO SFTP
-behavior, target grammar (user, hostname, IPv6, optional port and remote
-path), safe URI encoding and credentials handling, and `--new-window` PID/UUID
-correlation. Then, on separate explicit implementation approval, add
-`dolphin|sftp|TARGET` to the known safe local-Dolphin launch framework. A
-remote file navigation/authentication failure is not a KWin placement failure.
-Do not execute remote Dolphin or treat KIO file transfer as SSH GUI forwarding.
+**1.5c.5a — Dolphin SFTP (first).** The maintainer approved the URL-only
+`sftp://[USER@]HOST[:PORT][/ABSOLUTE/PATH]` target contract, safe
+percent-encoding/redacted diagnostics, native KIO/libssh host trust and
+independent remote-outcome reporting. The task-branch implementation launches
+local `dolphin --new-window -- URL` using existing positive PID/UUID ownership,
+desktop/slot placement and initial layers. Maintainer X11 and Wayland native
+runs demonstrated successful managed placement and remote file browsing on the
+specified reachable destination. Those observations do not mean that the
+launcher verified SFTP authentication or listing, or that untested host-key
+prompts and active-desktop focus have been accepted. A remote navigation or
+authentication failure is not a KWin placement failure. Do not execute remote
+Dolphin or treat KIO file transfer as SSH GUI forwarding.
+
+**Post-confirmation SFTP reachability advisories (follow-up correction).**
+The maintainer requires two separately observed, bounded checks: **(1) local
+name resolution** and **(2) a TCP connection attempt to the intended SSH
+transport endpoint/port**, where the effective destination can be determined
+reliably. They are diagnostics, not SFTP authentication or session verification.
+They must not run during `-c`, URI validation, offline capability preflight or
+before `-o` confirmation. Use configurable bounded timeouts and preserve
+separate `succeeded`, `failed`, and `not attempted/inconclusive` outcomes for
+each check. Numeric IP addresses need no DNS lookup. SSH aliases, libssh
+configuration, proxies and nonstandard ports can make direct NSS/TCP results
+incomplete or misleading: do not equate a DNS failure with TCP unreachability,
+or a TCP success with a working authenticated SFTP session. A check that cannot
+be performed must be reported as such, not silently converted to failure.
+Any negative or indeterminate advisory result must leave the accepted launch
+policy unchanged: **launch the local Dolphin window with the validated SFTP URL
+anyway**, permit KIO to present its own error/retry UI, and report the window's
+actual registration/placement separately. No automatic fallback to a local
+path or new network-management framework is authorized by these advisories.
+
+**KIO/OpenRC compatibility observation.** The maintainer observed
+`kf.kio.gui: Failed to determine systemd version, falling back to extremely legacy forking mode.`
+During KDE KIO's application-process launch selection, inability to obtain a
+systemd-manager version causes a fallback to its normal forking launcher (see
+[KIO process-runner source](https://github.com/KDE/kio/blob/4ef7a0aed32da3c5a365f2d07d637a8d821a678a/src/gui/systemd/systemdprocessrunner.cpp)).
+On the tested OpenRC session, this was nonfatal and did not prevent managed
+window registration or remote browsing. It is not evidence of a failed SSH/SFTP
+connection. No suppression, process-launch redesign or systemd dependency is
+authorized as part of Step 1.5c.5a.
 
 **1.5c.5b — TigerVNC over SSH (second).** First inspect the existing archived
 `archive/tigervnc-poc/vnc-via-ssh-launch` and the maintainer's *working*,
@@ -526,4 +561,5 @@ tasks rather than broad speculative rewrites.
 - Should joetoo's Bash planner be evaluated for non-KWin environments such as
   LXQt/GNOME in a separately authorized later effort? This is not a version 1
   portability commitment.
+
 

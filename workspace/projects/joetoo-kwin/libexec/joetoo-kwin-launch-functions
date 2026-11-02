@@ -8,6 +8,23 @@ launch_resource() {
     python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_launch_resources.py" "$@"
 }
 
+# Only called from confirmed execution, immediately before the SFTP launch.
+# Reporting/helper failures cannot change the managed application outcome.
+sftp_launch_advisory() {
+    [[ $sftp_advisory_enabled ]] || return 0
+    local _sa_result _sa_warning _sa_observation
+    if _sa_result=$(printf '%s' "$1" | python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_sftp_advisory.py" \
+        "$sftp_advisory_timeout_ms" "$sftp_advisory_ssh_port"); then
+        _sa_warning=$(jq -er '.warning | select(type == "string")' <<< "$_sa_result") || _sa_warning='SFTP advisory: result unavailable; launching Dolphin anyway.'
+        [[ -z $_sa_warning ]] || j_msg "-${warn}" -p "$_sa_warning" || :
+        _sa_observation=$(jq -c 'del(.warning)' <<< "$_sa_result") || _sa_observation='unavailable'
+        j_msg "-${debug}" -p "SFTP advisory observation (TCP only, not SSH/authentication/listing verification): $_sa_observation" || :
+    else
+        j_msg "-${warn}" -p 'SFTP advisory: helper unavailable/inconclusive; launching Dolphin anyway.' || :
+    fi
+    return 0
+}
+
 launch_preflight() {
     local _lp_status _lp_managed _lp_observed _lp_i _lp_conflicts
     for _lp_i in bash jq qdbus6 python3; do
@@ -132,6 +149,7 @@ open_plan() {
         if [[ $_op_class == dolphin ]]; then
             if [[ ${planned_mode[$_op_i]} == sftp ]]; then
                 _op_argv=(dolphin --new-window -- "${planned_remote_uri[$_op_i]}")
+                sftp_launch_advisory "${planned_remote_uri[$_op_i]}"
                 j_msg "-${notice}" -p 'Requesting SFTP location; authentication and remote listing are not verified by this launcher'
             else
                 _op_argv=(dolphin --new-window -- "${planned_local_path[$_op_i]}")

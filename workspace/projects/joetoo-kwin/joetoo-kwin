@@ -156,6 +156,7 @@ check_plan() {
     varlist+=" dt_win_limit min_window_exposure_px"
     varlist+=" initial_focus_timeout_ms initial_focus_poll_interval_ms"
     varlist+=" sftp_capability_timeout_ms"
+    varlist+=" sftp_advisory_enabled sftp_advisory_timeout_ms sftp_advisory_ssh_port"
     varlist+=" terminal_width_percent terminal_gap_percent terminal_height_percent"
     varlist+=" terminal_left_percent terminal_top_percent terminal_row_gap_percent"
     varlist+=" graphical_left_percent graphical_top_percent graphical_width_percent graphical_height_percent"

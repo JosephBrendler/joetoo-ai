@@ -17,6 +17,9 @@ plan_defaults() {
     initial_focus_timeout_ms=500
     initial_focus_poll_interval_ms=25
     sftp_capability_timeout_ms=2000
+    sftp_advisory_enabled=$TRUE
+    sftp_advisory_timeout_ms=2000
+    sftp_advisory_ssh_port=22
     terminal_width_percent=87
     terminal_gap_percent=2
     terminal_height_percent=85
@@ -87,6 +90,11 @@ validate_plan() {
     declare -gA implicit_counts=() total_counts=() terminal_counts=() terminal_slots=() next_slot=()
 
     validate_layout_geometry || return $?
+    if [[ $sftp_advisory_enabled != "$TRUE" && -n $sftp_advisory_enabled ]] ||
+        [[ ! $sftp_advisory_timeout_ms =~ ^[1-9][0-9]{0,4}$ || ! $sftp_advisory_ssh_port =~ ^[1-9][0-9]{0,4}$ ]] ||
+        (( sftp_advisory_timeout_ms > 10000 || sftp_advisory_ssh_port > 65535 )); then
+        plan_error 'invalid SFTP advisory settings: enabled TRUE/FALSE, timeout 1..10000 ms, port 1..65535'; return 2
+    fi
     if [[ ! $sftp_capability_timeout_ms =~ ^[1-9][0-9]{0,4}$ ]] || (( sftp_capability_timeout_ms > 10000 )); then
         plan_error 'sftp_capability_timeout_ms must be 1..10000 ms'; return 2
     fi

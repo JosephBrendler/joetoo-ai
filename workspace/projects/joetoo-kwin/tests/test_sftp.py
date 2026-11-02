@@ -91,6 +91,20 @@ class SftpContractTests(unittest.TestCase):
 class SftpLaunchTests(_Graphical):
     def setUp(self):
         super().setUp()
+        # Never perform real NSS or TCP operations in subprocess-based tests.
+        getent = self.folder / 'getent'
+        getent.write_text('#!/bin/sh\nprintf "resolver:%s\\n" "$*" >> "$TRACE"\n'
+                          'if [ "${MOCK_RESOLVE:-ok}" = fail ]; then exit 2; fi\n'
+                          'printf "192.0.2.1 STREAM host\\n"\n')
+        getent.chmod(0o755)
+        helper = self.folder / 'libexec/joetoo_kwin_sftp_advisory.py'
+        helper.write_text(helper.read_text().replace("if __name__ == '__main__':", '''
+def probe_tcp(addresses, port, timeout_ms):
+    import os
+    with open(os.environ['TRACE'], 'a') as trace: trace.write('tcp:' + str(port) + '\\n')
+    return os.environ.get('MOCK_TCP', 'open')
+if __name__ == '__main__':
+'''))
         self.write_config(['4|dolphin|sftp|sftp://joe@host/home/joe/|panel',
                            '2|konsole|local|btop', '4|dolphin|local||under'])
         root = self.folder / 'plugins'

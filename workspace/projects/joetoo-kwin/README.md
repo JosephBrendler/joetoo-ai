@@ -16,14 +16,21 @@ closure documentation recorded in the [Step 1.5 handoff](task_step1.5/HANDOFF.md
 The merged branch may have a different merge-commit SHA. Do not confuse the
 tested implementation revision with a later documentation or merge commit.
 
-**Next proposed tranche: 1.5c.5 (remote resources and remote desktop).**
+**Step 1.5c.5a Dolphin SFTP is implemented on the task branch**, published at
+`98e3668` and natively demonstrated on gmki91 X11 and q552u01 Wayland. See the
+[SFTP acceptance record](task_step1.5/step1.5c5a-native-acceptance.md) for independent
+window/remote outcomes and remaining checks. A new non-enforcing DNS/NSS + TCP
+console advisory is pending correction review/native validation. Neither this task
+branch nor complete 1.5c.5 is declared merged.
+
+**Remaining tranche: 1.5c.5 (remote resources and remote desktop).**
 This architecture/README update is planning, **not** an authorization to
 implement, perform remote operations, or change protected repositories.
 The sequence proposed for a new, separately authorized task handoff is:
 
 | Increment | Proposed work | Status |
 | --- | --- | --- |
-| 1.5c.5a | Dolphin SFTP, safe target grammar and independent placement/connection semantics | Proposed |
+| 1.5c.5a | Dolphin SFTP, safe target grammar and independent placement/connection semantics | Implemented on task branch; X11/Wayland native demonstrations; advisory correction pending |
 | 1.5c.5b | Translate the maintainer's existing KDE-launcher-integrated TigerVNC-over-SSH workflow into positively managed launch after POC/security review | Proposed |
 | 1.5c.5c | Compare RDP graphical candidates and decide whether secure, reliable RDP should replace legacy VNC as preferred graphical remote access | Feasibility first; implementation separately gated |
 | 1.5d | Integrated X11/Wayland regression of accepted 1.5 features, including selected new transports | Future separate gate |
