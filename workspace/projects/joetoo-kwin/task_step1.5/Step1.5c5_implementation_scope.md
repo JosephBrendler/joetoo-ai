@@ -1,12 +1,12 @@
 # Step 1.5c.5 — Remote resources and graphical remote desktops: implementation scope and outline
 
-**Status:** Proposed scope for maintainer review. This document does **not** authorize implementation, repository edits, network connections, native GUI operations, deployment, publication, or a new task branch. Increment-specific authorization belongs in a subsequently approved `task_step1.5/HANDOFF.md`.
+**Status:** Maintainer-approved implementation scope. It defines task boundaries and acceptance requirements but does **not** independently authorize code changes, native/network operations, publication or later increments; the current [HANDOFF](HANDOFF.md) controls those permissions. Step 1.5c.5a Dolphin SFTP was separately approved, implemented on the task branch and demonstrated in native X11 and Wayland tests. A subsequent two-part reachability-advisory correction remains subject to its own code review and native acceptance. Steps 1.5c.5b/c remain separately gated.
 
-**Baseline:** The maintainer has accepted and merged the bounded Step 1.5c.4 implementation. The maintainer reports committing an updated `ARCHITECTURE.md` and `README.md` but **not yet merging those documentation changes** at the time this scope was drafted. Before opening a task branch, verify accepted `main`, its exact SHA, this scope's consistency with the merged architecture, and working-tree cleanliness. The historical native-tested 1.5c.4 implementation baseline is `a3c50fc`; do not mistake it for the future 1.5c.5 branch point.
+**Baseline:** Step 1.5c.4 is accepted and merged. The accepted Step 1.5c.5 planning update was committed as `099096e33fe568579b219ffced4131f211af2a3f`. The maintainer created `task/joetoo-kwin-step1.5c5-remote-access`; the SFTP implementation was committed/pushed there at `98e366899a611e000f246b74abb4906f7238db8b`. Verify current HEAD and working-tree state for each subsequent iteration. `a3c50fc` remains the historical native-tested 1.5c.4 implementation SHA, not the 1.5c.5 branch point.
 
-**Proposed branch:** `task/joetoo-kwin-step1.5c5-remote-access` (name and base require maintainer approval).
+**Task branch:** `task/joetoo-kwin-step1.5c5-remote-access` (already maintainer-created; publication/merge remains maintainer-controlled).
 
-**Authorities:** Current project `ARCHITECTURE.md` (particularly §§3–7, 10–11), project/root/workspace `AGENTS.md`, and the future active HANDOFF. `Step1.5c4_implementation_scope.md` is historical design evidence, not renewed authorization. The existing `task_step1.5/HANDOFF.md` closes 1.5c.4 and does not open 1.5c.5.
+**Authorities:** Current project `ARCHITECTURE.md` (especially §§3–7, 10–11), project/root/workspace `AGENTS.md`, and the active [HANDOFF](HANDOFF.md). `Step1.5c4_implementation_scope.md` is historical design evidence, not renewed authorization.
 
 ## 1. Objective and boundaries
 
@@ -42,11 +42,62 @@ Propose and obtain maintainer approval of a documented, unambiguous `TARGET` gra
 
 Reuse the current Dolphin `--new-window`, argument-array, positive process/UUID correlation, managed-slot guard, desktop verification, and initial-layout transaction. Confirm the installed Dolphin/KIO version and behavior; when a launch delegates to an existing window or produces an ambiguous PID/UUID, fail conservatively rather than adopting it. Distinguish invalid recipe, missing executable/KIO support, window-launch failure, window-placement failure, KIO authentication prompt, inaccessible remote directory, connection timeout and remote listing success to the extent observable. **Do not invent transport telemetry** if existing interfaces cannot report it; state uncertainty truthfully.
 
+### 3.2a Post-confirmation name-resolution and TCP-connectivity advisories
+
+A maintainer-directed follow-up correction adds **two separately reported checks**
+for SFTP targets: local DNS/NSS name resolution (not needed for a literal IP)
+and bounded TCP connectivity to the intended SSH endpoint/port, where the
+effective destination is safely ascertainable. Each check has its own
+`success`, `failure`, or `not attempted/inconclusive` result. If resolution
+fails and there is no usable address for a TCP attempt, report the second
+check as **not attempted**, not as a TCP failure. A failed direct lookup or
+connection check is not proof that KIO/libssh cannot reach an SSH alias or
+proxy-mediated destination. Neither check is authentication or SFTP success.
+
+These checks occur **only after the maintainer confirms `-o`**, immediately
+before the relevant SFTP launch. Preserve the offline `-c`, full-plan URI
+validation and local KIO capability preflight. Use configurable bounded
+timeouts and a documented disable mechanism; do not require new packages or
+embed secrets or unvalidated URIs into resolver/connection command lines.
+Unavailable tools, unsupported aliases/proxies, timeouts and indeterminate
+results must be differentiated from a verified failure. The checks are
+**advisory only**: negative results must not abort an otherwise valid plan,
+change UUID/slot/geometry handling, or claim a remote-authentication outcome.
+Always launch Dolphin with the original validated URL so KIO can show its own
+error and allow manual retry; do not silently substitute a local directory.
+
+### 3.2b KIO/OpenRC process-launch warning
+
+The maintainer observed
+`kf.kio.gui: Failed to determine systemd version, falling back to extremely legacy forking mode.`
+on an OpenRC/KWin native test host. KDE KIO's process runner attempts to query
+the session's systemd-manager version and uses a conventional forking fallback
+when that query does not return a usable version. This is a **nonfatal,
+application-launch compatibility warning**, separate from SFTP hostname,
+TCP-connectivity, authentication or listing errors. The tested managed launch
+and remote browsing still succeeded. Do not introduce systemd as a dependency,
+suppress the warning or redesign KDE/joetoo process launching in this tranche.
+
 ### 3.3 Acceptance
 
 Headless: valid/invalid endpoint table; URI construction and escaping; no command evaluation/secret leakage; complete-plan preflight; cancellation; launch-argv capture; ambiguous/delegated window rejection; propagation of independent placement versus remote-access results; preservation of existing local-Dolphin and Konsole tests.
 
 Maintainer-native on `gmki91` X11 and `q552u01` Wayland: reachable SFTP location with visible file browsing, unavailable/invalid target, authentication behavior, positive new-window UUID, exact desktop/slot and placement, layer behavior, and no adoption of an already-running Dolphin. Report which outcomes are directly observable versus not instrumented.
+
+**Observed evidence (2026-11-01):** The maintainer ran the SFTP+local Dolphin
+fixture on both X11 (`gmki91`) and Wayland (`q552u01`): 301 Python and 50
+JavaScript tests passed on each host; both new windows registered with distinct
+UUIDs, reached desktop 2 with verified geometry and verified panel-over-under
+stacking; the maintainer independently browsed `nuthuvia.brendler` via KIO
+and opened its `/etc/hostname`. Both runs initialized desktop 2 while desktop
+1 was active, so automatic focus acquisition on the displayed target desktop
+was **not tested**. Host-key/authentication prompts and all URI variants were
+not exercised. A separate X11 negative test using nonexistent
+`raspi23204.brendler` successfully placed both windows, while Dolphin reported
+name-resolution failure. That verifies independent placement/error display;
+it does **not** establish completed acceptance of the new DNS/TCP advisories,
+which require their own tests after implementation. Preserve these distinctions
+in the task's native acceptance record.
 
 **Gate:** Acceptance of 1.5c.5a and a separate explicit authorization precede work on 1.5c.5b.
 
@@ -159,4 +210,5 @@ Reuse previously accepted 1.5c.4 native evidence for unchanged contracts rather 
 
 **Stop/escalate** on: conflicting task scope or repository policy; uncertain source baseline; unsupported/ambiguous endpoint semantics; inability to preserve positive window identity; unresolved cross-process Busy or ownership uncertainty; unsafe credential/certificate/host-key behavior; VNC traffic outside the approved SSH protection; orphaned tunnel risk; unapproved broker/resident API edits; need for deployment, native connections or protected repository writes; or a proposed departure from accepted layer, shell or configuration contracts. Document concrete findings and obtain the maintainer's decision before extending scope.
 
-**Next actor:** maintainer reviews this proposed scope with cloud AI, records accepted decisions, merges approved planning documents as appropriate, and only then prepares a new, specifically authorized 1.5c.5 HANDOFF for the first bounded increment.
+**Next actor:** maintainer reviews this outcomes from implementation of this proposed scope with cloud AI, records accepted decisions, merges approved planning documents as appropriate, and only then prepares a new, specifically authorized 1.5c.5 HANDOFF for the first bounded increment.
+

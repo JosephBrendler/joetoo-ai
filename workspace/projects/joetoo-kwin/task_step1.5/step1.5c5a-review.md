@@ -1,17 +1,16 @@
-# Step 1.5c.5a — Dolphin SFTP implementation candidate
+# Step 1.5c.5a — Dolphin SFTP implementation review and advisory correction
 
-## Baseline, authority and source evidence
+**Published implementation:** `98e366899a611e000f246b74abb4906f7238db8b` on
+`task/joetoo-kwin-step1.5c5-remote-access`. Managed Dolphin SFTP has been natively
+demonstrated on gmki91 X11 and q552u01 Wayland; see the [acceptance record](step1.5c5a-native-acceptance.md).
+This branch/whole milestone is not declared merged. The newly authorized advisory
+correction below is uncommitted and awaits maintainer-native validation.
 
-Branch `task/joetoo-kwin-step1.5c5-remote-access`, HEAD/local main
-`5dd60d397d00539ddfc973455e178dfefda80267`, descendant of planning baseline
-`099096e33fe568579b219ffced4131f211af2a3f`. The starting dirty work was the prior
-contract report and HANDOFF row 21; both were preserved. The maintainer also added
-approval annotations/native evidence to that report and an explicit authorization
-subsection in HANDOFF Section 4 during this iteration; those were retained. Agent
-HANDOFF edits add only row 22. The full candidate diff includes these maintainer notes. Latest explicit maintainer
-approval resolves the grammar/security gate, including native KIO operator trust
-policy and optional rather than mandatory qtpaths discovery. No branch, staging,
-commit, publication, installation or service operation was performed.
+## Implementation history and source evidence
+
+The approved implementation was prepared from `5dd60d3`, following planning baseline
+`099096e`; its prior review/diff and headless results remain historical evidence.
+The grammar/security decisions were approved before dispatch was implemented.
 
 The exact release worker was available read-only in local Portage distfiles:
 `/var/cache/distfiles/kio-extras-26.04.3.tar.xz`, member
@@ -31,9 +30,10 @@ maintainer supplied a screenshot in the review conversation. No passphrase promp
 appeared; a cached key was reported. This is maintainer-executed interactive KIO
 feasibility, not agent testing, managed PID/UUID acceptance, proof of a specific
 authentication mechanism, changed-key validation, port precedence or Wayland acceptance.
-No corresponding managed SFTP native acceptance is yet claimed on either host.
+Subsequent managed X11/Wayland acceptance is recorded separately; it does not
+retroactively turn this earlier feasibility test into a managed-launch test.
 
-## Candidate behavior and changed paths
+## Published behavior and changed paths
 
 - `libexec/joetoo_kwin_sftp_target.py` is a new pure standard-library validator.
   One raw target arrives on stdin, never argv; JSON stdout contains only a valid
@@ -98,7 +98,7 @@ bounded focus: report partial/failure honestly and seek a separate decision if n
 observations require changing the accepted identity/layout contract. Do not weaken it.
 Broker connection fields remain uninstrumented, regardless of visible KIO activity.
 
-## Validation
+## Published implementation validation
 
 **301 Python tests PASS** without skips, including retained installed-header
 integration; **four Node discovery test files PASS**. The focused SFTP suite has
@@ -129,59 +129,68 @@ git diff --check
 
 ```
 
-## Maintainer native acceptance — NOT TESTED by Codex
+## Native acceptance and new advisory correction
 
-Use the same reviewed implementation on gmki91 X11 and q552u01 Wayland; record the
-exact implementation SHA (or HEAD plus reviewed diff before the first commit), host,
-capability result, window UUID/slot and independent layout/remote results. Existing
-broker/resident contracts are unchanged. Run the checkout CLI with its colocated new helpers. If testing an installed CLI,
-the maintainer must supply the matching helpers through the existing candidate
-procedure. No broker/resident reload is required by this increment. Do not bypass
-an inconclusive detector.
+At published revision 98e3668 the maintainer reports 301 Python and 50 JavaScript
+cases passing on both hosts. Two separate Dolphin UUIDs were registered/placed and
+stacked on desktop 2 while desktop 1 was active; active-desktop SFTP focus is **NOT
+TESTED**. Remote /etc/hostname was opened in Kate on X11 and KWrite on Wayland,
+showing nuthuvia. Wayland capability preflight passed for the tested installation.
+The [acceptance record](step1.5c5a-native-acceptance.md) preserves precise outcomes
+and qualifications, including the X11 negative DNS destination where both windows
+succeeded but Dolphin correctly displayed a resolution error.
 
-The [native fixture](step1.5c5a-native.conf) has one SFTP panel and a local Dolphin
-underlay. Choose an unused intended desktop/slot pair and manually display that
-desktop for a focus check. Example 10 below is not a claim that it is currently free.
-Keep an unrelated Dolphin open to test new-window isolation. Inspect the trusted
-fixture before sourcing it. No configuration/host files are changed by -c.
+### Post-confirmation NSS and TCP advisory
 
-```bash
-TEST_DESKTOP=10 ./joetoo-kwin -c -f task_step1.5/step1.5c5a-native.conf
-TEST_DESKTOP=10 ./joetoo-kwin -vv -o -f task_step1.5/step1.5c5a-native.conf
-# End of commands
+Authorized narrowly after that native negative case. New
+`libexec/joetoo_kwin_sftp_advisory.py` extracts the host/explicit port from the validated
+URI on stdin. It runs bounded `getent ahosts`, then the established `nc -n -z -w`
+zero-I/O probe against returned numeric addresses. The nc timeout is derived from
+configuration (rounded to tool seconds); Python's subprocess timeout enforces the
+remaining per-stage budget across IPv4/IPv6 addresses. No Python socket connection
+backend or mandatory new package is introduced. The Konsole SSH probe is unchanged.
 
-```
+Global defaults are `sftp_advisory_enabled=$TRUE` (disable with `$FALSE`),
+`sftp_advisory_timeout_ms=2000` per stage (1..10000 ms), and
+`sftp_advisory_ssh_port=22` fallback (1..65535). Explicit URI ports override the
+probe fallback only. All are validated, assigned in the template and displayed in
+effective configuration; KIO/libssh may still select a different endpoint/port.
 
-First decline: no desktop provisioning/application launch. Then approve with fresh
-slots: expect separate positively registered UUIDs, exact placement, panel above
-under, preferred panel focus where permitted, and a requested/unverified SFTP notice.
-Manually verify the remote listing in Dolphin (and the known remote hostname file
-if desired). Record any dialog, cancellation, error or later navigation separately
-from KWin placement/stack/focus. No secret screenshot/log content should be published.
+Only confirmed execution calls the advisory immediately before the SFTP launch.
+-c, syntax/capability preflight, invalid plans and confirmation decline remain
+network-free apart from arbitrary side effects of the already-trusted Bash config.
+Numeric literals bypass NSS. Failure, timeout, absent tools, unsupported nc output
+or helper/reporting failure never veto Dolphin. The validated URL and launch/layout
+classification are unchanged. A missing NSS key yields one warning and skips TCP;
+timeout/uncertainty are qualified instead of asserting the host cannot be reached.
+The console explains where to adjust time tolerance and that KIO/SSH configuration
+may differ. Debug output exposes stage statuses without repeating the warning.
 
-On further fresh desktops, override SFTP_TEST_URI with the approved endpoint and a
-percent-encoded directory containing spaces/UTF-8, omitted path, explicit `/`, and
-nondefault user/port/alias where actually used. Verify URI/profile precedence instead
-of assuming OpenSSH behavior. Exercise a known missing directory and a reserved
-unreachable `.invalid` host; observe KIO errors without relabeling placed windows as
-successful remote connections. Do not tamper with production known_hosts or keys.
-Test naturally required authentication prompts and cancel safely. An unsupported
-IPv6 test environment is NOT TESTED natively, with parser coverage retained.
+NSS is not necessarily DNS; an alias may work in KIO even if direct NSS fails.
+An nc failure is not definitive host-down proof, and a connected TCP port proves
+neither an SSH service nor authentication/listing. No banner/authentication probe,
+SSH profile rewriting, DNS-over-TLS/VPN management or monitoring is added. Dolphin
+is always launched with its requested URI, including failures: the visible error
+retains mission purpose and permits immediate manual correction/retry, with the
+config updated separately. Broker, registry, resident and SSH rcfile are unchanged.
 
-An invalid URI should reject before confirmation and without spawning Dolphin:
+### Correction validation and next gate
 
-```bash
-TEST_DESKTOP=10 SFTP_TEST_URI='sftp://files.example:0/' ./joetoo-kwin -o -f task_step1.5/step1.5c5a-native.conf
-# End of commands
+Correction validation: **312 Python tests PASS, no skips** (including installed-header coverage); **4 Node discovery files PASS**, no skips. Bash syntax, Python compilation, ShellCheck and whitespace checks PASS. Node reports file-level counts on this host; the maintainer’s earlier 50 JavaScript cases remain separately attributed. Resolver/nc commands are mocked;
+no real DNS, TCP, SSH or SFTP operation was performed by Codex. Tests cover numeric
+IPv4/IPv6, default/explicit ports, NSS failures/timeouts/unavailable utilities,
+qualified nc results, advisory disable/helper failure, unchanged argv and mixed-plan
+completion, cancellation/offline -c and invalid offline preflight. Existing original
+Bash, lock, ownership, placement and layer suites remain intact.
 
-```
+See the [remaining native checklist and exact commands](step1.5c5a-native-acceptance.md#remaining-acceptance-checklist)
+for resolvable and unresolvable endpoints. This correction is **PENDING native
+acceptance on both hosts**. New/changed-host-key prompts, active-desktop SFTP focus,
+nondefault-port/profile precedence and further endpoint variants remain qualified;
+do not label them PASS from mocks or normal base runs. No new implementation in
+1.5c.5b/c or Step 1.5d is authorized. Maintainer reviews the complete advisory diff,
+then runs the narrow native checks and decides acceptance/publication separately.
 
-Confirm the unrelated Dolphin is not adopted and duplicate logical slots still
-reject. Reuse c4 evidence for unchanged geometry/manual-control/SSH behavior; do not
-repeat its entire battery. Native prompt/delegation/security incompatibilities must
-be reported for focused review, not solved through unsafe fallbacks.
+Complete correction diff, including the new helper, tests and acceptance record: [step1.5c5a-advisory.patch](step1.5c5a-advisory.patch). Concurrent maintainer architecture/scope edits and the preexisting native_joe fixture are excluded.
 
-Next actor: maintainer reviews the [complete diff](step1.5c5a-implementation.patch),
-independently validates, then runs native X11 acceptance before publishing the exact
-candidate for Wayland testing. Publication requires separate authorization. Stop here;
-1.5c.5b/c and 1.5d remain outside this implementation.
+Documentation checks: new relative file links resolve. Two existing README links to `task_step1.4/HANDOFF.md` are absent locally and unchanged by this correction. Scoped `git diff --check` passes; the full working-tree check reports EOF blank lines in concurrent maintainer edits to ARCHITECTURE.md and Step1.5c5_implementation_scope.md, which the agent leaves untouched.
