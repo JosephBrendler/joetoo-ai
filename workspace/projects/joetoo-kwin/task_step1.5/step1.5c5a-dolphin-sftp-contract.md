@@ -1,6 +1,6 @@
 # Step 1.5c.5a — Dolphin SFTP contract and implementation status
 
-**Current baseline:** `98e366899a611e000f246b74abb4906f7238db8b` on
+**Current published advisory baseline:** `b8120f7c9aad608e26b5c147561a5eee5756a8e9` on
 `task/joetoo-kwin-step1.5c5-remote-access`. The maintainer approved the URL grammar,
 encoding/redaction, KIO operator trust policy and offline capability checks and
 explicitly authorized implementation. SFTP is implemented and published on this task
@@ -122,7 +122,7 @@ connection fields are not SFTP telemetry. No broker/resident API changes were re
 
 ## Approved post-confirmation advisory correction
 
-The newly authorized correction adds two optional, non-enforcing checks immediately
+The published advisory adds two optional, non-enforcing checks immediately
 before each confirmed SFTP launch: direct NSS resolution (`getent ahosts`), then a
 bounded `nc` zero-I/O TCP probe of returned numeric addresses. Numeric IPv4/IPv6 skip
 NSS. The original validated URI always reaches Dolphin unchanged. This reuses the
@@ -146,8 +146,14 @@ layout classification, and never suppress Dolphin's own connection error. The fa
 Dolphin view preserves the mission's purpose and allows immediate manual correction;
 configuration can be updated separately. No network monitoring/controller is added.
 
-The advisory correction is headless-tested only until the maintainer runs the
-[pending native checks](step1.5c5a-native-acceptance.md#remaining-acceptance-checklist).
+The maintainer demonstrated positive Wayland NSS/TCP results (`resolved`, `open`,
+port 22) with desktop-4 SFTP win-003/local win-004, verified placement/stack and
+2/2 completion, plus visible nuthuvia.brendler browsing. Negative Wayland resolution
+(`failed`, TCP `skipped`) warned and still launched both windows. Earlier X11
+positive browsing and negative-advisory evidence are retained; a post-advisory X11
+`tcp=open` transcript remains pending. See [native evidence and gaps](step1.5c5a-native-acceptance.md#remaining-acceptance-checklist).
+The only final executable cleanup changes the debug label to accurately name both
+NSS and TCP. Maintainer acceptance/closure is still to be decided.
 Changed-host-key prompts, nondefault-port precedence, additional SSH aliases, IPv6
 remote endpoints and active-desktop SFTP focus remain qualified/not tested unless
 specifically recorded there. 1.5c.5b/c and 1.5d remain separately gated.

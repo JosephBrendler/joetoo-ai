@@ -18,7 +18,7 @@ sftp_launch_advisory() {
         _sa_warning=$(jq -er '.warning | select(type == "string")' <<< "$_sa_result") || _sa_warning='SFTP advisory: result unavailable; launching Dolphin anyway.'
         [[ -z $_sa_warning ]] || j_msg "-${warn}" -p "$_sa_warning" || :
         _sa_observation=$(jq -c 'del(.warning)' <<< "$_sa_result") || _sa_observation='unavailable'
-        j_msg "-${debug}" -p "SFTP advisory observation (TCP only, not SSH/authentication/listing verification): $_sa_observation" || :
+        j_msg "-${debug}" -p "SFTP NSS/TCP advisory observation (not SSH authentication or SFTP listing verification): $_sa_observation" || :
     else
         j_msg "-${warn}" -p 'SFTP advisory: helper unavailable/inconclusive; launching Dolphin anyway.' || :
     fi

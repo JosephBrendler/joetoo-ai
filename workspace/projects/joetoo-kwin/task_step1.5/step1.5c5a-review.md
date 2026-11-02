@@ -1,10 +1,11 @@
 # Step 1.5c.5a — Dolphin SFTP implementation review and advisory correction
 
-**Published implementation:** `98e366899a611e000f246b74abb4906f7238db8b` on
+**Published implementation including NSS/TCP advisory:** `b8120f7c9aad608e26b5c147561a5eee5756a8e9` on
 `task/joetoo-kwin-step1.5c5-remote-access`. Managed Dolphin SFTP has been natively
 demonstrated on gmki91 X11 and q552u01 Wayland; see the [acceptance record](step1.5c5a-native-acceptance.md).
-This branch/whole milestone is not declared merged. The newly authorized advisory
-correction below is uncommitted and awaits maintainer-native validation.
+This branch/whole milestone is not declared merged. Advisory native evidence now
+includes Wayland positive/negative checks and X11 negative behavior. Only the final
+debug-label cleanup below is uncommitted; maintainer acceptance remains undecided.
 
 ## Implementation history and source evidence
 
@@ -183,14 +184,32 @@ qualified nc results, advisory disable/helper failure, unchanged argv and mixed-
 completion, cancellation/offline -c and invalid offline preflight. Existing original
 Bash, lock, ownership, placement and layer suites remain intact.
 
-See the [remaining native checklist and exact commands](step1.5c5a-native-acceptance.md#remaining-acceptance-checklist)
-for resolvable and unresolvable endpoints. This correction is **PENDING native
-acceptance on both hosts**. New/changed-host-key prompts, active-desktop SFTP focus,
-nondefault-port/profile precedence and further endpoint variants remain qualified;
-do not label them PASS from mocks or normal base runs. No new implementation in
-1.5c.5b/c or Step 1.5d is authorized. Maintainer reviews the complete advisory diff,
-then runs the narrow native checks and decides acceptance/publication separately.
+### Final cleanup and closure review at b8120f7
 
-Complete correction diff, including the new helper, tests and acceptance record: [step1.5c5a-advisory.patch](step1.5c5a-advisory.patch). Concurrent maintainer architecture/scope edits and the preexisting native_joe fixture are excluded.
+The only source change replaces the misleading TCP-only debug label with
+`SFTP NSS/TCP advisory observation (not SSH authentication or SFTP listing verification)`.
+No advisory, transport, broker, resident, SSH or application behavior changes.
 
-Documentation checks: new relative file links resolve. Two existing README links to `task_step1.4/HANDOFF.md` are absent locally and unchanged by this correction. Scoped `git diff --check` passes; the full working-tree check reports EOF blank lines in concurrent maintainer edits to ARCHITECTURE.md and Step1.5c5_implementation_scope.md, which the agent leaves untouched.
+Maintainer evidence: Wayland negative `resolution=failed`, `tcp=skipped` warned
+correctly and launched both windows despite Dolphin's own resolution error.
+Wayland positive `resolution=resolved`, `tcp=open`, `port=22` launched SFTP win-003
+and underlay win-004 on desktop 4, verified placement/stacking, completed 2/2 and
+visibly browsed nuthuvia.brendler. This human browsing observation is independent
+of the TCP result. X11 positive browsing and negative-advisory evidence remain;
+no current task record documents a post-advisory X11 `tcp=open` transcript.
+
+See the [remaining checklist and X11 command](step1.5c5a-native-acceptance.md#remaining-acceptance-checklist).
+New/changed-host-key prompts, active-desktop SFTP focus, nondefault ports/profile
+precedence and endpoint variants remain NOT TESTED unless separately recorded.
+Maintainer decides acceptance/closure; no b/c/d work or publication is authorized.
+
+Final cleanup validation: 25 focused SFTP tests PASS; full Python suite **312 PASS,
+no skips** (including installed-header integration); Node **4 discovery files PASS**,
+no skips (file-level counts on this host). Bash syntax for CLI/planner/launcher/
+template, Python compilation of SFTP helpers/tests, ShellCheck and scoped
+`git diff --check` PASS. No real DNS/TCP/SFTP/native GUI operations were performed.
+All six changed files are in scope; architecture, scope, broker, resident, SSH and
+tests are unchanged. Existing README links to `task_step1.4/HANDOFF.md` remain
+missing locally; newly edited relative file links resolve. Historical
+[advisory implementation patch](step1.5c5a-advisory.patch) remains unchanged and is
+not the diff for this cleanup. The current cleanup diff is supplied at handoff.
