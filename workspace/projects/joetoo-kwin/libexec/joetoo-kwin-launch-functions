@@ -19,6 +19,10 @@ launch_preflight() {
                 command -v dolphin >/dev/null || return 2
                 _lp_status=$(launch_resource local-path "${planned_target[$_lp_i]}" "$config") || return 2
                 planned_local_path[_lp_i]=$(jq -er 'select(type == "string")' <<< "$_lp_status") || return 2 ;;
+            dolphin:sftp)
+                command -v dolphin >/dev/null || { plan_error 'missing executable [dolphin]'; return 2; }
+                _lp_status=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_sftp_capability.py" "$sftp_capability_timeout_ms") || return 2
+                planned_remote_uri[_lp_i]=$(jq -er 'select(type == "string")' <<< "${planned_sftp_uri[$_lp_i]}") || return 2 ;;
             konsole:ssh)
                 command -v konsole >/dev/null || return 2
                 command -v nc >/dev/null && command -v ssh >/dev/null || return 2
@@ -98,7 +102,7 @@ open_plan() {
     # When sourced, this helper's directory is libexec.
     launch_session_file=${_op_dir}/joetoo-kwin-session.bashrc
     [[ -r $launch_session_file ]] || return 1
-    declare -a planned_local_path=()
+    declare -a planned_local_path=() planned_remote_uri=()
     check_plan launch || return $?
     local _op_required=0 _op_desktop _op_capacity _op_class
     local -a _op_argv
@@ -126,7 +130,12 @@ open_plan() {
         _op_capacity=$(launch_resource verify "$_op_required" "$_op_capacity") || return 1
         _op_class=${planned_program[$_op_i]}
         if [[ $_op_class == dolphin ]]; then
-            _op_argv=(dolphin --new-window -- "${planned_local_path[$_op_i]}")
+            if [[ ${planned_mode[$_op_i]} == sftp ]]; then
+                _op_argv=(dolphin --new-window -- "${planned_remote_uri[$_op_i]}")
+                j_msg "-${notice}" -p 'Requesting SFTP location; authentication and remote listing are not verified by this launcher'
+            else
+                _op_argv=(dolphin --new-window -- "${planned_local_path[$_op_i]}")
+            fi
         else
             _op_argv=(env JOETOO_SESSION_MODE="${planned_mode[$_op_i]}" JOETOO_SESSION_TARGET="${planned_target[$_op_i]}"
                 konsole --separate -e bash --rcfile "$launch_session_file" -i)
