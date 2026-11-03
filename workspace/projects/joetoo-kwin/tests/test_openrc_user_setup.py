@@ -36,16 +36,16 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_literal_openrc_assignment_from_empty(self):
         updated, names = self.config.parse_and_update("")
-        self.assertEqual(updated, 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"\n')
-        self.assertEqual(names, ["DBUS_SESSION_BUS_ADDRESS", "JOETOO_KWIND_EXEC"])
+        self.assertEqual(updated, 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC DISPLAY XAUTHORITY"\n')
+        self.assertEqual(names, ["DBUS_SESSION_BUS_ADDRESS", "JOETOO_KWIND_EXEC", "DISPLAY", "XAUTHORITY"])
         self.assertEqual(self.config.parse_and_update(updated)[0], updated)
         self.assertNotIn("case ", updated)
 
     def test_preserve_existing_literal_allowlist_and_unrelated_settings(self):
         original = 'rc_some_setting="yes"\nrc_env_allow="FOO DBUS_SESSION_BUS_ADDRESS"\n'
         updated, names = self.config.parse_and_update(original)
-        self.assertEqual(updated, 'rc_some_setting="yes"\nrc_env_allow="FOO DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"\n')
-        self.assertEqual(names, ["FOO", "DBUS_SESSION_BUS_ADDRESS", "JOETOO_KWIND_EXEC"])
+        self.assertEqual(updated, 'rc_some_setting="yes"\nrc_env_allow="FOO DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC DISPLAY XAUTHORITY"\n')
+        self.assertEqual(names, ["FOO", "DBUS_SESSION_BUS_ADDRESS", "JOETOO_KWIND_EXEC", "DISPLAY", "XAUTHORITY"])
         self.assertEqual(self.config.parse_and_update(updated)[0], updated)
 
     def test_migrate_exact_broken_legacy_case_block(self):
@@ -62,7 +62,7 @@ esac
 # END joetoo-kwind Step 1.2a environment
 '''
         updated, _ = self.config.parse_and_update(original)
-        self.assertEqual(updated.strip(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"')
+        self.assertEqual(updated.strip(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC DISPLAY XAUTHORITY"')
 
     def test_reject_unknown_or_partial_managed_block(self):
         with self.assertRaises(self.config.ConfigurationError):
@@ -135,10 +135,45 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertEqual(self.service.read_bytes(), (ROOT / 'user-init.d/joetoo-kwind').read_bytes())
         self.assertEqual(self.daemon.read_bytes(), (ROOT / 'libexec/joetoo-kwind').read_bytes())
         self.assertEqual(self.override.read_bytes(), (ROOT / 'poc-user-conf.d/joetoo-kwind').read_bytes())
-        self.assertEqual(self.conf.read_text(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"\n')
+        self.assertEqual(self.conf.read_text(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC DISPLAY XAUTHORITY"\n')
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
         self.assertEqual(self.run_tool(CONFIG_TOOL, "--check").returncode, 0)
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--install").returncode, 1)
+
+
+    def test_upgrade_detects_missing_graphical_environment_and_preserves_settings(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        original='other="yes"\nrc_env_allow="EXISTING DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"\n'
+        self.conf.write_text(original)
+        self.conf.chmod(0o640)
+        before=self.conf.stat()
+        self.assertEqual(self.run_tool(CONFIG_TOOL, '--check').returncode, 1)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 1)
+        self.assertEqual(self.conf.read_text(), original)
+        self.assertEqual(self.conf.stat().st_mtime_ns, before.st_mtime_ns)
+        result=self.run_tool(INSTALL_TOOL, '--update')
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        expected='other="yes"\nrc_env_allow="EXISTING DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC DISPLAY XAUTHORITY"\n'
+        self.assertEqual(self.conf.read_text(),expected)
+        self.assertEqual(self.conf.stat().st_mode & 0o777, 0o640)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode,0)
+        updated=self.conf.stat()
+        self.assertEqual(self.run_tool(CONFIG_TOOL, '--apply').returncode,0)
+        self.assertEqual(self.conf.stat().st_ino,updated.st_ino)
+        self.assertEqual(self.conf.stat().st_mtime_ns,updated.st_mtime_ns)
+        self.assertEqual(self.conf.read_text(),expected)
+
+    def test_unset_xauthority_is_allowed_without_recording_session_values(self):
+        self.env.pop('XAUTHORITY',None)
+        self.env['DISPLAY']=':97'
+        result=self.run_tool(INSTALL_TOOL, '--install')
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertEqual(self.run_tool(CONFIG_TOOL,'--check').returncode,0)
+        self.assertEqual(self.run_tool(INSTALL_TOOL,'--check').returncode,0)
+        literal=self.conf.read_text()
+        self.assertIn('DISPLAY XAUTHORITY',literal)
+        self.assertNotIn(':97',literal)
+        self.assertNotIn(str(self.home),literal)
 
 
     def test_override_missing_causes_check_failure(self):
@@ -177,7 +212,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         p = self.run_tool(INSTALL_TOOL, "--install")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertEqual(self.conf.read_text(),
-                         'other="yes"\nrc_env_allow="EXISTING DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC"\n')
+                         'other="yes"\nrc_env_allow="EXISTING DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC DISPLAY XAUTHORITY"\n')
         self.service.write_text('OLD\n')
         self.assertNotEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
         p = self.run_tool(INSTALL_TOOL, "--update")

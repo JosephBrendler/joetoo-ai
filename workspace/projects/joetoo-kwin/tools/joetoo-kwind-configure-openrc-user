@@ -15,7 +15,9 @@ import stat
 import sys
 import tempfile
 
-REQUIRED = ("DBUS_SESSION_BUS_ADDRESS", "JOETOO_KWIND_EXEC")
+# Preserve names, never session-specific values or credentials. XAUTHORITY may
+# legitimately be unset; allowing it does not require it to exist in a session.
+REQUIRED = ("DBUS_SESSION_BUS_ADDRESS", "JOETOO_KWIND_EXEC", "DISPLAY", "XAUTHORITY")
 BEGIN = "# BEGIN joetoo-kwind Step 1.2a environment"
 END = "# END joetoo-kwind Step 1.2a environment"
 LEGACY_BLOCK = """# BEGIN joetoo-kwind Step 1.2a environment

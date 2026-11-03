@@ -27,7 +27,7 @@ class PlannerHarness:
         self.folder = Path(self.tmp.name)
         (self.folder / 'libexec').mkdir()
         shutil.copyfile(ROOT / 'libexec/joetoo-kwin-exposure.py', self.folder / 'libexec/joetoo-kwin-exposure.py')
-        for helper in ('joetoo_kwin_sftp_target.py', 'joetoo_kwin_sftp_capability.py', 'joetoo_kwin_sftp_advisory.py'):
+        for helper in ('joetoo_kwin_sftp_target.py', 'joetoo_kwin_sftp_capability.py', 'joetoo_kwin_sftp_advisory.py', 'joetoo_kwin_vnc_target.py'):
             shutil.copyfile(ROOT / 'libexec' / helper, self.folder / 'libexec' / helper)
         shutil.copyfile(ROOT / 'libexec/joetoo-kwin-plan-functions',
                         self.folder / 'libexec/joetoo-kwin-plan-functions')

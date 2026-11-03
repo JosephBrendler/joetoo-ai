@@ -17,6 +17,16 @@ plan_defaults() {
     initial_focus_timeout_ms=500
     initial_focus_poll_interval_ms=25
     sftp_capability_timeout_ms=2000
+    vnc_ssh_start_timeout_ms=10000
+    vnc_viewer_ready_timeout_ms=120000
+    vnc_supervisor_poll_interval_ms=100
+    vnc_cleanup_timeout_ms=2000
+    vnc_local_port_attempts=3
+    vnc_identity_event_limit=256
+    vnc_identity_settle_ms=500
+    vnc_dbus_timeout_ms=3000
+    vnc_identity_start_timeout_ms=1000
+    vnc_placement_timeout_ms=15000
     sftp_advisory_enabled=$TRUE
     sftp_advisory_timeout_ms=2000
     sftp_advisory_ssh_port=22
@@ -85,6 +95,8 @@ validate_plan() {
     declare -ga planned_desktop=() planned_slot=() planned_program=() planned_mode=() planned_target=()
     declare -ga planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
     declare -ga planned_explicit=() desktop_groups=()
+    declare -g vnc_bounds="" # Validated JSON consumed by the configured VNC launcher.
+    # shellcheck disable=SC2034
     declare -ga planned_sftp_uri=()
     declare -gA preferred_slot=() planned_stack_slots=()
     declare -gA implicit_counts=() total_counts=() terminal_counts=() terminal_slots=() next_slot=()
@@ -136,6 +148,15 @@ validate_plan() {
             _vp_sftp_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 2
             # Unvalidated userinfo stays on stdin, never a child command line.
             _vp_uri=$(printf '%s' "$_vp_target" | python3 "$_vp_sftp_dir/joetoo_kwin_sftp_target.py") || return 2
+        fi
+        if [[ $_vp_program == vncviewer && $_vp_mode == ssh ]]; then
+            _vp_sftp_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 2
+            printf '%s' "$_vp_target" | python3 "$_vp_sftp_dir/joetoo_kwin_vnc_target.py" --target >/dev/null || return 2
+            # shellcheck disable=SC2034
+            vnc_bounds=$(python3 "$_vp_sftp_dir/joetoo_kwin_vnc_target.py" --settings \
+                "$vnc_ssh_start_timeout_ms" "$vnc_viewer_ready_timeout_ms" "$vnc_supervisor_poll_interval_ms" \
+                "$vnc_cleanup_timeout_ms" "$vnc_local_port_attempts" "$vnc_identity_event_limit" \
+                "$vnc_identity_settle_ms" "$vnc_dbus_timeout_ms" "$vnc_placement_timeout_ms" "$vnc_identity_start_timeout_ms") || return 2
         fi
         if [[ $_vp_mode != direct && -z $_vp_target && ! ( $_vp_program == dolphin && $_vp_mode == local ) ]]; then
             plan_error "missing target for mode [${_vp_mode}]"; return 2
