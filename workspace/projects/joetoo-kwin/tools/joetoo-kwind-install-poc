@@ -6,11 +6,11 @@
 set -eu
 
 usage() {
-    printf 'Usage: %s --check | --install | --update\n' "${0##*/}" >&2
+    printf 'Usage: %s --check | --install | --update | --preview-legacy-backups\n' "${0##*/}" >&2
     exit 2
 }
 [ "$#" -eq 1 ] || usage
-case $1 in --check|--install|--update) action=$1 ;; *) usage ;; esac
+case $1 in --check|--install|--update|--preview-legacy-backups) action=$1 ;; *) usage ;; esac
 
 [ "$(id -u)" -ne 0 ] || { echo 'Do not run as root' >&2; exit 1; }
 [ -n "${HOME:-}" ] && [ "${HOME#/}" != "$HOME" ] || { echo 'HOME must be absolute' >&2; exit 1; }
@@ -22,9 +22,17 @@ root=$(CDPATH='' cd -- "$script_dir/.." && pwd -P)
 service_source=$root/user-init.d/joetoo-kwind
 daemon_source=$root/libexec/joetoo-kwind
 registry_source=$root/libexec/joetoo_kwin_registry.py
+# These modules are runtime dependencies of the managed TigerVNC path.
+# Include them in the same safety/check/backup lifecycle as the original files.
+vnc_identity_source=$root/libexec/joetoo_kwin_vnc_identity.py
+vnc_target_source=$root/libexec/joetoo_kwin_vnc_target.py
+vnc_launch_source=$root/libexec/joetoo_kwin_vnc_launch.py
 service_dest=$config_home/rc/init.d/joetoo-kwind
 daemon_dest=$HOME/.local/libexec/joetoo-kwind
 registry_dest=$HOME/.local/libexec/joetoo_kwin_registry.py
+vnc_identity_dest=$HOME/.local/libexec/joetoo_kwin_vnc_identity.py
+vnc_target_dest=$HOME/.local/libexec/joetoo_kwin_vnc_target.py
+vnc_launch_dest=$HOME/.local/libexec/joetoo_kwin_vnc_launch.py
 override_source=$root/poc-user-conf.d/joetoo-kwind
 override_dest=$config_home/rc/conf.d/joetoo-kwind
 resident_source=$root/joetoo-kwin-resident.js
@@ -33,15 +41,255 @@ cli_source=$root/joetoo-kwin
 cli_dest=$HOME/.local/bin/joetoo-kwin
 config_helper=$root/tools/joetoo-kwind-configure-openrc-user
 
+# Keep archival work in this installer; Python is already required by its
+# configuration helper. Each component has its own namespace (several share
+# the basename joetoo-kwind). A version is immutable, with rollback provenance.
+# Immutability applies to payload bytes; metadata observations are append-only.
+archive_files() {
+    python3 - "$action" "${XDG_STATE_HOME:-$HOME/.local/state}/joetoo-kwin/archive" \
+        "$service_source" "$service_dest" "$daemon_source" "$daemon_dest" \
+        "$registry_source" "$registry_dest" "$override_source" "$override_dest" \
+        "$resident_source" "$resident_dest" "$cli_source" "$cli_dest" \
+        "$vnc_identity_source" "$vnc_identity_dest" "$vnc_target_source" "$vnc_target_dest" \
+        "$vnc_launch_source" "$vnc_launch_dest" <<'PY'
+import datetime
+import filecmp
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import stat
+import sys
+import tempfile
+
+
+def safe_path(path):
+    # Reject symlinks in ancestors too, before reading or writing through them.
+    for part in reversed((path, *path.parents)):
+        if part.is_symlink():
+            raise ValueError(f"Refusing symlink: {part}")
+    if path.exists() and (not path.is_file() or path.stat().st_uid != os.geteuid()):
+        raise ValueError(f"Refusing non-regular/non-owned file: {path}")
+
+
+def private_directory(path):
+    if path.is_symlink():
+        raise ValueError(f"Refusing symlink: {path}")
+    if not path.exists():
+        private_directory(path.parent)
+        path.mkdir(mode=0o700)
+    info = path.stat()
+    if not path.is_dir() or info.st_uid != os.geteuid() or info.st_mode & 0o022:
+        raise ValueError(f"Refusing unsafe archive directory: {path}")
+    # Revalidate existing user-owned ancestors on every update too, including
+    # when the component directory already exists from a previous archive.
+    for parent in path.parents:
+        info = parent.stat()
+        if info.st_uid != os.geteuid():
+            break
+        if info.st_mode & 0o022:
+            raise ValueError(f"Refusing unsafe archive directory: {parent}")
+
+
+def digest(path):
+    with path.open('rb') as stream:
+        value = hashlib.sha256()
+        for block in iter(lambda: stream.read(65536), b''):
+            value.update(block)
+        return value.hexdigest()
+
+
+def provenance_id(data):
+    # Reuse an identical metadata observation without losing distinct modes or
+    # timestamps. Archive time describes recording, not the installed version.
+    identity = {key: value for key, value in data.items() if key != 'archived_at'}
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+
+
+def read_provenance(path, version, dest, src):
+    safe_path(path)
+    info = path.stat()
+    if stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1:
+        raise ValueError(f'Unsafe provenance file: {path}')
+    data = json.loads(path.read_text())
+    fields = {'schema_version', 'installed_path', 'source_path', 'original_name',
+              'sha256', 'mode', 'atime_ns', 'mtime_ns', 'archived_at'}
+    if not isinstance(data, dict) or set(data) != fields:
+        raise ValueError(f'Invalid provenance schema: {path}')
+    if type(data['schema_version']) is not int or data['schema_version'] != 1:
+        raise ValueError(f'Unsupported provenance schema: {path}')
+    if data['sha256'] != version.name or data['original_name'] != dest.name:
+        raise ValueError(f'Provenance identity mismatch: {path}')
+    for key, name in (('installed_path', dest.name), ('source_path', src.name)):
+        value = data[key]
+        if (not isinstance(value, str) or not Path(value).is_absolute()
+                or '..' in Path(value).parts or Path(value).name != name):
+            raise ValueError(f'Invalid provenance {key}: {path}')
+    mode = data['mode']
+    if (not isinstance(mode, str) or not mode.startswith('0o')
+            or any(c not in '01234567' for c in mode[2:])
+            or len(mode) < 3 or not 0 <= int(mode, 8) <= 0o7777
+            or oct(int(mode, 8)) != mode):
+        raise ValueError(f'Invalid provenance mode: {path}')
+    if any(type(data[key]) is not int for key in ('atime_ns', 'mtime_ns')):
+        raise ValueError(f'Invalid provenance timestamps: {path}')
+    if not isinstance(data['archived_at'], str):
+        raise ValueError(f'Invalid provenance archive time: {path}')
+    if datetime.datetime.fromisoformat(data['archived_at']).utcoffset() is None:
+        raise ValueError(f'Provenance archive time needs a timezone: {path}')
+    if path.name != 'provenance.json' and path.name != f'provenance.{provenance_id(data)}.json':
+        raise ValueError(f'Provenance record name mismatch: {path}')
+    return data
+
+
+def write_provenance(path, data):
+    # Publish a complete record atomically, without overwriting any old record.
+    # The temporary link is metadata-only, never a link to an active install.
+    fd, pending = tempfile.mkstemp(prefix='.provenance-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(data, stream, indent=2)
+            stream.write('\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(pending, path)
+    finally:
+        os.unlink(pending)
+    fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def main():
+    action, archive = sys.argv[1], Path(sys.argv[2])
+    if not archive.is_absolute() or '..' in archive.parts:
+        raise ValueError('XDG_STATE_HOME must be an absolute path without .. components')
+    components = ('service', 'daemon', 'registry', 'override', 'resident', 'cli',
+                  'vnc_identity', 'vnc_target', 'vnc_launch')
+    # Match the explicit install -m contract, not the checkout's source modes.
+    required_modes = (0o755, 0o755, 0o644, 0o644, 0o644, 0o755, 0o644, 0o644, 0o644)
+    for component, required_mode, src, dest in zip(components, required_modes, sys.argv[3::2], sys.argv[4::2]):
+        src, dest = Path(src), Path(dest)
+        safe_path(dest)
+        if action == '--preview-legacy-backups':
+            # Read only: group old beside-installation backups by actual bytes.
+            groups = []
+            for pattern in (dest.name + '.before-update.*', dest.name + '.before-step1.2a-update.*'):
+                for old in sorted(dest.parent.glob(pattern)):
+                    safe_path(old)
+                    for group in groups:
+                        if filecmp.cmp(old, group[0], shallow=False):
+                            group.append(old)
+                            break
+                    else:
+                        groups.append([old])
+            print(json.dumps({'component': component, 'installed_path': str(dest),
+                              'active_sha256': digest(dest) if dest.exists() else None,
+                              'versions': [{'sha256': digest(g[0]), 'representative': str(g[0]),
+                                            'copies': len(g), 'paths': list(map(str, g))}
+                                           for g in groups]}))
+            continue
+        safe_path(src)
+        if not dest.exists():
+            continue
+        # Capture before content reads can update the installed access time.
+        original_info = dest.stat()
+        # Ignore timestamp-only drift; preserve metadata when bytes OR the
+        # required installation mode will be superseded.
+        if (filecmp.cmp(src, dest, shallow=False)
+                and stat.S_IMODE(original_info.st_mode) == required_mode):
+            continue
+        # Save every superseded component BEFORE the shell starts installing any
+        # replacement. Failure here leaves the old installation intact.
+        safe_path(archive / 'probe')
+        directory = archive / component
+        private_directory(directory)
+        version = directory / digest(dest)
+        payload = version / dest.name
+        safe_path(payload)
+        metadata = {'schema_version': 1, 'installed_path': str(dest), 'source_path': str(src),
+                    'original_name': dest.name, 'sha256': version.name,
+                    'mode': oct(stat.S_IMODE(original_info.st_mode)),
+                    'atime_ns': original_info.st_atime_ns, 'mtime_ns': original_info.st_mtime_ns,
+                    'archived_at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
+        if version.exists():
+            private_directory(version)
+            if stat.S_IMODE(version.stat().st_mode) != 0o700:
+                raise ValueError(f'Unsafe version directory permissions: {version}')
+            if not filecmp.cmp(dest, payload, shallow=False) or payload.stat().st_nlink != 1:
+                raise ValueError(f'Archive integrity failure: {version}')
+            records = [read_provenance(version / 'provenance.json', version, dest, src)]
+            records += [read_provenance(path, version, dest, src)
+                        for path in sorted(version.glob('provenance.*.json'))]
+            # Payload filesystem metadata belongs only to the first observation.
+            # Later installations' metadata is represented by separate records.
+            first = records[0]
+            payload_info = payload.stat()
+            if (first['mode'] != oct(stat.S_IMODE(payload_info.st_mode))
+                    or first['mtime_ns'] != payload_info.st_mtime_ns):
+                raise ValueError(f'Payload/provenance metadata mismatch: {version}')
+            if not any(provenance_id(record) == provenance_id(metadata) for record in records):
+                write_provenance(version / f'provenance.{provenance_id(metadata)}.json', metadata)
+            print(f'Already archived: {payload}; installation metadata recorded separately')
+            continue
+        staging = Path(tempfile.mkdtemp(prefix='.pending-', dir=directory))
+        try:
+            copied = staging / dest.name
+            shutil.copy2(dest, copied)
+            if not filecmp.cmp(dest, copied, shallow=False) or digest(copied) != version.name:
+                raise ValueError(f'Archive copy verification failed: {dest}')
+            # The payload keeps its first installation metadata; provenance is
+            # authoritative for restoring the metadata of each later observation.
+            os.chmod(copied, stat.S_IMODE(original_info.st_mode))
+            os.utime(copied, ns=(original_info.st_atime_ns, original_info.st_mtime_ns))
+            provenance = staging / 'provenance.json'
+            write_provenance(provenance, metadata)
+            for saved in (copied, provenance):
+                with saved.open('rb') as stream:
+                    os.fsync(stream.fileno())
+            staging.rename(version)
+            # Persist the completed version's directory entry before replacing
+            # active files. If this fails, abort installation and retain both.
+            fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            print(f'Backup: {payload}')
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
+
+
+try:
+    main()
+except (OSError, ValueError) as error:
+    print(f'Installer archive: {error}', file=sys.stderr)
+    sys.exit(1)
+PY
+}
+
+if [ "$action" = --preview-legacy-backups ]; then
+    archive_files
+    exit "$?"
+fi
+
 printf 'OpenRC user service: %s\n' "$service_dest"
 printf 'Daemon executable:  %s\n' "$daemon_dest"
 printf 'Registry module:     %s\n' "$registry_dest"
+printf 'VNC identity module: %s\n' "$vnc_identity_dest"
+printf 'VNC target module:   %s\n' "$vnc_target_dest"
+printf 'VNC launch module:   %s\n' "$vnc_launch_dest"
 printf 'Resident JavaScript: %s\n' "$resident_dest"
 printf 'Bash CLI:           %s\n' "$cli_dest"
 printf 'OpenRC user override: %s\n' "$override_dest"
 printf 'OpenRC user config:  %s\n' "$config_home/rc/rc.conf"
 
-for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest"; do
+for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest" \
+    "$vnc_identity_dest" "$vnc_target_dest" "$vnc_launch_dest"; do
     if [ -L "$dest" ] || { [ -e "$dest" ] && [ ! -f "$dest" ]; }; then
         printf 'Refusing unexpected installation destination: %s\n' "$dest" >&2
         exit 1
@@ -50,7 +298,7 @@ done
 
 if [ "$action" = --check ]; then
     status=0
-    for mapping in service daemon registry override resident cli; do
+    for mapping in service daemon registry override resident cli vnc_identity vnc_target vnc_launch; do
         case $mapping in
             service) src=$service_source; dest=$service_dest ;;
             daemon) src=$daemon_source; dest=$daemon_dest ;;
@@ -58,8 +306,12 @@ if [ "$action" = --check ]; then
             override) src=$override_source; dest=$override_dest ;;
             resident) src=$resident_source; dest=$resident_dest ;;
             cli) src=$cli_source; dest=$cli_dest ;;
+            vnc_identity) src=$vnc_identity_source; dest=$vnc_identity_dest ;;
+            vnc_target) src=$vnc_target_source; dest=$vnc_target_dest ;;
+            vnc_launch) src=$vnc_launch_source; dest=$vnc_launch_dest ;;
         esac
-        if [ -f "$dest" ] && cmp -s -- "$src" "$dest"; then
+        case $mapping in service|daemon|cli) mode=755 ;; *) mode=644 ;; esac
+        if [ -f "$dest" ] && cmp -s -- "$src" "$dest" && [ "$(stat -c '%a' -- "$dest")" = "$mode" ]; then
             printf 'Current: %s\n' "$dest"
         else
             printf 'Missing or outdated: %s\n' "$dest"
@@ -71,7 +323,8 @@ if [ "$action" = --check ]; then
 fi
 
 if [ "$action" = --install ]; then
-    for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest"; do
+    for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest" \
+        "$vnc_identity_dest" "$vnc_target_dest" "$vnc_launch_dest"; do
         if [ -e "$dest" ]; then
             printf 'Already installed: %s (use --check or --update)\n' "$dest" >&2
             exit 1
@@ -86,26 +339,23 @@ if command -v rc-service >/dev/null 2>&1 && rc-service -U joetoo-kwind status >/
     exit 1
 fi
 
-"$config_helper" --apply || exit 1
 if [ "$action" = --update ]; then
     # Explicit update preserves the previous on-disk POC. No silent reset of a
     # known-working service/daemon installation.
-    backup_suffix=".before-update.$(date +%Y%m%d-%H%M%S).$$"
-    for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest"; do
-        if [ -f "$dest" ]; then
-            cp -p -- "$dest" "$dest$backup_suffix" || exit 1
-            printf 'Backup: %s\n' "$dest$backup_suffix"
-        fi
-    done
+    archive_files || exit 1
 fi
+"$config_helper" --apply || exit 1
 # -D creates BOTH parent paths if missing, avoiding manual mkdir commands.
 install -D -m 0755 -- "$service_source" "$service_dest"
 install -D -m 0755 -- "$daemon_source" "$daemon_dest"
 install -D -m 0644 -- "$registry_source" "$registry_dest"
+install -D -m 0644 -- "$vnc_identity_source" "$vnc_identity_dest"
+install -D -m 0644 -- "$vnc_target_source" "$vnc_target_dest"
+install -D -m 0644 -- "$vnc_launch_source" "$vnc_launch_dest"
 install -D -m 0644 -- "$override_source" "$override_dest"
 install -D -m 0644 -- "$resident_source" "$resident_dest"
 install -D -m 0755 -- "$cli_source" "$cli_dest"
-printf 'Installed six user-owned joetoo-kwind files. No service was started.\n'
+printf 'Installed nine user-owned joetoo-kwind files. No service was started.\n'
 printf 'From a local Plasma Konsole, run:\n'
 printf '  rc-service -U joetoo-kwind start\n'
 printf '  rc-service -U joetoo-kwind status\n'

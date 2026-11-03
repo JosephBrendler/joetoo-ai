@@ -7,12 +7,15 @@ Subprocess integration runs must execute as a non-root user in a disposable HOME
 No real OpenRC service is started, stopped, configured system-wide, or reloaded.
 """
 
+import hashlib
+import json
 import importlib.machinery
 import importlib.util
 import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -113,6 +116,8 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.home = Path(self.tmp.name)
         self.env = {**os.environ, "HOME": str(self.home)}
         self.env.pop("XDG_CONFIG_HOME", None)
+        self.env.pop("XDG_STATE_HOME", None)
+        self.archive = self.home / ".local/state/joetoo-kwin/archive"
         # Never query real OpenRC: a temporary HOME does not isolate rc-service.
         # Default to an inactive service; only the running-service test overrides it.
         self.bindir = self.home / "bin"
@@ -125,6 +130,9 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.daemon = self.home / ".local/libexec/joetoo-kwind"
         self.override = self.home / ".config/rc/conf.d/joetoo-kwind"
         self.conf = self.home / ".config/rc/rc.conf"
+        self.vnc_modules = [self.home / '.local/libexec' / name for name in
+                            ('joetoo_kwin_vnc_identity.py', 'joetoo_kwin_vnc_target.py',
+                             'joetoo_kwin_vnc_launch.py')]
 
     def run_tool(self, tool, arg):
         return subprocess.run([str(tool), arg], env=self.env, capture_output=True, text=True)
@@ -136,9 +144,491 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertEqual(self.daemon.read_bytes(), (ROOT / 'libexec/joetoo-kwind').read_bytes())
         self.assertEqual(self.override.read_bytes(), (ROOT / 'poc-user-conf.d/joetoo-kwind').read_bytes())
         self.assertEqual(self.conf.read_text(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC DISPLAY XAUTHORITY"\n')
+        self.assertIn('Installed nine user-owned', p.stdout)
+        for module in self.vnc_modules:
+            self.assertEqual(module.read_bytes(), (ROOT / 'libexec' / module.name).read_bytes())
+            self.assertEqual(module.stat().st_mode & 0o777, 0o644)
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
         self.assertEqual(self.run_tool(CONFIG_TOOL, "--check").returncode, 0)
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--install").returncode, 1)
+
+
+    def test_vnc_missing_or_outdated_modules_fail_nonmutating_check(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        config = self.conf.read_bytes()
+        for module in self.vnc_modules:
+            with self.subTest(module=module.name):
+                original = module.read_bytes()
+                module.unlink()
+                check = self.run_tool(INSTALL_TOOL, '--check')
+                self.assertEqual(check.returncode, 1)
+                self.assertIn('Missing or outdated: ' + str(module), check.stdout)
+                self.assertFalse(module.exists())
+                module.write_text('# outdated module\n')
+                before = module.stat().st_mtime_ns
+                self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 1)
+                self.assertEqual(module.read_text(), '# outdated module\n')
+                self.assertEqual(module.stat().st_mtime_ns, before)
+                self.assertEqual(self.conf.read_bytes(), config)
+                module.write_bytes(original)
+                self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+
+    def test_upgrade_six_file_install_adds_vnc_modules_and_is_content_idempotent(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        for module in self.vnc_modules:
+            module.unlink()
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 1)
+        for _ in range(2):
+            update = self.run_tool(INSTALL_TOOL, '--update')
+            self.assertEqual(update.returncode, 0, update.stdout + update.stderr)
+            for module in self.vnc_modules:
+                self.assertEqual(module.read_bytes(), (ROOT / 'libexec' / module.name).read_bytes())
+                self.assertEqual(module.stat().st_mode & 0o777, 0o644)
+            self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+
+    def test_vnc_update_preserves_previous_modules_in_backups(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        for module in self.vnc_modules:
+            module.write_text('# previous ' + module.name + '\n')
+            module.chmod(0o600)
+        update = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertEqual(update.returncode, 0, update.stdout + update.stderr)
+        for module in self.vnc_modules:
+            backups = list(self.archive.glob('vnc_' + module.stem.removeprefix('joetoo_kwin_vnc_') + '/*/' + module.name))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_text(), '# previous ' + module.name + '\n')
+            self.assertEqual(backups[0].stat().st_mode & 0o777, 0o600)
+            self.assertEqual(module.read_bytes(), (ROOT / 'libexec' / module.name).read_bytes())
+            self.assertEqual(module.stat().st_mode & 0o777, 0o644)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+
+    def archived(self, component, name):
+        return sorted(self.archive.glob(component + '/*/' + name))
+
+    def test_unchanged_update_creates_no_archive_or_legacy_backups(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        for _ in range(2):
+            result = self.run_tool(INSTALL_TOOL, '--update')
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.archive.exists())
+        self.assertFalse(list(self.home.rglob('*.before-update.*')))
+
+    def test_mode_only_mismatches_checked_and_archived_for_all_nine_components(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        installed = {
+            'service': (self.service, 0o755), 'daemon': (self.daemon, 0o755),
+            'override': (self.override, 0o644),
+            'registry': (self.daemon.with_name('joetoo_kwin_registry.py'), 0o644),
+            'resident': (self.home / '.local/share/joetoo-kwin/joetoo-kwin-resident.js', 0o644),
+            'cli': (self.home / '.local/bin/joetoo-kwin', 0o755),
+            **{key: (path, 0o644) for key, path in zip(
+                ('vnc_identity', 'vnc_target', 'vnc_launch'), self.vnc_modules)}}
+        contents = {key: path.read_bytes() for key, (path, _) in installed.items()}
+        times = (1600000000000000000, 1600000001000000000)
+        for path, _ in installed.values():
+            path.chmod(0o600)
+            os.utime(path, ns=times)
+        check = self.run_tool(INSTALL_TOOL, '--check')
+        self.assertEqual(check.returncode, 1, check.stdout + check.stderr)
+        self.assertFalse(self.archive.exists())
+        for path, _ in installed.values():
+            self.assertIn('Missing or outdated: ' + str(path), check.stdout)
+            self.assertEqual(path.stat().st_mode & 0o7777, 0o600)
+            self.assertEqual(path.stat().st_mtime_ns, times[1])
+            # --check may read bytes; restore a known access time for the update.
+            os.utime(path, ns=times)
+        update = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertEqual(update.returncode, 0, update.stdout + update.stderr)
+        for component, (path, expected) in installed.items():
+            saved, = self.archived(component, path.name)
+            record = json.loads((saved.parent / 'provenance.json').read_text())
+            self.assertEqual(saved.read_bytes(), contents[component])
+            self.assertEqual(record['mode'], '0o600')
+            self.assertEqual((record['atime_ns'], record['mtime_ns']), times)
+            self.assertEqual(path.read_bytes(), contents[component])
+            self.assertEqual(path.stat().st_mode & 0o7777, expected)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+
+    def test_timestamp_only_drift_does_not_archive_or_add_provenance(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        os.utime(self.daemon, ns=(1500000000000000000, 1500000001000000000))
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        self.assertFalse(self.archive.exists())
+        self.daemon.chmod(0o600)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        saved, = self.archived('daemon', self.daemon.name)
+        before = {p.name: p.read_bytes() for p in saved.parent.iterdir()}
+        for offset in (0, 1000000000):
+            os.utime(self.daemon, ns=(1500000000000000000 + offset, 1500000001000000000 + offset))
+            self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+            self.assertEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        self.assertEqual({p.name: p.read_bytes() for p in saved.parent.iterdir()}, before)
+
+    def test_mode_only_changes_reuse_payload_with_distinct_metadata(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        module = self.vnc_modules[0]
+        content = module.read_bytes()
+        for mode in (0o600, 0o640):
+            module.chmod(mode)
+            result = self.run_tool(INSTALL_TOOL, '--update')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(module.stat().st_mode & 0o7777, 0o644)
+        saved, = self.archived('vnc_identity', module.name)
+        self.assertEqual(saved.read_bytes(), content)
+        records = [json.loads(p.read_text()) for p in saved.parent.glob('provenance*.json')]
+        self.assertEqual({r['mode'] for r in records}, {'0o600', '0o640'})
+        self.assertEqual(len(records), 2)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        self.assertEqual(len(list(saved.parent.iterdir())), 3)
+
+    def test_mode_only_archive_failure_does_not_correct_mode_without_backup(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.daemon.chmod(0o600)
+        self.inject_archive_python('import os\n'
+                                   'def fail(*args, **kwargs):\n'
+                                   '    raise OSError("injected metadata archive failure")\n'
+                                   'os.link = fail\n')
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('injected metadata archive failure', result.stderr)
+        self.assertEqual(self.daemon.stat().st_mode & 0o7777, 0o600)
+        self.assertEqual(self.archived('daemon', self.daemon.name), [])
+
+    def test_archive_all_nine_components_and_same_named_files_are_separate(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        installed = {
+            'service': self.service, 'daemon': self.daemon, 'override': self.override,
+            'registry': self.daemon.with_name('joetoo_kwin_registry.py'),
+            'resident': self.home / '.local/share/joetoo-kwin/joetoo-kwin-resident.js',
+            'cli': self.home / '.local/bin/joetoo-kwin',
+            **dict(zip(('vnc_identity', 'vnc_target', 'vnc_launch'), self.vnc_modules))}
+        for path in installed.values():
+            path.write_bytes(b'previous version\n')
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for component, path in installed.items():
+            saved, = self.archived(component, path.name)
+            self.assertEqual(saved.read_bytes(), b'previous version\n')
+            self.assertNotEqual(saved.stat().st_ino, path.stat().st_ino)
+            self.assertEqual(saved.stat().st_nlink, 1)
+            metadata = json.loads((saved.parent / 'provenance.json').read_text())
+            self.assertEqual(metadata['installed_path'], str(path))
+            self.assertEqual(metadata['original_name'], path.name)
+            self.assertEqual(metadata['sha256'], hashlib.sha256(saved.read_bytes()).hexdigest())
+            self.assertEqual(saved.parent.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+
+    def test_archive_deduplicates_repeated_bytes_but_retains_distinct_versions(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        for old in (b'first version', b'other version', b'first version'):
+            self.daemon.write_bytes(old)
+            result = self.run_tool(INSTALL_TOOL, '--update')
+            self.assertEqual(result.returncode, 0, result.stderr)
+        versions = self.archived('daemon', self.daemon.name)
+        self.assertEqual({p.read_bytes() for p in versions}, {b'first version', b'other version'})
+        self.assertEqual(len(versions), 2)
+        before = [(p.read_bytes(), p.stat().st_mtime_ns) for p in versions]
+        self.daemon.write_bytes(b'first version')
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        self.assertEqual([(p.read_bytes(), p.stat().st_mtime_ns) for p in versions], before)
+
+    def test_unsafe_archive_rejected_without_overwriting_installation(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.daemon.write_bytes(b'previous version')
+        outside = self.home / 'outside'
+        outside.mkdir()
+        self.archive.parent.mkdir(parents=True)
+        self.archive.symlink_to(outside, target_is_directory=True)
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Refusing symlink', result.stderr)
+        self.assertEqual(self.daemon.read_bytes(), b'previous version')
+        self.assertEqual(list(outside.iterdir()), [])
+        self.archive.unlink()
+        self.archive.mkdir(mode=0o777)
+        (self.archive / 'daemon').mkdir(mode=0o700)
+        self.archive.chmod(0o777)
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('unsafe archive directory', result.stderr)
+        self.assertEqual(self.daemon.read_bytes(), b'previous version')
+
+    def test_corrupt_or_symlink_archive_version_is_not_overwritten(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        old = b'previous version'
+        self.daemon.write_bytes(old)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        saved, = self.archived('daemon', self.daemon.name)
+        self.daemon.write_bytes(old)
+        saved.write_bytes(b'corrupt')
+        self.assertNotEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        self.assertEqual(saved.read_bytes(), b'corrupt')
+        self.assertEqual(self.daemon.read_bytes(), old)
+        saved.unlink()
+        saved.symlink_to(self.daemon)
+        self.assertNotEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        self.assertTrue(saved.is_symlink())
+        self.assertEqual(self.daemon.read_bytes(), old)
+
+    def archived_daemon_fixture(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.daemon.write_bytes(b'previous version')
+        self.daemon.chmod(0o600)
+        os.utime(self.daemon, ns=(1600000000000000000, 1600000001000000000))
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        saved, = self.archived('daemon', self.daemon.name)
+        self.daemon.write_bytes(b'previous version')
+        return saved
+
+    def inject_archive_python(self, preamble):
+        wrapper = self.bindir / 'python3'
+        wrapper.write_text('#!' + sys.executable + '\n'
+                           'import sys\nsys.argv.pop(1)\n' + preamble + '\n'
+                           'exec(compile(sys.stdin.read(), "archive", "exec"))\n')
+        wrapper.chmod(0o755)
+        return wrapper
+
+    def test_existing_version_directory_permissions_are_revalidated(self):
+        saved = self.archived_daemon_fixture()
+        for mode in (0o755, 0o770, 0o777):
+            with self.subTest(mode=oct(mode)):
+                saved.parent.chmod(mode)
+                result = self.run_tool(INSTALL_TOOL, '--update')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(str(saved.parent), result.stderr)
+                self.assertEqual(self.daemon.read_bytes(), b'previous version')
+                self.assertEqual(saved.read_bytes(), b'previous version')
+        saved.parent.chmod(0o700)
+
+    def test_existing_version_and_provenance_ownership_are_revalidated(self):
+        saved = self.archived_daemon_fixture()
+        for target in (saved.parent, saved.parent / 'provenance.json'):
+            with self.subTest(target=target.name):
+                # Ordinary-user tests cannot chown files to another UID. Inject
+                # only that stat field, exercising the real installer boundary.
+                preamble = ('import os\nfrom pathlib import Path\n'
+                            'original_stat = Path.stat\n'
+                            'def changed_stat(path, *args, **kwargs):\n'
+                            '    info = original_stat(path, *args, **kwargs)\n'
+                            f'    if str(path) == {str(target)!r}:\n'
+                            '        fields = list(info)\n'
+                            '        fields[4] = os.geteuid() + 1\n'
+                            '        return os.stat_result(fields)\n'
+                            '    return info\n'
+                            'Path.stat = changed_stat\n')
+                wrapper = self.inject_archive_python(preamble)
+                result = self.run_tool(INSTALL_TOOL, '--update')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(str(target), result.stderr)
+                self.assertEqual(self.daemon.read_bytes(), b'previous version')
+                wrapper.unlink()
+
+    def test_existing_provenance_rejects_invalid_json_schema_and_identity(self):
+        saved = self.archived_daemon_fixture()
+        provenance = saved.parent / 'provenance.json'
+        valid = json.loads(provenance.read_text())
+        variants = {'malformed': '{', 'array': '[]',
+                    'missing field': json.dumps({k: v for k, v in valid.items() if k != 'mode'})}
+        for key, value in (('schema_version', 2), ('sha256', '0' * 64),
+                           ('original_name', 'unrelated'), ('installed_path', 'relative'),
+                           ('source_path', '/tmp/unrelated'), ('mode', '0o888'),
+                           ('mtime_ns', True), ('atime_ns', 'yesterday'),
+                           ('archived_at', '2026-11-02T12:00:00')):
+            variants[key] = json.dumps({**valid, key: value})
+        for label, text in variants.items():
+            with self.subTest(label=label):
+                provenance.write_text(text)
+                result = self.run_tool(INSTALL_TOOL, '--update')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(provenance.read_text(), text)
+                self.assertEqual(self.daemon.read_bytes(), b'previous version')
+                self.assertEqual(saved.read_bytes(), b'previous version')
+        provenance.write_text(json.dumps(valid))
+        provenance.chmod(0o644)
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Unsafe provenance file', result.stderr)
+        self.assertEqual(self.daemon.read_bytes(), b'previous version')
+
+    def test_identical_payload_retains_distinct_metadata_records(self):
+        saved = self.archived_daemon_fixture()
+        first = json.loads((saved.parent / 'provenance.json').read_text())
+        original = saved.stat()
+        self.daemon.chmod(0o640)
+        second_times = (1700000000000000000, 1700000001000000000)
+        os.utime(self.daemon, ns=second_times)
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        second_path, = saved.parent.glob('provenance.*.json')
+        second = json.loads(second_path.read_text())
+        self.assertEqual(first['mode'], '0o600')
+        self.assertEqual(second['mode'], '0o640')
+        self.assertEqual((second['atime_ns'], second['mtime_ns']), second_times)
+        self.assertEqual(first['mtime_ns'], 1600000001000000000)
+        self.assertEqual(saved.stat().st_ino, original.st_ino)
+        self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(saved.stat().st_mtime_ns, first['mtime_ns'])
+        self.assertEqual(saved.read_bytes(), b'previous version')
+        self.assertEqual(len(list(saved.parent.iterdir())), 3)  # One payload, two records.
+        self.assertEqual(json.loads((saved.parent / 'provenance.json').read_text()), first)
+        # Retrying the exact same installation metadata adds no duplicate record.
+        self.daemon.write_bytes(b'previous version')
+        self.daemon.chmod(0o640)
+        os.utime(self.daemon, ns=second_times)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        self.assertEqual(len(list(saved.parent.iterdir())), 3)
+        self.assertEqual(second_path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(second_path.stat().st_nlink, 1)
+
+    def test_additional_provenance_and_payload_metadata_must_remain_valid(self):
+        saved = self.archived_daemon_fixture()
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        extra, = saved.parent.glob('provenance.*.json')
+        self.daemon.write_bytes(b'previous version')
+        original = extra.read_bytes()
+        extra.write_text('{}')
+        self.assertNotEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        self.assertEqual(self.daemon.read_bytes(), b'previous version')
+        extra.write_bytes(original)
+        wrong_name = extra.with_name('provenance.wrong.json')
+        extra.rename(wrong_name)
+        self.assertNotEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        wrong_name.rename(extra)
+        saved.chmod(0o640)
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Payload/provenance metadata mismatch', result.stderr)
+        self.assertEqual(self.daemon.read_bytes(), b'previous version')
+
+    def test_new_provenance_failure_preserves_payload_old_record_and_install(self):
+        saved = self.archived_daemon_fixture()
+        first = (saved.parent / 'provenance.json').read_bytes()
+        self.inject_archive_python('import os\n'
+                                   'def fail(*args, **kwargs):\n'
+                                   '    raise OSError("injected record publish failure")\n'
+                                   'os.link = fail\n')
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('injected record publish failure', result.stderr)
+        self.assertEqual(self.daemon.read_bytes(), b'previous version')
+        self.assertEqual(saved.read_bytes(), b'previous version')
+        self.assertEqual((saved.parent / 'provenance.json').read_bytes(), first)
+        self.assertEqual(len(list(saved.parent.iterdir())), 2)
+
+    def test_install_failure_keeps_recoverable_archive_and_check_detects_failure(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.daemon.write_bytes(b'previous version')
+        # Fail the existing install command, without invoking a real service.
+        failing = self.bindir / 'install'
+        failing.write_text('#!/bin/sh\nexit 73\n')
+        failing.chmod(0o755)
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertEqual(result.returncode, 73)
+        self.assertEqual(self.daemon.read_bytes(), b'previous version')
+        saved, = self.archived('daemon', self.daemon.name)
+        self.assertEqual(saved.read_bytes(), b'previous version')
+        self.assertFalse(list(self.archive.rglob('.pending-*')))
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 1)
+
+    def test_archive_copy_failure_removes_staging_and_keeps_active_file(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.daemon.write_bytes(b'old daemon')
+        # Inject a copy error only into the installer's embedded archive code.
+        # This tests the real shell failure boundary without filling a disk.
+        wrapper = self.bindir / 'python3'
+        wrapper.write_text('#!' + sys.executable + '\n'
+                           'import shutil, sys\n'
+                           'sys.argv.pop(1)  # Match python3 - argv semantics.\n'
+                           'def fail(*args, **kwargs):\n'
+                           '    raise OSError("injected copy failure")\n'
+                           'shutil.copy2 = fail\n'
+                           'exec(compile(sys.stdin.read(), "archive", "exec"))\n')
+        wrapper.chmod(0o755)
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('injected copy failure', result.stderr)
+        self.assertEqual(self.daemon.read_bytes(), b'old daemon')
+        self.assertFalse(list(self.archive.rglob('.pending-*')))
+        self.assertEqual(self.archived('daemon', self.daemon.name), [])
+
+    def test_archive_failure_precedes_any_install_command(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.service.write_bytes(b'old service')
+        self.daemon.write_bytes(b'old daemon')
+        self.archive.mkdir(parents=True)
+        (self.archive / 'daemon').write_text('not a directory')
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.service.read_bytes(), b'old service')
+        self.assertEqual(self.daemon.read_bytes(), b'old daemon')
+        saved, = self.archived('service', self.service.name)
+        self.assertEqual(saved.read_bytes(), b'old service')
+
+    def test_xdg_state_override_and_relative_path_rejection(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.daemon.write_bytes(b'old')
+        self.env['XDG_STATE_HOME'] = 'relative'
+        self.assertNotEqual(self.run_tool(INSTALL_TOOL, '--update').returncode, 0)
+        self.assertEqual(self.daemon.read_bytes(), b'old')
+        self.env['XDG_STATE_HOME'] = str(self.home / 'custom-state')
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(list((self.home / 'custom-state/joetoo-kwin/archive').glob('daemon/*/joetoo-kwind')))
+        self.assertFalse(self.archive.exists())
+
+    def test_legacy_preview_groups_content_without_modification(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        files = []
+        for suffix, content in (('before-update.one', b'A'),
+                                ('before-update.two', b'A'),
+                                ('before-step1.2a-update.old', b'B')):
+            path = self.daemon.with_name(self.daemon.name + '.' + suffix)
+            path.write_bytes(content)
+            files.append(path)
+        before = [(p.read_bytes(), p.stat().st_ino, p.stat().st_mtime_ns) for p in files]
+        self.rc_service.write_text('#!/bin/sh\nexit 0\n')
+        result = self.run_tool(INSTALL_TOOL, '--preview-legacy-backups')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        records = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(records), 9)
+        daemon = next(r for r in records if r['component'] == 'daemon')
+        self.assertEqual(sorted(v['copies'] for v in daemon['versions']), [1, 2])
+        self.assertEqual({p for v in daemon['versions'] for p in v['paths']}, set(map(str, files)))
+        self.assertEqual([(p.read_bytes(), p.stat().st_ino, p.stat().st_mtime_ns) for p in files], before)
+        self.assertFalse(self.archive.exists())
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+
+    def test_vnc_symlinks_rejected_before_install_update_or_check(self):
+        sentinel = self.home / 'sentinel'
+        sentinel.write_text('preserve\n')
+        self.vnc_modules[0].parent.mkdir(parents=True)
+        for module in self.vnc_modules:
+            with self.subTest(module=module.name):
+                module.symlink_to(sentinel)
+                for action in ('--install', '--update', '--check'):
+                    result = self.run_tool(INSTALL_TOOL, action)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('Refusing unexpected installation destination', result.stderr)
+                    self.assertTrue(module.is_symlink())
+                    self.assertEqual(sentinel.read_text(), 'preserve\n')
+                    self.assertFalse(self.service.exists())
+                    self.assertFalse(self.conf.exists())
+                module.unlink()
+
+    def test_running_service_blocks_vnc_module_update_without_backups(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.vnc_modules[0].write_text('# old module\n')
+        before = [path.read_bytes() for path in self.vnc_modules]
+        daemon = self.daemon.read_bytes()
+        self.rc_service.write_text('#!/bin/sh\nexit 0\n')
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Stop the user service', result.stderr)
+        self.assertEqual([path.read_bytes() for path in self.vnc_modules], before)
+        self.assertEqual(self.daemon.read_bytes(), daemon)
+        self.assertFalse(list(self.home.rglob('*.before-update.*')))
 
 
     def test_upgrade_detects_missing_graphical_environment_and_preserves_settings(self):
@@ -190,7 +680,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.override.write_text("CUSTOM=previous\\n")
         p = self.run_tool(INSTALL_TOOL, "--update")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-        backups = list(self.override.parent.glob("joetoo-kwind.before-update.*"))
+        backups = list(self.archive.glob("override/*/joetoo-kwind"))
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].read_text(), "CUSTOM=previous\\n")
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
@@ -218,7 +708,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         p = self.run_tool(INSTALL_TOOL, "--update")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--check").returncode, 0)
-        backups = list(self.service.parent.glob('joetoo-kwind.before-update.*'))
+        backups = list(self.archive.glob('service/*/joetoo-kwind'))
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].read_text(), 'OLD\n')
 
