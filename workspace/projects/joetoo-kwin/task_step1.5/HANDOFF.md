@@ -1,22 +1,24 @@
 # Step 1.5c.5 — remote resources and graphical remote desktops: active task handoff
 
-**Current maintainer status (2026-11-03):** Step 1.5c.5a (Dolphin
-SFTP) is accepted and closed. Step 1.5c.5b (TigerVNC-over-SSH) is implemented,
-natively verified on X11 and Wayland/XWayland, and ready for final branch/PR
-review; the maintainer has not yet declared the task branch merged. Step
-1.5c.5c (RDP comparison) and Step 1.5d (integrated regression) remain
-separate future authorization gates. The investigation-only authorization
-recorded in earlier iterations is historical, not the current task status.
+**Current maintainer status (2026-11-03):** Step 1.5c.5a (Dolphin SFTP)
+is accepted and closed. The maintainer reports that Step 1.5c.5b
+(TigerVNC-over-SSH) has been merged following native X11 and Wayland/XWayland
+acceptance. **Step 1.5c.5c (RDP feasibility and decision) is now authorized
+for read-only, server-first research and a comparative recommendation only.**
+RDP client/server implementation, package or service changes, native network
+connections and Step 1.5d integrated regression are not authorized here.
+Earlier VNC investigation directions below are historical.
 
 **Canonical location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`.
 
-**Task branch:** `task/joetoo-kwin-step1.5c5-remote-access`. Current
-maintainer review baseline: local merge commit `949268e`, incorporating
-`origin/main` architecture commit `571b789` atop the published candidate
-`c5d7f28`. Check local HEAD before publication; this record does not claim
-that `949268e` has already been pushed. Historical SFTP/advisory baseline:
-`b8120f7c9aad608e26b5c147561a5eee5756a8e9`; earlier planning baseline:
-`099096e33fe568579b219ffced4131f211af2a3f`.
+**Active 1.5c.5c branch (maintainer-approved):**
+`task/joetoo-kwin-step1.5c5c-rdp-feasibility`. Begin from the maintainer's
+merged, current `main` after verifying `git status`, remote tracking and the
+actual base SHA. This document does not assert that the new branch exists
+or that its changes have been committed/pushed. The historical 1.5c.5b
+branch was `task/joetoo-kwin-step1.5c5-remote-access` (local review merge
+`949268e`; published archive commit `c5d7f28`). SFTP/advisory baseline:
+`b8120f7c9aad608e26b5c147561a5eee5756a8e9`.
 
 **Authoritative design:** [ARCHITECTURE.md](../ARCHITECTURE.md) and [Step 1.5c.5 approved scope](Step1.5c5_implementation_scope.md). This HANDOFF grants operational permissions only within that design. Governing root/workspace/project `AGENTS.md` and applicable `.agents/skills/` take precedence. `joetoo` and `joetoo-upstream` retain their read-only/advisory restrictions for AI.
 
@@ -49,6 +51,78 @@ not a pending migration requirement. The active installer preserves replaced
 versions in its separate content-addressed archive and avoids new timestamped
 backups in production directories.
 
+## Active authorization — Step 1.5c.5c RDP feasibility (2026-11-03)
+
+**Maintainer decision and motivation.** Investigate RDP starting with the
+*server/session model*, then clients. The maintainer has working
+TigerVNC-over-SSH but little prior RDP experience and wishes to start a
+remote graphical login/session, not merely observe an already-logged-in
+screen. Several Ubuntu machines currently offer RDP-oriented GNOME access.
+Keep existing TigerVNC working and do not assume RDP is categorically more
+secure than verified SSH-protected VNC.
+
+**Scope: research and comparison only.** Reuse Section 5 of
+`Step1.5c5_implementation_scope.md` and the project's architecture. First
+separate (a) sharing an existing session, (b) logging in remotely to a new
+session, and (c) reconnecting to a persistent session; do not assume one
+server supports all three. Compare the following server-side options and
+verify version-specific behavior: Ubuntu/GNOME Remote Desktop's RDP
+*Desktop Sharing* versus *Remote Login* (GNOME/GDM, Wayland), `xrdp` with
+`xorgxrdp` and a compatible Xorg desktop, and KDE KRDP's logged-in Plasma
+session service. Determine whether an independent KDE/Wayland remote login
+is actually supported; do not conflate KRDP with KRDC. Consider OpenRC
+compatibility and the existing remote-login behavior of Ubuntu systems.
+
+**Client evaluation follows the server requirements.** Compare KRDC,
+Remmina, `xfreerdp`, `sdl-freerdp`, and supported Wayland-native FreeRDP
+frontends if available, on `gmki91` (X11) and `q552u01` (Wayland/XWayland).
+Evaluate exact installed versions/USE flags/executables, credential and
+certificate trust policies, command-line/profile security, unique desktop
+window identity versus preliminary login dialogs, window reuse, process
+lifetime, and fit with the existing broker's UUID-based placement.
+
+**New maintainer-supplied inventory (not a native RDP test).** On `gmki91`
+Gentoo Portage showed `net-misc/freerdp-3.32.1` installed; executables
+`xfreerdp`, `sdl-freerdp`, `freerdp-shadow-cli`, `freerdp-proxy`, and
+`krdpserver` were present. `kde-plasma/krdp-6.7.5-r1` was subsequently
+confirmed installed. A proposed Remmina 1.4.43 installation had `rdp`,
+`ssh`, `vnc`, and `wayland` USE flags but its completion was not shown.
+The FreeRDP emerge output showed `(-wayland)`; identify the *effective*
+Portage masking source before attributing it to the joetoo profile.
+`q552u01` installed-client inventory and all server configurations remain
+unverified.
+
+**Security gates.** Assess TLS certificate identity, trusted CA or pinned
+fingerprints, login authentication/NLA where supported, downgrade behavior,
+network binding, VPN/SSH gateway choices, credential handling and least
+exposure. No direct public TCP/3389, automatic trust override, `/cert:ignore`,
+password in argv/history/logs, security weakening, firewall change or
+server start is authorized. Separately report encrypted transport, verified
+server identity, authenticated login and graphical usability; success of a
+window launch is not proof of any of these.
+
+**Permitted actor and edits.** Codex may read joetoo-ai code/docs, upstream
+technical documentation and nonsecret local installed-package metadata. It
+may propose a small read-only command checklist for the maintainer and edit
+**only this HANDOFF.md** with concise findings within the approved joetoo-ai
+research branch after verifying a clean working tree and applicable
+`AGENTS.md`/skills. No new framework, source implementation, test harness,
+configuration or separate planning files. Do not alter `joetoo` or
+`joetoo-upstream`, install packages, configure RDP servers, open real
+connections, handle credentials, commit, push, open a PR or merge. If read
+access to a host or file is unavailable, ask the maintainer for exact
+nonsecret output rather than inventing the result.
+
+**Deliverable and stop gate.** Present a compact *server-first* capability
+matrix, a client matrix limited to credible candidates, an explicit security
+assessment, a recommended Ubuntu-first native pilot the maintainer may
+separately authorize, and a ranked decision: pursue an RDP client/endpoint
+contract or retain TigerVNC as primary. Label every finding inspected,
+maintainer-reported, proposed or untested. Stop for approval before native
+RDP tests or any implementation. The maintainer remains responsible for
+selecting server, client, login semantics, trust policy, packaging and
+publication. Step 1.5d remains a separate gate.
+
 ## 1. Maintainer-approved task definition — historical scope and accepted outcome
 
 **Objective:** Turn the verified Step 1.4 multiwindow and asynchronous placement foundation into practical, consistent layout and launch workflows, while preserving the legacy joetoo interaction requirements and both X11/Wayland backends.
@@ -67,13 +141,12 @@ backups in production directories.
 
 **Original proposed success criteria (now assessed for the bounded Step 1.5c.4 candidate):** configuration dry run present the "plan" but never launches; configured windows register and reach expected geometry; SSH placeholder is not classified as a placement failure; existing windows remain unaffected; X11/Wayland native results agree; window/session-state race condition risks are mitigated; headless regression suite remains green.
 
-**Current phase:** Step 1.5c.5a is accepted and closed. Step
-1.5c.5b has passed the maintainer's X11/Wayland native checks, including
-final nine-file installation and viewer/SSH teardown; formal task-branch
-acceptance/PR/merge remains with the maintainer. Earlier investigation and
-implementation-gate instructions below document history rather than current
-authorization. Transport and window outcomes remain independent. RDP
-(1.5c.5c) and broader integration regression (1.5d) are not yet authorized.
+**Current phase:** Steps 1.5c.5a and 1.5c.5b are accepted; the maintainer
+reports the 1.5c.5b branch merged. Step 1.5c.5c is authorized for read-only,
+server-first RDP feasibility and comparative decision support as defined in
+the active authorization above. Earlier VNC investigation and execution
+directions below document historical approvals, not present instructions.
+No RDP implementation, native RDP connection, or Step 1.5d work is authorized.
 
 ## 2. Required inspection for Step 1.5c.5b
 
