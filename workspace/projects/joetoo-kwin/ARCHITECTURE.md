@@ -60,6 +60,8 @@ otherwise fall back to `/etc/joetoo-kwin/joetoo-kwin.conf`. A present but
 unreadable/invalid user file must not silently fall back. `XDG_CONFIG_HOME`
 need not be set; its standard default is `$HOME/.config`.
 
+**Control surface versus managed windows:** joetoo-kwin's control surface is not inherently a managed window, and it is not inherently singular. The OpenRC service and its broker must be initialized by an entity the broker does not manage, but afterward, any terminal or command line interface with access to the user's login shell can be used to control additional joetoo-kwin actions. "Managed" is an attribute assigned to positively identified application windows through authorized launch transactions. An existing Konsole, KDE application launcher, panel shortcut, or future graphical control interface may initiate those transactions without becoming managed itself. Explicit enrollment of preexisting windows, if implemented later, requires a separately approved identity and ownership contract. Graphical launch entry points must preserve the established confirmation and reporting safeguards.
+
 **Packaging obligation (Step 1.9):** Distribute a documented configuration
 template and provide ebuild post-install guidance for optional per-user
 configuration. Do not populate HOME, overwrite user configurations, or modify
