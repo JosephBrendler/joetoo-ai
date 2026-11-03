@@ -1,17 +1,53 @@
 # Step 1.5c.5 — remote resources and graphical remote desktops: active task handoff
 
-**Current maintainer decision:** [20261101-23:06:33] Step 1.5c.5a, Dolphin SFTP, is accepted and closed.
- Step 1.5c.5b, TigerVNC-over-SSH, is authorized to begin with source/POC inspection and a security, target-grammar and lifecycle contract for maintainer approval.
-** This activates 1.5c.5b investigation, not yet executable VNC implementation or native network operations**.
- Step 1.5c.5c RDP comparison and Step 1.5d integrated regression remain future separate gates.
+**Current maintainer status (2026-11-03):** Step 1.5c.5a (Dolphin
+SFTP) is accepted and closed. Step 1.5c.5b (TigerVNC-over-SSH) is implemented,
+natively verified on X11 and Wayland/XWayland, and ready for final branch/PR
+review; the maintainer has not yet declared the task branch merged. Step
+1.5c.5c (RDP comparison) and Step 1.5d (integrated regression) remain
+separate future authorization gates. The investigation-only authorization
+recorded in earlier iterations is historical, not the current task status.
 
 **Canonical location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`.
 
-**Task branch:** `task/joetoo-kwin-step1.5c5-remote-access`, already created. Last independently verified published SFTP/advisory implementation commit: `b8120f7c9aad608e26b5c147561a5eee5756a8e9`. The final Codex debug-label/documentation cleanup was reported uncommitted; inspect actual HEAD and local changes before proceeding, rather than assuming that cleanup was published. Historical planning baseline: `099096e33fe568579b219ffced4131f211af2a3f`.
+**Task branch:** `task/joetoo-kwin-step1.5c5-remote-access`. Current
+maintainer review baseline: local merge commit `949268e`, incorporating
+`origin/main` architecture commit `571b789` atop the published candidate
+`c5d7f28`. Check local HEAD before publication; this record does not claim
+that `949268e` has already been pushed. Historical SFTP/advisory baseline:
+`b8120f7c9aad608e26b5c147561a5eee5756a8e9`; earlier planning baseline:
+`099096e33fe568579b219ffced4131f211af2a3f`.
 
 **Authoritative design:** [ARCHITECTURE.md](../ARCHITECTURE.md) and [Step 1.5c.5 approved scope](Step1.5c5_implementation_scope.md). This HANDOFF grants operational permissions only within that design. Governing root/workspace/project `AGENTS.md` and applicable `.agents/skills/` take precedence. `joetoo` and `joetoo-upstream` retain their read-only/advisory restrictions for AI.
 
 **Accepted 1.5c.5a evidence:** [Native acceptance record](step1.5c5a-native-acceptance.md), [implementation review](step1.5c5a-review.md) and [URI/security contract](step1.5c5a-dolphin-sftp-contract.md). See Section 4 for corrected interpretation of the previously omitted X11 positive advisory. Earlier Step 1.5c.4 acceptance remains in [its native closure](step1.5c4-native-acceptance.md).
+
+**Step 1.5c.5b native closeout evidence (maintainer, 2026-11-03;
+formal milestone merge pending):** `gmki91` X11 registered and placed the
+actual TigerVNC desktop viewer, verified coexistence with an independently
+managed Dolphin window and stacking, observed loopback-only SSH forwarding,
+and confirmed viewer/SSH teardown. `q552u01` Wayland/XWayland used the final
+nine-file installer and launched `yorsqui:2` on desktop 10, slot 1;
+`win-001` and exact KWin UUID `afbdbaa1-3c45-49a4-a18f-ac2793fbbb1d`
+were verified by the broker, geometry was 1670×918, initial layout was
+`SUCCEEDED`, the remote desktop was visually usable, and viewer/SSH PIDs
+`1183613`/`1183610` were absent after closure. CLI remote-session and VNC
+authentication fields remained `unverified`, correctly independent of the
+human observation. Both machines reported all nine installed files `Current`.
+The maintainer reported 382 Python/53 JavaScript passes on `gmki91`, and
+405 Python/53 JavaScript passes on `q552u01` before moving the 23 legacy
+migration-only tests outside normal test discovery. Repeat regressions after
+the archive move were not claimed.
+
+**Legacy-backup housekeeping (maintainer, 2026-11-03):** 171 historical backup
+files on `gmki91` and 135 on `q552u01` were manually moved into their
+respective `~/.local/state/joetoo-kwin/legacy-backups/` trees; no legacy
+contents were deleted. The proposed migration utility and tests were archived
+at `archive/aborted_backup_migration_tool/` in `c5d7f28`; no real migration
+Gate B/C was executed. Historical Iteration 33 records the abandoned proposal,
+not a pending migration requirement. The active installer preserves replaced
+versions in its separate content-addressed archive and avoids new timestamped
+backups in production directories.
 
 ## 1. Maintainer-approved task definition — historical scope and accepted outcome
 
@@ -31,7 +67,13 @@
 
 **Original proposed success criteria (now assessed for the bounded Step 1.5c.4 candidate):** configuration dry run present the "plan" but never launches; configured windows register and reach expected geometry; SSH placeholder is not classified as a placement failure; existing windows remain unaffected; X11/Wayland native results agree; window/session-state race condition risks are mitigated; headless regression suite remains green.
 
-**Current phase:** The original Step 1.5 requirements above are preserved as historical requirements, including their original geometry, `-m`, `-c`, `-o` and `script_header_joetoo` conventions. Step 1.5c.5a is now **accepted and closed**; Step 1.5c.5b is **active for POC/security/identity contract investigation**. Remote transport outcomes remain separate from managed-window outcomes. The [approved 1.5c.5 scope](Step1.5c5_implementation_scope.md) governs detailed remote-access requirements; RDP and 1.5d are not yet authorized.
+**Current phase:** Step 1.5c.5a is accepted and closed. Step
+1.5c.5b has passed the maintainer's X11/Wayland native checks, including
+final nine-file installation and viewer/SSH teardown; formal task-branch
+acceptance/PR/merge remains with the maintainer. Earlier investigation and
+implementation-gate instructions below document history rather than current
+authorization. Transport and window outcomes remain independent. RDP
+(1.5c.5c) and broader integration regression (1.5d) are not yet authorized.
 
 ## 2. Required inspection for Step 1.5c.5b
 

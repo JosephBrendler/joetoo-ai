@@ -411,8 +411,8 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.2** | Sequential managed launches, positive UUID registration, geometry and duplicate-slot safety | Accepted |
 | **1.5c.3** | Original local Bash, `ssh_wrapper` and unavailable SSH placeholders | Accepted |
 | **1.5c.4** | Desktop capacity, Dolphin local launches, XDG discovery, application-independent `under/panel/over`, grouped launches, bounded initial stack/focus | Accepted, merged; native X11/Wayland closure evidence in Step 1.5 task |
-| **1.5c.5a** | Dolphin SFTP integration | Implemented on the task branch; maintainer demonstrated managed X11 and Wayland launches, UUID placement/stacking and remote browsing. Separate post-confirmation DNS/TCP advisories remain a follow-up correction under review; see task evidence |
-| **1.5c.5b** | TigerVNC viewer over authenticated SSH | Proposed next increment; inspect existing functioning KDE launcher/POC, verify compatibility, then approve minimal managed-launch translation |
+| **1.5c.5a** | Dolphin SFTP integration | Accepted and closed; managed X11/Wayland launches and remote browsing demonstrated; optional post-confirmation NSS/TCP advisories remain non-enforcing diagnostics |
+| **1.5c.5b** | TigerVNC viewer over authenticated SSH | Implemented on task branch; native X11 and Wayland/XWayland viewer identification, UUID placement, SSH tunnel and teardown checks passed; milestone PR/merge pending |
 | **1.5c.5c** | Comparative RDP feasibility and decision | Evaluate installed candidates, security, capability and user value; an accepted secure/reliable RDP workflow may supersede legacy VNC as primary graphical remote access; implementation requires explicit follow-up authorization |
 | **1.5d** | add -L, -l; conduct integrated native X11/Wayland regression of completed Step 1.5 capabilities | Cross-feature ownership, Busy, focus, desktop membership, failures and completeness; not an implicit feature-development gate |
 | **1.6** | Managed `-a`, `-d`, `-x` | Selective safe close, never unrelated windows |
@@ -473,19 +473,30 @@ window registration or remote browsing. It is not evidence of a failed SSH/SFTP
 connection. No suppression, process-launch redesign or systemd dependency is
 authorized as part of Step 1.5c.5a.
 
-**1.5c.5b — TigerVNC over SSH (second).** First inspect the existing archived
-`archive/tigervnc-poc/vnc-via-ssh-launch` and the maintainer's *working*,
-KDE-application-launcher-integrated TigerVNC-over-SSH invocation. This path is
-already demonstrated operational by the maintainer: concentrate on actual
-command-line compatibility with the managed launch model, accurate viewer
-window identity, and minimal safe translation into script activation. The
-candidate is not thereby presumed cryptographically secure or production
-ready; determine actual tunnel options, loopback binding, SSH host-key
-verification, VNC authentication, child/tunnel ownership and cleanup. No
-**direct VNC** is authorized, including on local LAN. Distinguish viewer
-existence/placement from tunnel, authentication and remote-display success.
-If source inspection reveals material weaknesses in the POC, report them
-rather than blindly copying it into a supported executable recipe.
+**1.5c.5b — TigerVNC over SSH (second).** The implemented recipe
+`DESKTOP|vncviewer|ssh|ssh://[USER@]HOST[:SSH_PORT]/display/N[|LAYER]`
+(or `/port/P`) validates its endpoint offline and launches a dedicated,
+owned SSH forwarding process with a loopback-only local VNC listener. SSH
+host-key checks remain in force; raw/direct VNC is not supported, including
+on a local LAN. TigerVNC's own `-via` tunnel is disabled so its process and
+forwarding lifecycle do not compete with the owned SSH tunnel.
+
+The actual desktop viewer is identified only after the stock TigerVNC
+desktop-role signal and correlated with the exact KWin X11/XWayland window
+UUID, process, source and launch transaction. The preceding authentication
+window is never adopted merely because it shares PID or class. The broker
+places the positively identified viewer, verifies geometry and registration,
+and preserves independent launch, transport, authentication, remote-usability
+and window-placement outcomes. Startup, failure, cancellation and teardown
+use bounded checks and owned-process cleanup rather than class-wide killing.
+
+The maintainer natively demonstrated correct viewer registration/placement,
+stacking and usable remote desktop on `gmki91` X11 and `q552u01` Wayland,
+and confirmed viewer and dedicated SSH process teardown after normal close.
+These observations do not imply that the program independently verifies VNC
+authentication or remote usability, nor that all failure or host-key paths
+have been tested. The task branch awaits maintainer review and merge;
+Step 1.5c.5c RDP evaluation remains a separate authorization gate.
 
 **1.5c.5c — RDP feasibility and decision (third).** Deliberately evaluate
 *each viable graphical remote-desktop client candidate* identified in the
