@@ -372,6 +372,7 @@ function reportExistingWindows() {
     // KWin runs this enumeration synchronously on its scripting thread.
     callDBus(BRIDGE, PATH, BRIDGE, "SyncInventory", JSON.stringify({
         source: observerSource, revision: ++observerRevision, windows: snapshots, move_protocol: 1,
+        viewer_protocol: typeof workspace.getClient === "function" ? 1 : 0,
         initial_layout_protocol: typeof workspace.raiseWindow === "function" && workspace.stackingOrder &&
             workspace.currentDesktop && Number.isInteger(Number(workspace.currentDesktop.x11DesktopNumber)) &&
             typeof workspace.activeWindow !== "undefined" ? 1 : 0
@@ -393,6 +394,46 @@ registerShortcut("joetoo_bridge_observe", "Joetoo refresh window observations",
                  "", reportExistingWindows);
 reportExistingWindows();
 // ---------------- End Step 1.3a observational extension ---------------------
+
+// TigerVNC desktop-role handshake. XID comes only from the broker's scoped
+// X11 event observer. Resolve it in KWin, then require new UUID/PID/lifecycle
+// validation at the broker BEFORE any geometry is changed. No title matching.
+function managedViewerFromBroker() {
+    if (typeof workspace.getClient !== "function") return;
+    callDBus(BRIDGE, PATH, BRIDGE, "TakeManagedViewer", observerSource, function(payload) {
+        if (!payload) return;
+        let request;
+        try { request = JSON.parse(payload); } catch (error) { return; }
+        if (request.source !== observerSource || !Array.isArray(request.xids)) return;
+        const matches = [];
+        for (const xid of request.xids) {
+            const win = workspace.getClient(xid);
+            if (!win || win.deleted || !win.normalWindow || Number(win.pid) !== request.pid) continue;
+            const cls = String(win.resourceClass || "").toLowerCase();
+            if (cls !== "vncviewer") continue;
+            const identifier = windowUUID(win);
+            if (identifier) matches.push({xid: xid, uuid: identifier});
+        }
+        const resolutionStarted = Date.now();
+        callDBus(BRIDGE, PATH, BRIDGE, "CompleteManagedViewer", JSON.stringify({
+            id: request.id, claim: request.claim, source: observerSource, matches: matches
+        }), function(placement) {
+            if (!placement) return;
+            let r;
+            try { r = JSON.parse(placement); } catch (error) { return; }
+            if (r.source !== observerSource || Date.now() - resolutionStarted >= r.remaining_ms) return;
+            // Re-resolve the same XID and UUID after the async broker round-trip.
+            const selected = matches.find(m => m.uuid.replace(/[{}]/g, "").toLowerCase() === r.window_uuid);
+            const win = selected ? workspace.getClient(selected.xid) : null;
+            if (!win || win.deleted || Number(win.pid) !== request.pid ||
+                    windowUUID(win).replace(/[{}]/g, "").toLowerCase() !== r.window_uuid) {
+                finish(r, "ERROR", "Verified viewer disappeared before placement"); return;
+            }
+            placeWindow(win, r, "launch");
+        });
+    });
+}
+registerShortcut("joetoo_bridge_viewer", "Joetoo verified TigerVNC desktop", "", managedViewerFromBroker);
 
 // Initialization-only, positively registered cohort. Never select the active
 // window as an operation target, and never subscribe to later user overrides.

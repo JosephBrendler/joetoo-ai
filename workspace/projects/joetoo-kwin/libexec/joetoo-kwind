@@ -34,6 +34,16 @@ _libexec_dir = os.path.dirname(os.path.realpath(__file__))
 if _libexec_dir not in sys.path:
     sys.path.insert(0, _libexec_dir)
 from joetoo_kwin_registry import RegistryError, WindowRegistry
+# Lazy factories preserve non-VNC startup when optional deployment files have
+# not yet been installed. VNC preflight reports their absence explicitly.
+def DesktopObserver(bounds):
+    from joetoo_kwin_vnc_identity import DesktopObserver as observer_type
+    return observer_type(bounds)
+
+
+def viewer_settings(data):
+    from joetoo_kwin_vnc_target import settings
+    return settings(data)
 
 # Our D-Bus address has three parts:
 #   BUS  = unique service name that the Python process requests ownership of;
@@ -129,6 +139,7 @@ class Broker(dbus.service.Object):
         self.observation_synced = False
         self.initial_layout = None
         self.initial_layout_protocol = 0
+        self.viewer_protocol = 0
         self.move_protocol = 0  # Advertised by the synchronized resident, not inferred.
         # Step 1.3b diagnostic-only: one pending correlation probe. This is
         # deliberately NOT the managed-window registry of Step 1.4.
@@ -139,6 +150,10 @@ class Broker(dbus.service.Object):
         self._managed_correlation = None
 
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
+        self._expire_managed_correlation()
+        if (self._managed_correlation and self._managed_correlation.get("viewer")
+                and (self._managed_correlation["state"] == "PENDING" or self._managed_correlation.get("observer_cleanup_uncertain"))):
+            raise dbus.DBusException("Viewer readiness or cleanup is pending", name=IFACE + ".Busy")
         if self._initial_layout_active():
             raise dbus.DBusException("Initial layout is still active", name=IFACE + ".Busy")
         # Shared implementation for Submit (move) and SubmitLaunch (launch).
@@ -353,6 +368,10 @@ class Broker(dbus.service.Object):
         desktop changes. No arbitrary sleeps or JS timer API are needed.
         """
         r = self.request
+        if (r and r["kind"] == "viewer" and r["state"] in ("RUNNING", "VERIFYING")
+                and time.monotonic() >= r["viewer_placement_deadline"]):
+            r.update(state="ERROR", detail="Verified viewer placement deadline expired")
+            self._sync_managed_placement()
         if r is None or r["state"] != "VERIFYING":
             return
         identifier = r["placement_uuid"]
@@ -412,6 +431,13 @@ class Broker(dbus.service.Object):
         if r is None or r["id"] != request_id or r["state"] != "RUNNING":
             raise dbus.DBusException("Unknown or inactive request",
                                      name=IFACE + ".InvalidRequest")
+        if r["kind"] == "viewer" and (not self.observation_synced or
+                self.observation_source != r.get("viewer_source")):
+            r.update(state="ERROR", detail="Viewer placement source replaced")
+            self._sync_managed_placement()
+            return
+        if r["kind"] == "viewer" and result == "OK":
+            raise dbus.DBusException("Viewer placement requires exact UUID verification", name=IFACE + ".BadArguments")
         if r["kind"] == "move_optional" and result == "OK":
             raise dbus.DBusException("Optional moves require UUID verification", name=IFACE + ".BadArguments")
         if result not in ("OK", "ERROR", "VERIFY"):
@@ -421,6 +447,8 @@ class Broker(dbus.service.Object):
             try:
                 payload = json.loads(detail)
                 identifier = str(uuid.UUID(payload["window_uuid"]))
+                if r["kind"] == "viewer" and identifier != r.get("viewer_uuid"):
+                    raise ValueError("viewer placement UUID mismatch")
                 before = payload["before"]
                 if (not isinstance(before, str) or len(before) > 256
                         or not isinstance(payload["tiled"], bool)
@@ -663,6 +691,166 @@ class Broker(dbus.service.Object):
                                                        "focus_timeout_ms", "focus_poll_interval_ms")} |
                           {"entries": [{k: e[k] for k in ("uuid", "layer", "desktop")} for e in r["entries"]]})
 
+    # TigerVNC only: a deferred, role-qualified launch. Generic launch/correlation
+    # stays unchanged; no class-qualified placement is armed during authentication.
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
+    def SubmitManagedViewerLaunch(self, payload):
+        observer = None
+        previous = self.request
+        try:
+            if len(payload) > 8192:
+                raise ValueError("Viewer request too large")
+            data = json.loads(payload)
+            bounds = viewer_settings(data)
+            if not self.viewer_protocol or not self.observation_synced:
+                raise ValueError("Resident cannot resolve X11/XWayland viewer identity")
+            desktop, slot = data["desktop"], data["slot"]
+            geometry = [data[k] for k in ("x", "y", "width", "height")]
+            if any(type(v) is not int for v in [desktop, slot] + geometry) or not 1 <= slot <= 256:
+                raise ValueError("Invalid viewer layout")
+            for record in self.registry.managed_windows.values():
+                if record.recipe.get("desktop") == desktop and record.recipe.get("slot") == slot:
+                    raise ValueError("Managed desktop/slot conflict")
+            placement = self._submit("launch", desktop, *geometry, "vncviewer")
+            # Connect and select the root BEFORE the viewer is allowed to start.
+            observer = DesktopObserver(bounds)
+            registration = self._begin_managed_launch(expected_class="vncviewer",
+                recipe={"desktop": desktop, "slot": slot, "program": "vncviewer", "mode": "ssh", "target": ""})
+            c = self._managed_correlation
+            c.update(viewer=True, observer=observer, bounds=bounds, role_xids=set(),
+                     destroyed_xids=set(), claim=None, selected=None,
+                     deadline=time.monotonic() + (bounds["vnc_ssh_start_timeout_ms"] + 2 * bounds["vnc_dbus_timeout_ms"]) / 1000)
+            self._viewer_schedule_expiry(c)
+            self.request.update(kind="viewer", state="WAIT_VIEWER", registration_request_id=registration)
+            return json.dumps({"registration_request_id": registration, "placement_request_id": placement})
+        except (ValueError, KeyError, TypeError, RegistryError, RuntimeError, OSError) as exc:
+            if observer: observer.close()
+            self.request = previous
+            raise dbus.DBusException(str(exc), name=IFACE + ".InvalidRequest") from exc
+
+    def _viewer_schedule_expiry(self, c):
+        # A crashed/unpolled launcher must not leave the identity observer
+        # installed indefinitely. Ordinary tests stub GLib; production uses
+        # its existing broker event loop, not a new policy daemon.
+        if not hasattr(GLib, "timeout_add"): return
+        if c.get("expiry_timer"): GLib.source_remove(c["expiry_timer"])
+        generation = object()
+        c["expiry_generation"] = generation
+        def expire():
+            if c.get("expiry_generation") is not generation: return GLib.SOURCE_REMOVE
+            c["expiry_timer"] = None
+            self._viewer_observe(c)
+            return GLib.SOURCE_REMOVE
+        c["expiry_timer"] = GLib.timeout_add(max(1, math.ceil((c["deadline"] - time.monotonic()) * 1000)), expire)
+
+    def _viewer_close(self, c):
+        c["observer_cleanup_uncertain"] = c["observer"].close() is False
+        c["expiry_generation"] = None
+        if c.get("expiry_timer"):
+            GLib.source_remove(c["expiry_timer"]); c["expiry_timer"] = None
+        return not c["observer_cleanup_uncertain"]
+
+    def _viewer_fail(self, c, detail, state="failed"):
+        if c["state"] != "PENDING":
+            return
+        self.registry.finish_failed(c["id"], state, detail)
+        c["state"] = "TIMEOUT" if state == "timeout" else "STALE_SOURCE"
+        c["managed_result"] = {"state": state, "request_id": c["id"], "detail": detail}
+        self._viewer_close(c)
+        r = self.request
+        if r and r.get("registration_request_id") == c["id"]:
+            r.update(state="ERROR", detail=detail)
+
+    def _viewer_observe(self, c):
+        if c["state"] != "PENDING": return
+        if not self.observation_synced or self.observation_source != c["source"]:
+            self._viewer_fail(c, "Viewer observation source replaced"); return
+        if time.monotonic() >= c["deadline"]:
+            self._viewer_fail(c, "Viewer readiness timed out; authentication outcome unknown", "timeout"); return
+        if self.observation_evicted_through > c["event_floor"]:
+            self._viewer_fail(c, "Viewer lifecycle history incomplete"); return
+        try:
+            for kind, xid in c["observer"].drain(c["bounds"]["vnc_identity_event_limit"]):
+                if kind == "destroyed":
+                    c["destroyed_xids"].add(xid); c["role_xids"].discard(xid)
+                elif xid not in c["destroyed_xids"] and xid not in c["role_xids"]:
+                    c["observer"].select(xid, 1 << 17)
+                    c["role_xids"].add(xid)
+                if len(c["role_xids"] | c["destroyed_xids"]) > c["bounds"]["vnc_identity_event_limit"]:
+                    raise RuntimeError("Viewer identity history limit exceeded")
+        except (OSError, RuntimeError, ValueError):
+            self._viewer_fail(c, "Viewer identity observer unavailable or incomplete")
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
+    def TakeManagedViewer(self, source):
+        c = self._managed_correlation
+        if not c or not c.get("viewer"): return ""
+        self._viewer_observe(c)
+        if c["state"] != "PENDING" or source != c["source"] or c["pid"] is None or not c["role_xids"]:
+            return ""
+        c["claim"] = uuid.uuid4().hex
+        return json.dumps({"id": c["id"], "claim": c["claim"], "source": c["source"],
+                           "pid": c["pid"], "xids": sorted(c["role_xids"])})
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
+    def CompleteManagedViewer(self, payload):
+        c = self._managed_correlation
+        if not c or not c.get("viewer"): return ""
+        self._viewer_observe(c)
+        try:
+            if len(payload) > 65536: raise ValueError("Oversized viewer resolution")
+            data = json.loads(payload)
+            if (c["state"] != "PENDING" or data["id"] != c["id"] or (not c["claim"] or data["claim"] != c["claim"])
+                    or data["source"] != c["source"]): return ""
+            c["claim"] = None
+            matches = data["matches"]
+            if not isinstance(matches, list): raise ValueError("Invalid viewer resolution")
+            if len(matches) > 1:
+                self._viewer_fail(c, "Competing TigerVNC desktop identities", "ambiguous"); return ""
+            if not matches:
+                c["selected"] = None; return ""
+            match = matches[0]
+            xid, identifier = match["xid"], str(uuid.UUID(match["uuid"]))
+            if type(xid) is not int or xid not in c["role_xids"] or xid in c["destroyed_xids"]:
+                raise ValueError("Stale viewer XID")
+            live = self.observed_windows.get(identifier)
+            if (not live or live["pid"] != c["pid"] or identifier in c["baseline"]
+                    or not matches_class("vncviewer", live["resource_class"], live["desktop_file"])):
+                raise ValueError("Viewer identity is not a new live PID/class match")
+            if not any(e["event"] == "added" and e["event_id"] > c["event_floor"]
+                       and e["window_uuid"] == identifier for e in self.observation_events):
+                raise ValueError("Viewer lacks new-window lifecycle")
+            now = time.monotonic()
+            if not c["selected"] or c["selected"][:2] != (xid, identifier):
+                c["selected"] = (xid, identifier, now); return ""
+            if now - c["selected"][2] < c["bounds"]["vnc_identity_settle_ms"] / 1000:
+                return ""
+            if not self._viewer_close(c):
+                self._viewer_fail(c, "Viewer identity observer cleanup uncertain"); return ""
+            managed = self.registry.register_match(c["id"], dict(state="MATCHED", request_id=c["id"],
+                evidence="pid", candidate_history_complete=True, pid=c["pid"], window_uuid=identifier),
+                current_windows=self.observed_windows, source=self.observation_source, synchronized=self.observation_synced)
+            c["state"] = "MATCHED"
+            c["managed_result"] = dict(state="registered", request_id=c["id"], managed_id=managed.managed_id,
+                                       window_uuid=identifier)
+            r = self.request
+            r.update(state="RUNNING", created=now, viewer_uuid=identifier, viewer_source=c["source"],
+                     viewer_placement_deadline=now + c["bounds"]["vnc_placement_timeout_ms"] / 1000)
+            self._sync_managed_placement()
+            return json.dumps({key: r[key] for key in ("id", "desktop", "x", "y", "width", "height")} |
+                              {"window_uuid": identifier, "source": c["source"], "remaining_ms": c["bounds"]["vnc_placement_timeout_ms"]})
+        except (ValueError, KeyError, TypeError, RegistryError):
+            self._viewer_fail(c, "Invalid or stale viewer identity resolution")
+            return ""
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="")
+    def CancelManagedViewerLaunch(self, request_id):
+        c = self._managed_correlation
+        if c and c.get("viewer") and c["id"] == request_id:
+            self._viewer_fail(c, "Viewer launch cancelled or exited before readiness; cause unverified")
+            if c.get("observer_cleanup_uncertain") and not self._viewer_close(c):
+                raise dbus.DBusException("Viewer observer cleanup uncertain", name=IFACE + ".Busy")
+
     # Step 1.3b.1: a read-only launch correlation probe. It does not replace
     # SubmitLaunch/TakeLaunch, move a window or grant managed ownership.
     @dbus.service.method(IFACE, in_signature="ss", out_signature="s")
@@ -721,6 +909,10 @@ class Broker(dbus.service.Object):
             return
         if now is None:
             now = time.monotonic()
+        if c.get("viewer"):
+            self._viewer_observe(c)
+            if c["state"] != "PENDING":
+                return
         if now < c["deadline"]:
             return
         self.registry.finish_failed(c["id"], "timeout", "TIMEOUT")
@@ -763,6 +955,9 @@ class Broker(dbus.service.Object):
             raise RegistryError("inactive managed correlation")
         self.registry.mark_running(request_id, pid)
         c["pid"] = pid
+        if c.get("viewer"):
+            c["deadline"] = time.monotonic() + c["bounds"]["vnc_viewer_ready_timeout_ms"] / 1000
+            self._viewer_schedule_expiry(c)
 
     def _poll_managed_launch(self, request_id):
         """Internal-only correlation, registration and terminal reporting."""
@@ -771,6 +966,9 @@ class Broker(dbus.service.Object):
             return {"state": "UNKNOWN"}
         if "managed_result" in c:
             return deepcopy(c["managed_result"])
+        if c.get("viewer"):
+            self._viewer_observe(c)
+            return deepcopy(c.get("managed_result", {"state": "pending", "request_id": request_id, "detail": "waiting for TigerVNC desktop readiness; authentication may be pending"}))
         result = json.loads(self._poll_correlation(c))
         outcome = result["state"]
         if outcome == "MATCHED":
@@ -1119,6 +1317,7 @@ class Broker(dbus.service.Object):
         self.observation_revision = revision
         self.observation_synced = True
         self.initial_layout_protocol = (1 if type(message.get("initial_layout_protocol")) is int and message.get("initial_layout_protocol") == 1 else 0)
+        self.viewer_protocol = (1 if type(message.get("viewer_protocol")) is int and message.get("viewer_protocol") == 1 else 0)
         self.move_protocol = move_protocol
         # Do not invent "removed" events for entries absent in the snapshot:
         # such entries could predate a broker restart or a missed notification.
@@ -1234,6 +1433,8 @@ class Broker(dbus.service.Object):
             # verification. Clients conservatively stop on nonterminal snapshots.
             "placement_transaction": ({"id": self.request["id"], "state": self.request["state"]}
                                       if self.request is not None else {"id": None, "state": "IDLE"}),
+            "viewer_protocol": self.viewer_protocol,
+            "viewer_cleanup_uncertain": bool(self._managed_correlation and self._managed_correlation.get("observer_cleanup_uncertain")),
             "initial_layout_protocol": self.initial_layout_protocol,
             "initial_layout_active": self._initial_layout_active(),
             "managed_count": len(self.registry.managed_windows),

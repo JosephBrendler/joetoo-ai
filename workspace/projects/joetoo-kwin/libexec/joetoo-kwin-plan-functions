@@ -16,6 +16,20 @@ plan_defaults() {
     min_window_exposure_px=32
     initial_focus_timeout_ms=500
     initial_focus_poll_interval_ms=25
+    sftp_capability_timeout_ms=2000
+    vnc_ssh_start_timeout_ms=10000
+    vnc_viewer_ready_timeout_ms=120000
+    vnc_supervisor_poll_interval_ms=100
+    vnc_cleanup_timeout_ms=2000
+    vnc_local_port_attempts=3
+    vnc_identity_event_limit=256
+    vnc_identity_settle_ms=500
+    vnc_dbus_timeout_ms=3000
+    vnc_identity_start_timeout_ms=1000
+    vnc_placement_timeout_ms=15000
+    sftp_advisory_enabled=$TRUE
+    sftp_advisory_timeout_ms=2000
+    sftp_advisory_ssh_port=22
     terminal_width_percent=87
     terminal_gap_percent=2
     terminal_height_percent=85
@@ -76,15 +90,26 @@ validate_layout_geometry() {
 
 validate_plan() {
     local _vp_name _vp_value _vp_record _vp_delimiters _vp_declaration
-    local _vp_desktop _vp_program _vp_mode _vp_target _vp_layer _vp_explicit _vp_total
+    local _vp_desktop _vp_program _vp_mode _vp_target _vp_layer _vp_explicit _vp_total _vp_sftp_dir _vp_uri
     # Reset all derived state so rebuilding a plan cannot accumulate old entries.
     declare -ga planned_desktop=() planned_slot=() planned_program=() planned_mode=() planned_target=()
     declare -ga planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
     declare -ga planned_explicit=() desktop_groups=()
+    declare -g vnc_bounds="" # Validated JSON consumed by the configured VNC launcher.
+    # shellcheck disable=SC2034
+    declare -ga planned_sftp_uri=()
     declare -gA preferred_slot=() planned_stack_slots=()
     declare -gA implicit_counts=() total_counts=() terminal_counts=() terminal_slots=() next_slot=()
 
     validate_layout_geometry || return $?
+    if [[ $sftp_advisory_enabled != "$TRUE" && -n $sftp_advisory_enabled ]] ||
+        [[ ! $sftp_advisory_timeout_ms =~ ^[1-9][0-9]{0,4}$ || ! $sftp_advisory_ssh_port =~ ^[1-9][0-9]{0,4}$ ]] ||
+        (( sftp_advisory_timeout_ms > 10000 || sftp_advisory_ssh_port > 65535 )); then
+        plan_error 'invalid SFTP advisory settings: enabled TRUE/FALSE, timeout 1..10000 ms, port 1..65535'; return 2
+    fi
+    if [[ ! $sftp_capability_timeout_ms =~ ^[1-9][0-9]{0,4}$ ]] || (( sftp_capability_timeout_ms > 10000 )); then
+        plan_error 'sftp_capability_timeout_ms must be 1..10000 ms'; return 2
+    fi
     # These new observation bounds fit inside the existing ten-second lease.
     if [[ ! $initial_focus_timeout_ms =~ ^[1-9][0-9]{0,3}$ ||
           ! $initial_focus_poll_interval_ms =~ ^[1-9][0-9]{0,2}$ ]] ||
@@ -103,7 +128,8 @@ validate_plan() {
     for _vp_record in "${desktop_session_list[@]}"; do
         _vp_delimiters=${_vp_record//[^|]/}
         if (( ${#_vp_delimiters} != 3 && ${#_vp_delimiters} != 4 )) || [[ $_vp_record == *[$'\n\r\t\e']* ]]; then
-            plan_error "expected four or five single-line pipe-delimited fields: [${_vp_record}]"; return 2
+            # A malformed target may contain credentials. Never echo the record.
+            plan_error 'expected four or five single-line pipe-delimited fields (entry redacted)'; return 2
         fi
         IFS='|' read -r _vp_desktop _vp_program _vp_mode _vp_target _vp_layer <<< "$_vp_record"
         if [[ ! $_vp_desktop =~ ^[1-9][0-9]{0,2}$ ]] || (( _vp_desktop > desktop_limit )); then
@@ -114,8 +140,24 @@ validate_plan() {
         fi
         case $_vp_mode in
             ssh|swr|via-ssh|local|direct) ;;
+            sftp) [[ $_vp_program == dolphin ]] || { plan_error 'sftp mode requires Dolphin'; return 2; } ;;
             *) plan_error "unsupported mode [${_vp_mode}]"; return 2 ;;
         esac
+        _vp_uri=""
+        if [[ $_vp_mode == sftp ]]; then
+            _vp_sftp_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 2
+            # Unvalidated userinfo stays on stdin, never a child command line.
+            _vp_uri=$(printf '%s' "$_vp_target" | python3 "$_vp_sftp_dir/joetoo_kwin_sftp_target.py") || return 2
+        fi
+        if [[ $_vp_program == vncviewer && $_vp_mode == ssh ]]; then
+            _vp_sftp_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 2
+            printf '%s' "$_vp_target" | python3 "$_vp_sftp_dir/joetoo_kwin_vnc_target.py" --target >/dev/null || return 2
+            # shellcheck disable=SC2034
+            vnc_bounds=$(python3 "$_vp_sftp_dir/joetoo_kwin_vnc_target.py" --settings \
+                "$vnc_ssh_start_timeout_ms" "$vnc_viewer_ready_timeout_ms" "$vnc_supervisor_poll_interval_ms" \
+                "$vnc_cleanup_timeout_ms" "$vnc_local_port_attempts" "$vnc_identity_event_limit" \
+                "$vnc_identity_settle_ms" "$vnc_dbus_timeout_ms" "$vnc_placement_timeout_ms" "$vnc_identity_start_timeout_ms") || return 2
+        fi
         if [[ $_vp_mode != direct && -z $_vp_target && ! ( $_vp_program == dolphin && $_vp_mode == local ) ]]; then
             plan_error "missing target for mode [${_vp_mode}]"; return 2
         fi
@@ -134,6 +176,7 @@ validate_plan() {
         planned_program+=("$_vp_program")
         planned_mode+=("$_vp_mode")
         planned_target+=("$_vp_target")
+        planned_sftp_uri+=("$_vp_uri")
     done
     for _vp_desktop in "${desktop_groups[@]}"; do
         _vp_total=${total_counts[$_vp_desktop]}

@@ -6,7 +6,7 @@ in `joetoo-ai`, not yet the packaged version 1 application. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for accepted and proposed product contracts,
 including the next remote-access tranche.
 
-## Current status — November 1, 2026
+## Current status — November 3, 2026
 
 **Step 1.5c.4 is accepted and merged.** The tested implementation baseline was
 `a3c50fc`, with maintainers' X11 and Wayland acceptance and subsequent
@@ -16,17 +16,44 @@ closure documentation recorded in the [Step 1.5 handoff](task_step1.5/HANDOFF.md
 The merged branch may have a different merge-commit SHA. Do not confuse the
 tested implementation revision with a later documentation or merge commit.
 
-**Next proposed tranche: 1.5c.5 (remote resources and remote desktop).**
-This architecture/README update is planning, **not** an authorization to
-implement, perform remote operations, or change protected repositories.
-The sequence proposed for a new, separately authorized task handoff is:
+**Step 1.5c.5a Dolphin SFTP is accepted and closed.** The task-branch
+implementation includes safe SFTP URI handling and optional, non-enforcing
+post-confirmation NSS/TCP reachability advisories. The maintainer demonstrated
+managed X11 (`gmki91`) and Wayland (`q552u01`) launches, window registration,
+placement and remote browsing. Positive and negative advisory observations are
+recorded in the [Step 1.5 handoff](task_step1.5/HANDOFF.md) and
+[SFTP acceptance record](task_step1.5/step1.5c5a-native-acceptance.md).
+The advisory does not itself establish SSH authentication or SFTP usability.
 
-| Increment | Proposed work | Status |
+**Step 1.5c.5b TigerVNC-over-SSH is implemented and natively validated on the
+task branch.** On `gmki91` (X11), the maintainer verified an authenticated
+remote viewer, precise managed UUID identity and placement, a separate managed
+Dolphin window, stacking, loopback-only SSH forwarding, and viewer/tunnel
+teardown. On `q552u01` (Wayland/XWayland), a fresh one-window launch placed
+`yorsqui:2` at desktop 10, slot 1, with verified geometry, registry presence,
+1/1 layout completion, visually usable remote desktop, and both viewer and SSH
+processes absent after closing the viewer. The runner reports remote
+session/authentication as unverified; visual use is separate maintainer evidence.
+
+The nine-file user OpenRC installer (including the three VNC helper modules)
+reports all nine components current on both hosts. Its new content-addressed
+backup behavior was checked for unchanged-update stability on `gmki91`.
+Historical timestamped backups were manually relocated out of production
+paths: 171 on `gmki91`, 135 on `q552u01`, retained under the user state
+`legacy-backups/` directory. The unneeded standalone migration utility and
+its tests are retained only in `archive/aborted_backup_migration_tool/`;
+no real migration run was performed.
+
+**Milestone publication remains pending maintainer PR review and merge.**
+Step 1.5c.5c (RDP comparison) and Step 1.5d (broader integration regression)
+remain separate future gates. This status report does not authorize either.
+
+| Increment | Work | Status |
 | --- | --- | --- |
-| 1.5c.5a | Dolphin SFTP, safe target grammar and independent placement/connection semantics | Proposed |
-| 1.5c.5b | Translate the maintainer's existing KDE-launcher-integrated TigerVNC-over-SSH workflow into positively managed launch after POC/security review | Proposed |
-| 1.5c.5c | Compare RDP graphical candidates and decide whether secure, reliable RDP should replace legacy VNC as preferred graphical remote access | Feasibility first; implementation separately gated |
-| 1.5d | Integrated X11/Wayland regression of accepted 1.5 features, including selected new transports | Future separate gate |
+| 1.5c.5a | Dolphin SFTP, safe URI handling and independent placement/remote outcomes | Accepted and closed; X11/Wayland native evidence |
+| 1.5c.5b | Positively identified TigerVNC viewer over owned authenticated SSH tunnel | Implemented; X11/Wayland native acceptance checks passed; milestone PR pending |
+| 1.5c.5c | Compare RDP graphical clients and decide future remote-desktop preference | Future feasibility and separate authorization |
+| 1.5d | Integrated regression of accepted Step 1.5 features | Future separate gate |
 
 **Implementation scope:** See [Step 1.5c.5 implementation scope and outline](task_step1.5/Step1.5c5_implementation_scope.md) for detailed objectives, program/mode contracts, investigation requirements, security constraints, acceptance criteria, and increment boundaries. The scope document guides planning and review; implementation authorization and execution controls are established separately in `task_step1.5/HANDOFF.md`.
 
@@ -162,6 +189,6 @@ or separately authorized, consistent with applicable repository policy.
 - [Step 1.5c.4 native evidence](task_step1.5/step1.5c4-native-acceptance.md)
 - [Step 1.5c.4 merge-readiness audit](task_step1.5/step1.5c4-review.md)
 
-Do not treat historical proposals, illustrative targets or documentation as
-authorization for executable program/mode support. A new Step 1.5c.5 HANDOFF
-must separately establish baseline, permissions, testing and publication gates.
+Historical proposals and illustrative targets do not authorize new work.
+The active Step 1.5c.5 HANDOFF records the accepted SFTP and native-tested VNC
+outcomes; RDP evaluation and Step 1.5d remain separately gated.
