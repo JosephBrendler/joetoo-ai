@@ -1,0 +1,304 @@
+#!/bin/bash
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# rdp_identity-security_proof.sh -
+#
+# For each indow, record:
+#
+# Field                                                               Evidence source
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━
+# Creation/removal, UUID, PID, class, title                           Broker ListObserved
+# ──────────────────────────────────────────────────────────────────  ────────────────────────
+# normalWindow, dialog/modal/transient status, window type            KWin Debug Console
+# ──────────────────────────────────────────────────────────────────  ────────────────────────
+# X11 versus Wayland window                                           KWin Debug Console
+# ──────────────────────────────────────────────────────────────────  ────────────────────────
+# Actual SDL video driver                                             SDL’s backend log
+# ──────────────────────────────────────────────────────────────────  ────────────────────────
+# Visible role: credentials, certificate, progress, GDM or desktop    Maintainer observation
+#
+# The broker observes only normal windows. Its inventory therefore cannot prove that an omitted
+# dialog never existed. Conversely, a normal window is not necessarily a desktop viewer.
+#
+# The existing correlation probe is unsuitable as the principal proof: it has a 15-second
+# deadline and can match a uniquely observed same-PID auxiliary window. Its MATCHED result
+# does not establish the RDP desktop role.
+
+#
+# shellcheck source=/usr/sbin/script_header_joetoo.shellcheck_var_stub
+# shellcheck source=/usr/sbin/script_header_joetoo.shellcheck_func_stub
+source /usr/sbin/script_header_joetoo
+
+#-----[ variables ]---------------------------------------------------------------------------
+
+PN=${0##*/}   #  like =$(basename $0) but w/o subshell and function call
+
+BUILD=$(date +%Y%m%d)
+
+[ -z "$verbosity" ] && verbosity="${notice}"  # assign default if null; allow calling program to dictate
+
+maintainer="joe"
+# require command, host and user to be named on cmdline - do not hard code them
+rdp_cmd=${1:?"Usage: $PN command host[:port] [username]"}
+rdp_target=${2:?"Usage: $PN command host[:port] [username]"}
+rdp_user=${3:-$USER}
+
+project_dir="/home/${maintainer}/joetoo-ai/workspace/projects/joetoo-kwin"
+
+rdp_bus=org.joetoo.KWinBridge
+rdp_path=/org/joetoo/KWinBridge
+rdp_iface=org.joetoo.KWinBridge
+
+# take up to 30 minutes to collect screenshots
+rdp_proof_seconds=1800
+rdp_poll_seconds=0.25
+rdp_dbus_seconds=3
+
+# ShellCheck thinks varlist is unused, but it is in script_header_joetoo
+# shellcheck disable=SC2034
+varlist="
+    PN BUILD
+    rdp_user rlv.project_dir
+    rlv.rdp_proof_dir
+    rdp_bus rdp_path rdp_iface
+    rdp_proof_seconds rdp_poll_seconds rdp_dbus_seconds
+    rdp_tag
+"
+
+#-----[ functions ]---------------------------------------------------------------------------
+
+record_phase() {
+    printf '%s\t%s\n' "$(date --iso-8601=ns)" "$1" >> "$rdp_proof_dir/phases.txt"
+}
+
+#-----[ main script ]-------------------------------------------------------------------------
+
+checknotroot
+separator "$(hostname)" "${PN}-${BUILD}"
+
+old_dir="$(pwd)"
+j_msg "-${notice}" -p "PWD: [$PWD]"
+j_msg "-${notice}" -p -n "Moving to [$project_dir]"
+cd "$project_dir" || die "failed to cd $project_dir"
+right_status 0
+
+umask 077
+j_msg "-${notice}" -p -n "creating rdp_proof_dir"
+rdp_proof_dir=$(mktemp -d "${TMPDIR:-/tmp}/joetoo-rdp-stage-a.XXXXXXXX")
+right_status $? "$notice"
+j_msg "-${notice}" -p -n "creating screenshot subdirectories"
+mkdir -p "${rdp_proof_dir%/}/screenshots/auth_window" &&
+mkdir -p "${rdp_proof_dir%/}/screenshots/greeter_window" &&
+mkdir -p "${rdp_proof_dir%/}/screenshots/gnome_desktop"
+right_status $? "$notice"
+
+show_config
+j_msg "-${notice}" -mp ""
+
+for query in RegistryStatus ListManaged ListObserved; do
+    j_msg "-${notice}" -p "Writing ${query}-before json file"
+    qdbus6 "$rdp_bus" "$rdp_path" "${rdp_iface}.${query}" \
+        > "$rdp_proof_dir/${query}-before.json" ||
+        die "${query}-before collection failed" $?
+    right_status 0 "$notice"
+done
+
+j_msg "-${notice}" -p -n "Launching debug console"
+qdbus6 org.kde.KWin /KWin org.kde.KWin.showDebugConsole
+right_status $? "$notice"
+j_msg "-${notice}" -p "Private evidence rdp_proof_dir: [$rdp_proof_dir]"
+
+# Inspect only the Debug Console’s window information; do not change properties.
+# KWin exposes showDebugConsole through its existing interface. KWin interface.
+
+# Launch one client with a unique desktop-role title:
+
+j_msg "-${notice}" -p "launching rdp client under sureillance"
+rdp_tag="joetoo-rdp-proof-$(cat /proc/sys/kernel/random/uuid)"
+j_msg "-${notice}" -m "rdp_tag: [$rdp_tag]"
+
+
+rdp_cmd=${1:?"Usage: $PN command host[:port] [username]"}
+rdp_target=${2:?"Usage: $PN command host[:port] [username]"}
+rdp_user=${3:-$USER}
+
+case "${rdp_cmd}" in
+    sdl-freerdp)
+        rdp_args=( "/v:${rdp_target}" "/u:${rdp_user}" )
+        rdp_args+=( /network:auto /dynamic-resolution )
+        rdp_args+=( /sec:nla "/t:$rdp_tag" )
+        rdp_args+=( /log-level:INFO /log-filters:com.freerdp.client.SDL:DEBUG )
+        ;;
+    *) die "rdp_cmd [$rdp_cmd] is not (yet) supported" 1 ;;
+esac
+
+"${rdp_cmd}" "${rdp_args[@]}" > "$rdp_proof_dir/client.log" 2>&1 &
+rdp_pid=$!
+j_msg "-${notice}" -m "rdp_pid: [$rdp_pid]"
+
+j_msg "-${notice}" -p -n "Writing pid and tag to $rdp_proof_dir/run.txt"
+printf 'PID=%s\nTITLE=%s\n' "$rdp_pid" "$rdp_tag" \
+    > "$rdp_proof_dir/run.txt"
+handle_result $? "" "" "$notice"
+
+# Background ListObserved collection for the launched SDL client.
+j_msg "-${notice}" -m "backgrounding filtered ListObserved collection"
+
+(
+    set -o pipefail
+
+    # take up to this long to gather the observations and collect screenshots (30 min above)
+    rdp_end=$((SECONDS + rdp_proof_seconds))
+
+    while (( SECONDS < rdp_end )) && [[ ! -e "$rdp_proof_dir/observer.stop" ]]; do
+
+        # observe; time out if dbus doesnt answer w/in a few seconds (3 sec above)
+        if ! timeout "${rdp_dbus_seconds}s" \
+                qdbus6 "$rdp_bus" "$rdp_path" "$rdp_iface.ListObserved" |
+                jq -c \
+                    --arg at "$(date --iso-8601=ns)" \
+                    --argjson pid "$rdp_pid" '
+                    {
+                        at: $at,
+                        sync: .sync,
+                        windows: [
+                            .windows[]? | select(.pid == $pid)
+                        ],
+                        lifecycle_events: [
+                            .lifecycle_events[]?
+                            | select(.window.pid == $pid)
+                        ],
+                        changes: [
+                            .changes[]?
+                            | select(.window.pid == $pid)
+                        ]
+                    }'; then
+            printf 'poll-failed\n' \
+                > "$rdp_proof_dir/observer-status.txt"
+            exit 1
+        fi
+        # wait a brief observation polling period (0.25 sec above)
+        sleep "$rdp_poll_seconds"
+    done
+
+    if [[ -e "$rdp_proof_dir/observer.stop" ]]; then
+        printf 'stopped-by-script\n' > "$rdp_proof_dir/observer-status.txt"
+    else
+        printf 'time-limit-reached\n' > "$rdp_proof_dir/observer-status.txt"
+    fi
+
+) > "$rdp_proof_dir/observations.jsonl" \
+  2> "$rdp_proof_dir/observation-errors.log" &
+
+rdp_observer_pid=$!
+
+j_msg "-${notice}" -m "rdp_observer_pid: [$rdp_observer_pid]"
+
+# This captures retained lifecycle events, including short-lived windows that disappear between samples.
+# Keep these inventories private: unrelated window titles can appear in them.
+j_msg "-${notice}" -p "${BMon}Note: ${BYon}three debug console evidence collection steps follow"
+j_msg "-${notice}" -p "${BYon}Do this for each --${Boff}"
+j_msg "-${notice}" -p " - ${Con}find target section in the debug console and take screenshots"
+j_msg "-${notice}" -p " - ${Con}move the new screenshots to the associated subdir in rdp_proof_dir"
+phases=(
+    '1. Credential dialog visible; debug console evidence collected'
+    '2. Credential dialog still visible after 20+ seconds'
+    '3. Credentials submitted; credential dialog dismissed'
+    '4. Viewer window visible; debug console evidence collected'
+    '5. GDM greeter visible'
+    '6. GDM login submitted'
+    '7. Authenticated GNOME desktop usable; debug console evidence collected'
+    '8. Viewer closed normally'
+)
+
+for phase in "${phases[@]}"; do
+    # -n because yns_prompt prefixes with \n
+    j_msg "-${notice}" -p -n "${BYon}Are you ready to record, \"${BMon}${phase}${BYon}\"?${Boff}"
+    response=""
+    yns_prompt "${BWon}y: yes; n: no - abort; s: skip${Boff}"
+    case "${response:0:1}" in
+        [yY])
+            j_msg "-${notice}" -p "recording phase [$phase]"
+            record_phase "$phase"
+            right_status $? "$notice"
+            ;;
+        [nN])
+            record_phase "ABORT REQUESTED: $phase"
+            j_msg "-${warn}" -p "Aborting; close the RDP viewer normally"
+            break
+            ;;
+        [sS])
+            record_phase "SKIPPED: $phase"
+            continue
+            ;;
+        *) die "invalid response in $PN" 1;;
+    esac
+done
+
+# Wait for the SDL FreeRDP process to exit.
+j_msg "-${notice}" -p -n "Waiting for SDL FreeRDP PID [$rdp_pid] to exit"
+
+if wait "$rdp_pid"; then
+    rdp_exit=0
+else
+    rdp_exit=$?
+fi
+handle_result "$rdp_exit" "" "" "$notice"
+j_msg "-${notice}" -p "Client exit status: [$rdp_exit]"
+
+j_msg "-${notice}" -p -n "Writing client exit status to $rdp_proof_dir/run.txt"
+printf 'client_exit=%s\n' "$rdp_exit" >> "$rdp_proof_dir/run.txt"
+right_status $? "$notice"
+
+# Allow the broker to observe the final window-removal event.
+sleep 1
+
+# Ask our own observer to finish.
+j_msg "-${notice}" -p -n "Stopping observer"
+: > "$rdp_proof_dir/observer.stop"
+if wait "$rdp_observer_pid"; then
+    rdp_observer_exit=0
+else
+    rdp_observer_exit=$?
+fi
+handle_result "$rdp_observer_exit" "" "" "$notice"
+j_msg "-${notice}" -p "Observer exit status: [$rdp_observer_exit]"
+
+printf 'observer_exit=%s\n' "$rdp_observer_exit" >> "$rdp_proof_dir/run.txt"
+
+# Capture final broker observations.
+j_msg "-${notice}" -p -n "Capturing final broker observations"
+qdbus6 "$rdp_bus" "$rdp_path" "$rdp_iface.ListObserved" > "$rdp_proof_dir/observed-after.json" &&
+qdbus6 "$rdp_bus" "$rdp_path" "$rdp_iface.ListManaged" > "$rdp_proof_dir/managed-after.json" &&
+qdbus6 "$rdp_bus" "$rdp_path" "$rdp_iface.RegistryStatus" > "$rdp_proof_dir/registry-after.json"
+handle_result $? "" "" "$notice"
+
+# Extract the actual SDL backend from the client log.
+
+j_msg "-${notice}" -p -n "Collecting backend.txt"
+if grep_out=$(grep -F "client is using backend" "$rdp_proof_dir/client.log"); then
+    grep_result=0
+    printf '%s\n' "$grep_out" > "$rdp_proof_dir/backend.txt"
+else
+    grep_result=$?
+    printf '%s\n' "grep for backend.txt failed with status [$grep_result]" > "$rdp_proof_dir/backend.txt"
+fi
+
+j_msg "-${notice}" -p "Stage A evidence collected in [$rdp_proof_dir]"
+
+j_msg "-${notice}" -p "PWD: [$PWD]"
+j_msg "-${notice}" -p -n "Moving to [/tmp]"
+cd /tmp || die "failed to cd /tmp"
+right_status 0
+
+j_msg "-${notice}" -p -n "Creating evidence tarball"
+tar -cvjpf "${rdp_proof_dir%/}.tbz2" "${rdp_proof_dir%/}" 2>/dev/null
+handle_result $? "" "" "$notice"
+
+j_msg "-${notice}" -p "PWD: [$PWD]"
+j_msg "-${notice}" -p -n "returning to [$old_dir]"
+cd "$old_dir" || die "failed to cd $old_dir"
+right_status 0
+
+j_msg "-${notice}" -p "Stage A evidence collected in [$rdp_proof_dir]"
