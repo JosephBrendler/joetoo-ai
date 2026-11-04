@@ -238,6 +238,7 @@ Native SFTP-specific active-desktop focus, new/changed host-key prompts, uncommo
 | 33 | Codex (2026-11-02), standalone legacy migration Gates A/B candidate | Same task branch HEAD `ee534cd7744d71fd7623428c76f6ac1f26d0215f`; all pending installer/tests and rows 25–32 preserved. Added only separate migration utility/test file and this row; no installer/runtime changes | 23 migration tests and 405 full Python tests PASS without skips; 5 Node discovery files PASS; Python compilation, existing installer sh syntax/ShellCheck and diff whitespace PASS. Real read-only Gate A re-inventoried 171 legacy paths / 50 component-local versions / 121 duplicate copies, exactly matching supplied six-component counts: 50 payloads new, 0 reused, 4 preexisting VNC archive files. Repeated no-atime inventory confirmed all original/installed/archive file snapshots unchanged | Gate B implemented/tested ONLY in disposable HOME: representative 4-path/3-version fixture created 2 payloads, reused 1; component archive files 6→10, all originals/installed files unchanged, full manifest verified and retry created 0 payloads. Legacy metadata/filenames/embedded timestamps live in durable resumable `archive/migrations/legacy-INVENTORY_ID.json`, separate from strict installer provenance; copy uses atomic no-replace publication, stale/source checks and failure-safe staging. Utility reuses trusted installer archive helper definitions without running installer entry points; requires Linux no-atime/no-replace facilities. Real Gate B NOT executed; actual archive still 4 files. Maintainer reports deployed nine-file installer Current/restart/D-Bus PASS and 382 Python / 53 JS PASS; not Codex native testing. Next: maintainer reviews candidate and Gate A JSON, then performs separately reviewed copy/verify on gmki91; no other hosts, deletion/Gate C, deployment or publication by Codex. |
 | 34 | Codex (2026-11-03), 1.5c.5c server-first RDP feasibility | Clean approved branch `task/joetoo-kwin-step1.5c5c-rdp-feasibility`, HEAD `76dba5b968f38d2c80ff178c932046c6023ae664`; merge base/local main/origin-main `d8aad51e9ea894c49c78bdb7a8a5bea8b83df550` (merged PR 27). Only Section 5 of this HANDOFF edited | Read current architecture/scope, installed package metadata/manpages, exact cached KRDC/KRDP/FreeRDP/Remmina release sources, selected profile ancestry and primary upstream docs. Remmina 1.4.43 installation confirmed. No clients/services launched, credentials read, remote sessions opened or regressions rerun; documentation whitespace/scope/link checks only | Findings below are inspected/documented capabilities, not native RDP acceptance. Recommend Ubuntu GNOME Remote Login pilot, then KRDC versus SDL3 FreeRDP comparison; retain accepted TigerVNC-over-SSH. Maintainer chooses pilot host/session/trust policy and separately authorizes native tests before any executable RDP contract. No installation, configuration, protected-repository edits or publication. |
 | 35 | Codex (2026-11-03), focused RDP PKI/Windows/Shadow follow-up | Preserved pending iteration 34 and findings on unchanged `76dba5b`; only agent-owned Section 5 updated | Inspected exact FreeRDP 3.32.1 Shadow/crypto source, installed build flags and PAM/X11 linkage, plus primary GNOME/xrdp/Microsoft documentation. No keys, credentials, clients or services accessed; no native RDP result inferred | Existing private CA workflow is maintainer-reported. Added certificate integration, Windows login versus attended sharing, SAM-NLA versus TLS/PAM and Shadow X11 limits. `raspiubuntu401` test remains in progress elsewhere; maintainer reviews findings and supplies pilot outcomes before an implementation contract. |
+| 36 | Codex (2026-11-04), Ubuntu GNOME native evidence review | Clean approved RDP feasibility branch, HEAD `3eb587bda2a4d50ab6985df728a7db012b8e509f`; reviewed maintainer report and all 17 supporting screenshots read-only; updated only Section 5 | Recorded six working mode/client combinations, Remmina reconnect persistence, separate service credentials/certificates, session-state limitations and qualified TLS observations. Screenshot 01 duplicates KRDC screenshot 04 despite its FreeRDP label. Evidence files preserved byte-for-byte; documentation checks only, no native operations or tests | Recommend GNOME Remote Login as demonstrated Ubuntu baseline and KRDC as provisional managed-client candidate; retain xfreerdp diagnostic and Remmina working alternatives. PKI, fresh-boot login, Windows, Wayland client and positive KWin identity evidence remain outstanding; implementation still requires maintainer decision. |
 
 
 
@@ -269,7 +270,7 @@ Native SFTP-specific active-desktop focus, new/changed host-key prompts, uncommo
 On subsequent iterations, record only material changes, actual evidence and unresolved work. Keep detailed logs, temporary patches, input files and generators alongside this handoff under `task_step1.5/` as appropriate; keep live source/tests in the normal project-root paths.
 
 
-### 1.5c.5c findings — 2026-11-03 (research; native RDP untested)
+### 1.5c.5c findings — research 2026-11-03; native evidence reviewed 2026-11-04
 
 **Server/session decision first.** Sharing exposes an existing graphical session;
 remote login starts one without a physical user login; headless means no physical
@@ -280,7 +281,7 @@ Xorg/Wayland are independent choices across RDP.
 | Server | Session model and prerequisites | Assessment |
 | --- | --- | --- |
 | GNOME Desktop Sharing | Existing logged-in GNOME session; user service/Mutter/PipeWire; sharing credentials | Does not meet logged-out login goal. |
-| GNOME Remote Login | GNOME 46+/GDM; system GRD service; entry credentials then OS-user login. Upstream 47 adds persistent remote-login sessions | First Ubuntu pilot. Ubuntu 24.04 supports login; verify persistence/backports separately. Prefer an existing 26.04/GNOME 50 host if available. Documented service setup uses systemd; Gentoo/OpenRC server portability is unestablished. |
+| GNOME Remote Login | GNOME 46+/GDM; system GRD service; entry credentials then OS-user login. Upstream 47 adds persistent remote-login sessions | Now demonstrated on Ubuntu 26.04.1 Raspberry Pi 4, including reconnect persistence; fresh-boot login remains untested. Ubuntu 24.04 persistence/backports remain separate. Documented service setup uses systemd; Gentoo/OpenRC server portability is unestablished. |
 | xrdp + xorgxrdp | xrdp/sesman/PAM creates separate virtual Xorg desktop; no physical login or GDM required; reconnect policy configurable | Alternative for persistent independent sessions. Needs an Xorg-capable desktop (e.g. Xfce), not a Wayland-only GNOME session. Upstream permits non-systemd builds; local Gentoo/OpenRC packaging/PAM integration not established. |
 | KRDP 6.7.5-r1 | Shares current Plasma Wayland session; screencast/portal, user authentication; virtual monitor does not create a new login | Defer as solution to logged-out remote login. Installed without systemd USE; upstream KCM service-control instructions cannot be assumed to work on OpenRC. |
 
@@ -295,7 +296,7 @@ SessionController.cpp, RdpConnection.cpp and Gentoo patchset (no NLA changes).
 
 **gmki91 installed clients, ranked provisionally.** Exact cached release source
 and installed manpages inspected; none has demonstrated native KWin identity yet.
-There is no executable RDP recipe in `-o`; the proposed pilot uses clients manually.
+There is no executable RDP recipe in `-o`; subsequent maintainer manual-client evidence is assessed below.
 
 | Candidate | Invocation/security | Identity/backend tradeoff |
 | --- | --- | --- |
@@ -407,21 +408,66 @@ are not established as a usable Linux-to-Windows console workflow here.
 [Remote Help platforms](https://learn.microsoft.com/en-us/intune/remote-help/plan/),
 [RustDesk](https://rustdesk.com/docs/en/index.html).
 
-**Revised next gate:** maintainer reports GNOME Remote Desktop configured on
-`raspiubuntu401` (Raspberry Pi 4, Ubuntu 26.04.1), with a FreeRDP test being prepared
-in another conversation. Setup and successful login/persistence/certificate
-verification have not been independently established here; do not duplicate that
-work. Incorporate its actual results when supplied. Continue to prefer KRDC for
-simple KDE operation, with SDL3 FreeRDP as the direct comparison; Remmina is
-optional given the maintainer's UI preference. No legacy Wayland frontend unmask
-is recommended. Compare identical server/security settings, reconnect behavior,
-certificate verification, and each auth/main window's PID/UUID/type before any
-managed-client proposal. Obtain q552u01 inventory only when that comparison needs it.
-Next decisions: whether Ubuntu results meet the no-physical-login/persistence goal;
-which Windows edition/build and login versus attended-sharing goal to pilot;
-which CA identity/trust and renewal procedure to validate; then which client and
-readiness/ownership contract merits separate implementation authorization.
-No RDP implementation, native test or certificate operation was performed here.
+**Native evidence assessment — 2026-11-04.** Reviewed the maintainer's
+[Ubuntu GRD report](README_gnome_remote_desktop.md) and all 17 screenshots;
+these are maintainer-operated observations, not Codex native tests. The report
+supersedes the earlier pending-pilot status without changing prior research history.
+
+| Workflow on raspiubuntu401 (Ubuntu 26.04.1, Raspberry Pi 4) | gmki91 native result and confidence |
+| --- | --- |
+| System GRD Remote Login, actual listener 3389 | Reported usable GDM/GNOME login with xfreerdp 3.32.1, KRDC 26.04.3 and Remmina 1.4.43; screenshots support client/desktop usability. Remmina disconnect/reconnect without logout resumed the session. |
+| User GRD Desktop Sharing, actual listener 3390 | Reported working with all three clients, remote input and bidirectional plain-text clipboard; requires an existing unlocked local session in this setup. Preferred status port alone did not identify the actual negotiated listener. |
+| Authentication and server identity | Separate system/user RDP credential scopes and separate self-signed certificates. Report records independent fingerprint comparison, not CA/name validation. Remote Login additionally requires GDM account authentication; neither mode used an SSH tunnel. |
+
+**Revised recommendation.** GNOME Remote Login is now a demonstrated Ubuntu
+login/reconnection baseline; replacing it with xrdp is not justified by this pilot.
+Retain xrdp as an alternative for different session/desktop requirements and
+TigerVNC-over-SSH as the accepted compatibility baseline. KRDC remains the
+provisional first managed-client candidate for KDE usability; xfreerdp is now a
+working diagnostic/reference client. Remmina is a demonstrated alternative whose
+saved profiles worked at the default TLS level, not merely an untested option.
+SDL3 FreeRDP still lacks native evidence; do not rank it above the tested clients
+on demonstrated reliability, though it remains worth comparing for native Wayland.
+None yet has demonstrated positive managed PID/new-UUID ownership or placement.
+
+**Security qualifications.** The tested GNOME endpoint required NLA; TLS-only
+negotiation was refused. KRDC NLA-only worked with its 192-bit UI security level;
+NLA still uses TLS. Failure at 256 and success at 192 do not establish the precise
+cipher, cryptographic cause or a general requirement to lower client settings.
+Screenshot 06 shows an interim all-four-checkbox state, not the final reported
+selection. Do not copy classic-RDP enablement into a future contract. Remmina's
+default TLS level worked and needs no inferred KRDC-style adjustment. Private-PKI
+replacement, hostname/chain validation and renewal are still untested for both
+GRD services. Screenshot 16 also contains a changed-server-identification warning;
+prior cached-certificate history is not explained, so do not presume every changed
+identity is benign or automatically acceptable.
+
+**Lifecycle contract implications.** Viewer disconnect is not GNOME logout;
+remote work can survive closure and conflict with a subsequent local login.
+Do not force-stop sessions, disable locking or terminate remote processes as
+launcher cleanup. The report's journal plus successful unlock/retry strongly
+supports lock-related sharing denial; the later disappearing Remmina window has
+no matching journal and must not be labeled a proven lock event or client crash.
+A local client window/blank frame is not proof of authenticated desktop readiness;
+reported initialization delays and GDM conflicts require separate outcome reporting.
+Desktop Sharing scaling/cropping reflects the physical display, unlike Remote
+Login's virtual-display sizing. logind session evidence distinguishes user graphical
+sessions from greeters, managers and SSH sessions; window counts cannot do that.
+
+**Evidence integrity and remaining gate.** Screenshot 01 is byte-identical to 04
+and visibly shows KRDC, despite its FreeRDP filename/index description; use 02/03
+for FreeRDP visual evidence. This qualification is recorded here only; the supplied
+report/screenshots remain untouched. Native evidence establishes a working server
+and three clients, not a completed secure managed-RDP implementation contract.
+Still outstanding: fresh-reboot login before any physical user login (including
+service activation), private-PKI trust/renewal, synchronized lock-event diagnostics,
+Windows server pilot, q552u01 client inventory/native Wayland comparison, SDL3
+trial if selected, and exact per-client PID/UUID/dialog/delegation behavior.
+No quantitative performance ranking or universal GNOME lock policy is established.
+Next actor: maintainer selects the client and login/sharing scope, then authorizes
+any further identity/security validation and a bounded endpoint/credential/readiness
+contract. No implementation, new network session or host administration occurred
+in this review; no FreeRDP legacy Wayland unmask is recommended.
 
 ## 6. Current gate — Step 1.5c.5b TigerVNC-over-SSH contract review
 

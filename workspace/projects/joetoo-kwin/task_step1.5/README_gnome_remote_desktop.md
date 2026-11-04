@@ -1,34 +1,38 @@
 # GNOME Remote Desktop on Ubuntu 26.04.1 (Raspberry Pi 4)
 
-**Investigation and reproducibility report — 2026-11-03**  
+**Investigation and reproducibility report — 2026-11-03; revised with native evidence 2026-11-04**  
 **Server:** `raspiubuntu401` (Ubuntu 26.04.1, Raspberry Pi 4)  
-**Primary client:** `gmki91` (Gentoo/joetoo, KDE Plasma)  
+**Client platforms:** `gmki91` (Gentoo/joetoo, KDE Plasma/KWin X11) and `q552u01` (Gentoo/joetoo, KDE Plasma/KWin Wayland)  
 **Destination in joetoo-ai:** `workspace/projects/joetoo-kwin/task_step1.5/`  
-**Scope:** GNOME Remote Desktop (GRD) RDP Remote Login and Desktop Sharing; FreeRDP, KRDC, and Remmina clients; connection lifecycle, authentication, certificates, display scaling, and integration implications.
+**Scope:** GNOME Remote Desktop (GRD) Remote Login and Desktop Sharing; FreeRDP `xfreerdp` and `sdl-freerdp`, KRDC and Remmina; authentication, certificate identity, session lifecycle, display behavior, reboot and implications for `joetoo-kwin`.
 
-> **Evidence convention.** “Verified” means observed in commands, journals, or screenshots during this exploration. “Likely” denotes a causal inference supported by observations but not independently instrumented. “Not established” records an open question. This report deliberately distinguishes an RDP viewer disconnect from logging out of GNOME. Screenshot filenames are relative to this Markdown file and are included under `screenshots/`.
+> **Evidence convention.** **Verified** refers to maintainer-observed commands, system logs, or supplied screenshots. **Reported** distinguishes a maintainer test result not independently reproduced here. **Likely** is a causal inference consistent with observations. **Not established / NOT TESTED** denotes a remaining question. Client windows visible in screenshots demonstrate usable remote graphics, *not* automatic `joetoo-kwin` registration, certificate-chain verification or remote-login persistence unless those were separately checked. Screenshot links are relative to this Markdown report; files `01`–`17` belong to the original evidence collection, and `18`–`25` are the 2026-11-04 additions.
 
 ## Executive summary
 
-**All six server-mode/client combinations eventually worked.** No replacement RDP server (`xrdp`) was required. GNOME Remote Desktop provides two separately configured RDP services:
+**GNOME Remote Desktop worked in both server modes from both Gentoo native test platforms.** The original six combinations—three clients × two GRD modes—passed on `gmki91` X11 and have now also been demonstrated on `q552u01` Wayland. In addition, SDL FreeRDP successfully connected to **Remote Login** from **both** hosts. The maintainer rebooted the Raspberry Pi and confirmed that Remote Login worked again. No replacement server such as `xrdp` was necessary for these Ubuntu cases.
 
-| Mode | Listener actually observed | Service scope | Required session state | Result |
-|---|---|---|---|---|
-| **Remote Login** | `raspiubuntu401:3389/TCP` | System-level GRD, coordinated with GDM | `joe` must not have a competing local graphical session; disconnected remote sessions may persist | Verified: GDM greeter, authentication, full GNOME desktop |
-| **Desktop Sharing** | `raspiubuntu401:3390/TCP` | `joe`'s user-level GRD | Existing local graphical GNOME session, **unlocked** | Verified: same local desktop, remote input, clipboard |
+### The two server services are distinct
 
-| Gentoo client | Remote Login 3389 | Desktop Sharing 3390 | Comments |
-|---|---|---|---|
-| **FreeRDP 3.32.1** (`xfreerdp`) | **Verified** | **Verified** | Most useful command-line diagnostic baseline |
-| **KRDC 26.04.3** (`krdc`) | **Verified** | **Verified** | Worked after adjusting security-level configuration; use full screen or scaling |
-| **Remmina 1.4.43** (`remmina`) | **Verified** | **Verified** | Saved GUI profiles; reliable with default TLS level; scaling choices matter |
+| Mode | Observed listener | Service scope | Required graphical state | Native outcome |
+| --- | --- | --- | --- | --- |
+| **Remote Login** | `raspiubuntu401:3389/TCP` | System-level GRD with GDM | Can establish a graphical login remotely; a competing graphical session for `joe` may block login | GDM login and usable GNOME desktop verified; a later successful connection after reboot reported |
+| **Desktop Sharing** | `raspiubuntu401:3390/TCP` | `joe`'s user-level GRD | An existing **unlocked local** GNOME desktop for `joe` | Existing local desktop visible and controllable; locks may inhibit/disconnect sharing |
 
-**Two root causes in the early tests were different:**
+### Client/backend test matrix
 
-1. System-level Remote Login listened on 3389 but rejected clients with **`[RDP] Credentials are not set, denying client`**. Credentials were set using `sudo grdctl --system rdp set-credentials`; a system-service restart was performed before the verified successful connection.
-2. User-level Desktop Sharing authentication failed until **separate user-level credentials** were set using `grdctl rdp set-credentials` **without** `sudo` or `--system`, followed by a restart of the user service. Subsequent sharing attempts against a *locked* desktop were denied with **`Session creation inhibited`**; unlocking locally allowed the connection.
+| RDP client | `gmki91` X11: Remote Login 3389 | `gmki91` X11: Sharing 3390 | `q552u01` Wayland: Remote Login 3389 | `q552u01` Wayland: Sharing 3390 |
+| --- | --- | --- | --- | --- |
+| **FreeRDP 3.32.1 — `xfreerdp`** | **PASS** | **PASS** | **PASS** | **PASS** |
+| **KRDC 26.04.3** | **PASS** | **PASS** | **PASS** | **PASS** |
+| **Remmina 1.4.43** | **PASS** | **PASS** | **PASS** | **PASS** |
+| **FreeRDP 3.32.1 — `sdl-freerdp`** | **PASS** | **NOT TESTED** | **PASS** | **NOT TESTED** |
 
-**Operational limitation:** In this setup a screen lock blocks or disconnects Desktop Sharing. One later Remmina shared-desktop viewer disappeared with the Gentoo Plasma “explode” close animation. It was **likely** caused by the unattended Ubuntu screen locking on the inactivity timer, but no simultaneous server log was captured for that particular later event. Do not misclassify the animated window closure as an RDP graphics crash.
+The six `q552u01` combinations and the two SDL tests above are supported by the new evidence in §10. Here **Wayland** identifies the *local KDE Plasma session* on `q552u01`: it does not establish whether each individual client uses a native Wayland surface or XWayland. In particular, the SDL video backend used by `sdl-freerdp` was **not independently recorded**.
+
+**Early blockers were different:** system GRD Remote Login lacked system-scoped RDP credentials; separately, user-level Desktop Sharing lacked correctly configured user-scoped credentials and was subsequently inhibited by an **already-locked physical GNOME desktop**. The remedies were scoped `grdctl` credentials, service restarts, and local unlock—not changes to the RDP client protocol or `joetoo-kwin`.
+
+**Important security qualification:** Current GRD certificates are independent, self-signed, and named `CN=GNOME`; out-of-band fingerprint comparison was used during the original investigation. None of the newly successful client screenshots demonstrates validation against the maintainer's private root/intermediate CA. Certificate issuance/trust integration remains follow-up work.
 
 ---
 
@@ -36,14 +40,14 @@
 
 ### 1.1 GRD architecture
 
-The server has **two independent RDP credential contexts and two independent TLS certificate/key pairs**:
+The Pi has **two independent RDP credential contexts and TLS certificate/key pairs**:
 
-- **System-level Remote Login**: `sudo grdctl --system ...`, systemd **system** service `/usr/libexec/gnome-remote-desktop-daemon --system`, GDM graphical login.
-- **User-level Desktop Sharing**: `grdctl ...` as `joe`, systemd **user** service `/usr/libexec/gnome-remote-desktop-daemon`, GNOME Shell/Mutter screencast of the existing user session.
+- **System Remote Login:** `sudo grdctl --system ...`; systemd **system** service `/usr/libexec/gnome-remote-desktop-daemon --system`; GDM is responsible for graphical user login.
+- **User Desktop Sharing:** `grdctl ...` run as `joe`; systemd **user** service `/usr/libexec/gnome-remote-desktop-daemon`; shares the existing user's GNOME/Mutter session.
 
-These are distinct even when the RDP username happens to be `joe` in both. The RDP password is an initial transport/gateway credential, **not necessarily the Linux account password**. Remote Login subsequently displays GDM and requires a normal graphical user login. Keep the passwords out of this repository.
+The RDP connection credential is distinct from the Linux account password. For Remote Login, successful RDP authentication can lead to a further normal GDM graphical login. Even if the same account name `joe` is used in both services, the credential stores are separate. Never commit passwords.
 
-The relevant installed services were seen as active:
+The original investigation observed all relevant services running:
 
 ```text
 systemctl status gnome-remote-desktop.service
@@ -57,441 +61,439 @@ systemctl --user status gnome-remote-desktop.service
   user-level GNOME Remote Desktop daemon active
 ```
 
-`gdm.service` was shown as **active**, although its unit was reported **disabled**. Do not infer from “disabled” that GDM was not operating; investigate its activation arrangement separately before changing it.
+`gdm.service` was shown **active** while its unit state was **disabled**. This is not evidence that GDM was absent or malfunctioning; its activation mechanism was not separately investigated.
 
-### 1.2 Actual port allocation
+### 1.2 Observed ports and negotiation
 
-GRD status reported port 3389 in both configurations, but the user-level service had **`Negotiate port: yes`**, and live sockets showed the actual allocation:
+Both `grdctl --system status` and user `grdctl status` reported preferred port 3389, but user GRD had **`Negotiate port: yes`**. The actual listeners showed:
 
 ```text
 LISTEN ... *:3389 ... gnome-remote-desktop-daemon (system)
 LISTEN ... *:3390 ... gnome-remote-desktop-daemon (user)
 ```
 
-Therefore: **use 3389 for Remote Login and 3390 for Desktop Sharing on this machine**, while verifying listeners with `sudo ss -ltnp` after upgrades or reconfiguration. `grdctl status`'s user-level preferred port of 3389 does **not** mean Desktop Sharing was bound to 3389.
-
-Recheck:
+Therefore, on **this configured server**, use **3389 for Remote Login** and **3390 for Desktop Sharing**. Do not infer user GRD's live socket from its preferred-port field. After changes, verify the real binding:
 
 ```bash
-sudo grdctl --system status       # system Remote Login
-              grdctl status       # joe's Desktop Sharing
+sudo grdctl --system status
+          grdctl status
 sudo ss -ltnp | grep -E ':(3389|3390)\b'
+
+# End of commands
 ```
 
-### 1.3 Credential configuration — the decisive intervention
+### 1.3 Credential configuration: the decisive repair
 
-On `raspiubuntu401`, **system-level Remote Login**:
+System **Remote Login** credentials, applied on the Ubuntu host:
 
 ```bash
 sudo grdctl --system rdp set-credentials
 # Username: joe
-# Password: [entered interactively; not stored in this report]
+# Password: entered interactively and omitted here
 sudo grdctl --system status
 sudo systemctl restart gnome-remote-desktop.service
+
+# End of commands
 ```
 
-On `raspiubuntu401`, **user-level Desktop Sharing** (as logged-in `joe`):
+User **Desktop Sharing** credentials, applied as local user `joe`:
 
 ```bash
 grdctl rdp set-credentials
 # Username: joe
-# Password: [separately entered interactively]
+# Password: entered interactively and omitted here
 grdctl status
 systemctl --user restart gnome-remote-desktop.service
+
+# End of commands
 ```
 
-**Do not substitute** `sudo grdctl --system rdp set-credentials` for `grdctl rdp set-credentials` when fixing Desktop Sharing. That mistake was actually made during this investigation and initially prolonged the user-level authentication failures.
+**Do not substitute system-scoped commands for user-scoped commands.** The original error `[RDP] Credentials are not set, denying client` affected system Remote Login; incorrect user-level credentials caused Desktop Sharing's `ERRCONNECT_LOGON_FAILURE`/NTLM `MIC verification failed`. The maintainer restarted both services before successful tests; whether credential reload intrinsically required restarting was **not established**.
 
-The system service was restarted before Remote Login first worked. The user service was restarted before Desktop Sharing passed authentication. It was **not established** whether each restart is always required or whether the credentials would be dynamically reloaded under other circumstances.
+GNOME Settings had shown the modes enabled before the system credentials became usable. No evidence established whether the cause was an omitted Save action, Settings persistence defect, or something else; the CLI intervention is the confirmed remedy, **not** proof of a Settings bug.
 
-The GNOME graphical Settings panels had enabled the modes, but the original system journal proved the Remote Login credentials had not become usable. We **did not prove** whether an omitted Save action, a Settings bug, or some other persistence issue caused it. The CLI commands above are the confirmed working remedy, not proof of a specific Settings UI defect.
+Some unrelated systemd warnings suggested `daemon-reload` after unit files changed on disk. If needed, use `sudo systemctl daemon-reload` for system units or `systemctl --user daemon-reload` for user units; those warnings did not establish the RDP authentication failure.
 
-Systemd occasionally emitted:
+### 1.4 Independent certificates and proposed private PKI integration
 
-```text
-Warning: The unit file, source configuration file or drop-ins ... changed on disk.
-Run 'systemctl daemon-reload' ...
-```
+GRD generated **self-signed** server certificates with `Subject: CN=GNOME, C=US` and the same issuer. They did not match the contacted hostname `raspiubuntu401` and were not issued from the maintainer's private CA.
 
-For a system-level unit use `sudo systemctl daemon-reload`; for a user-level unit use `systemctl --user daemon-reload`. These warnings are **separate from** the GRD credential failures.
-
-### 1.4 TLS certificates and existing private PKI
-
-GNOME generated **self-signed**, independent certificates on the Pi, not certificates from the user's PKI. Both identified `Subject: CN = GNOME, C = US` and `Issuer: CN = GNOME, C = US` and produced name-mismatch/self-signed warnings when contacted as `raspiubuntu401`.
-
-| Mode | Certificate path | SHA-256 fingerprint observed |
-|---|---|---|
+| Mode | Observed certificate file | Observed SHA-256 fingerprint |
+| --- | --- | --- |
 | Remote Login | `/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop/certificates/rdp-tls.crt` | `ee:a7:3c:a3:3b:a9:ec:f5:25:8f:df:76:bb:05:32:8c:15:73:bd:50:57:76:0d:c5:69:c7:69:08:2d:58:93:d9` |
 | Desktop Sharing | `/home/joe/.local/share/gnome-remote-desktop/certificates/rdp-tls.crt` | `41:a3:aa:66:f9:f4:e0:16:40:84:ec:f0:6b:87:e6:ae:31:90:fe:dd:7e:c9:fd:95:66:bd:0f:98:c2:c4:05:fd` |
 
-Corresponding key files are `rdp-tls.key` in the same respective directories. **Never commit the private keys.** These fingerprints describe only the observed installation, not a universal Ubuntu default; they can change if regenerated.
+Their corresponding private key files have the same basenames ending in `rdp-tls.key`; **never copy them into Git or the evidence bundle**. These fingerprints are installation-specific and may change on renewal/reinstallation.
 
-On the Pi, compare the live certificate before trusting a client prompt:
+Read-only server-side fingerprint comparison:
 
 ```bash
 sudo openssl x509 \
   -in /var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop/certificates/rdp-tls.crt \
   -noout -subject -issuer -dates -fingerprint -sha256
+
+# End of commands
 ```
 
-FreeRDP prompted `Do you trust the above certificate? (Y/T/N)`: **Y** to accept and persist, **T** temporarily, **N** reject. Certificates presented on both ports matched their respective `grdctl` fingerprints. Certificate trust was established by out-of-band fingerprint comparison, **not** by PKI validation. A future improvement is to issue properly named certificates with SANs from the existing PKI, configure the matching cert/key through the appropriate system/user `grdctl rdp set-tls-cert` and `set-tls-key` commands, ensure accessible key permissions, and test each mode independently. This PKI migration was **not performed**.
+In the original FreeRDP certificate prompt, **Y** accepted/persisted trust, **T** temporarily trusted, and **N** refused. Both server modes' certificate fingerprints were compared out-of-band before acceptance. The **new X11 and Wayland screenshots are not evidence of an independently issued/trusted certificate chain**, and the SDL terminal screenshots still show certificate-verification warnings.
 
-The Pi logged:
+A proposed follow-up is to issue **separate, correctly named RDP server certificates** through the existing root/intermediate CA workflows, with appropriate hostname/IP SANs and server authentication use. Configure the correct cert/key through system and user `grdctl rdp set-tls-cert` and `set-tls-key`, with key permissions that permit the intended daemon to read the key, and distribute the private CA chain to clients. Test hostname and chain verification **independently on 3389 and 3390**. This was **not done** in the present study.
 
-```text
-Init TPM credentials failed because No TPM device found,
-using GKeyFile as fallback.
-```
+The Pi also emitted `Init TPM credentials failed because No TPM device found, using GKeyFile as fallback.` This did not prevent either RDP service from functioning.
 
-The absence of TPM hardware did not prevent either service from working.
+### 1.5 Other nonfatal log observations
 
-### 1.5 Other server log observations
-
-On the Pi 4, user-level GRD sometimes reported:
-
-```text
-Cannot load libcuda.so.1
-Cannot load libnvidia-encode.so.1
-[HWAccel.Vulkan] Initialization of Vulkan was successful
-RDP server started
-```
-
-CUDA/NVENC messages were nonfatal; there is no NVIDIA hardware in this test. Do not confuse them with authentication or session-state errors. SSH to `raspiubuntu401` from `gmki91` worked independently throughout the investigation.
+During the original investigation, GRD emitted missing `libcuda.so.1`/`libnvidia-encode.so.1` messages while reporting successful Vulkan initialization and RDP startup; this Raspberry Pi has no NVIDIA GPU. These were not shown to cause authentication or remote-session failures. SSH connectivity to the Pi was functioning independently.
 
 ---
 
-## 2. FreeRDP on Gentoo — known-good baseline
+## 2. FreeRDP `xfreerdp` — command-line baseline
 
-**Installed:** `net-misc/freerdp-3.32.1`, with USE `client`, `X`, etc., and **`-aad`**. Despite being version 3, the installed executable on `gmki91` is **`/usr/bin/xfreerdp`**, not `xfreerdp3`.
-
-**Remote Login (3389):**
+**Installed:** `net-misc/freerdp-3.32.1` with `client`, `X` and other USE features; `-aad`. On the tested Gentoo system, the executable is `/usr/bin/xfreerdp` rather than `xfreerdp3`.
 
 ```bash
+# GNOME Remote Login
 xfreerdp /v:raspiubuntu401:3389 /u:joe /network:auto /dynamic-resolution
-```
 
-**Desktop Sharing (3390):**
-
-```bash
+# GNOME Desktop Sharing
 xfreerdp /v:raspiubuntu401:3390 /u:joe /network:auto /dynamic-resolution
+
+# End of commands
 ```
 
-At interactive prompts: **Domain = blank** (press Enter); **Password = the credentials for the selected GRD mode**. The local DNS suffix `.brendler` is **not** an RDP authentication domain. `joe@raspiubuntu401` belongs in a URI that supports embedded user information; FreeRDP's `/v:` accepts a **host**, so `xfreerdp /v:joe@raspiubuntu401:3389 ...` failed DNS lookup. Specify `/u:joe` separately.
+For these GNOME connections, leave the RDP **Domain** prompt blank; it is not the `.brendler` DNS suffix. Supply the GRD mode's corresponding password interactively. **Do not use** `/v:joe@raspiubuntu401:3389`: `/v:` expects a host/port, and that input previously failed DNS lookup. `/u:joe` supplies the account name.
 
-**What `-aad` means here:** Microsoft Azure Active Directory / Entra ID support is unnecessary for this GNOME local-credential/NLA configuration. The warning below does **not** warrant rebuilding FreeRDP with USE `aad`:
+The warning `[nego_enable_aad]: This build does not support AAD security, disabling` is not a reason to rebuild with Gentoo USE `aad`: these GNOME local credentials do not require Azure/Entra authentication. Observed XKB-keycode and clipboard `CB_RESPONSE_FAIL` warnings were nonfatal. **Plain-text clipboard worked in both directions** in the original tests of both modes, but arbitrary MIME formats and file copying were not proven.
 
-```text
-[nego_enable_aad]: This build does not support AAD security, disabling.
-```
+Original X11 evidence:
 
-Additional nonfatal warnings included unmapped XKB keycodes `0x08` and `ZEHA 0x5d`, self-signed certificate/name mismatch, and clipboard format response failures (`CB_RESPONSE_FAIL`). Keyboard function was not exhaustively tested, but none of these warnings prevented a working remote GNOME session. Plain-text clipboard **worked both directions** in both Remote Login and Desktop Sharing; that does not establish support for every MIME format or file-copy operation.
+![FreeRDP remote GNOME login](screenshots/02-freerdp-remote-login-session.png)
 
-**Evidence — FreeRDP remotely logged in:**
+![FreeRDP sharing physical GNOME session](screenshots/03-freerdp-desktop-sharing.png)
 
-![FreeRDP remote GNOME login session](screenshots/02-freerdp-remote-login-session.png)
+**New `q552u01` Wayland evidence** (working remote-session windows, not yet managed by `joetoo-kwin`):
 
-**Evidence — FreeRDP sharing the existing local desktop:**
+![xfreerdp on Wayland, Remote Login 3389](screenshots/23-wayland-xfreerdp-remote-login.png)
 
-![FreeRDP existing desktop sharing, with local session and terminal](screenshots/03-freerdp-desktop-sharing.png)
+![xfreerdp on Wayland, Desktop Sharing 3390](screenshots/18-wayland-xfreerdp-desktop-sharing.png)
+
+The sharing screenshot includes a FreeRDP warning that the host/certificate identity changed and a trust prompt for the current self-signed certificate. The visible desktop shows connection success, **not** that future connections will pass strict PKI validation.
 
 ---
 
-## 3. KRDC on Gentoo — two modes verified
+## 3. KRDC — KDE graphical client
 
-**Installed:** `kde-apps/krdc-26.04.3`, Gentoo USE `rdp`, `ssh`, `vnc`, `wayland`; the `krdc_rdpplugin.so` existed and loaded. `kde-plasma/krdp` was also installed, but **KRDP is a KDE RDP server component, not the client used in these tests**.
+**Installed on original host:** `kde-apps/krdc-26.04.3` with `rdp`, `ssh`, `vnc`, `wayland`; `krdc_rdpplugin.so` was present and loaded. This **KRDC client** is unrelated to the `kde-plasma/krdp` server component installed elsewhere in the feasibility investigation.
 
-Working commands (launch from Konsole):
+Known-good launch forms:
 
 ```bash
 krdc 'rdp://joe@raspiubuntu401:3389'  # Remote Login
 krdc 'rdp://joe@raspiubuntu401:3390'  # Desktop Sharing
+
+# End of commands
 ```
 
-In KRDC's dropdown/address workflow, avoid inserting a redundant URL scheme into a field that expects `username@host[:port]`; the first attempt produced **Malformed URL**. A subsequent field showed the `rdp://` prefix percent-encoded inside the address (`rdp%3A%2F%2Fjoe@...`), so we standardized on the explicit, quoted command-line URI above.
+An earlier attempt in KRDC's GUI produced **Malformed URL** and a `rdp%3A%2F%2F...` double-encoded URL; the explicit, quoted URI above avoided that ambiguity.
 
-### 3.1 Working Host Configuration
+### 3.1 Working local Host Configuration
 
-| KRDC tab | Tested settings / observation |
-|---|---|
-| **General** | Resolution **Current Window Size**; acceleration **Use Best Available**; desktop/device scale **Auto**; keyboard **US English**; audio **On This Computer**. `Share Media` displayed `file:///media` (not shown to be a valid redirect target). The “Remember password” checkbox was shown checked in screenshots; KDE Wallet earlier emitted an error, but a causal role was **not established**. |
-| **Security** | **NLA enabled**, **TLS enabled**, **RDP enabled**, **Ext disabled** was reported working. **TLS security level 192 bit** was the key observed configuration difference from earlier failures at 256 bit. **NLA alone** at 192 bit also worked. Authentication Package List blank. |
-| **Proxy** | Default HTTP dropdown, **server/credentials blank**; no proxy configured. |
-| **Gateway** | Transport Auto, **server/domain/credentials blank**; no RDP gateway configured. |
-| **SSH tunnel** | **Connect via SSH tunnel unchecked**. |
+| KRDC configuration | Original working evidence |
+| --- | --- |
+| **General** | Resolution **Current Window Size**, acceleration **Use Best Available**, device scale **Auto**, keyboard **US English**, audio **On This Computer**; a default `Share Media` path `file:///media` was not proven valid |
+| **Security** | **NLA on, TLS on, RDP on, Ext off**, **TLS security level 192 bit**, Authentication Package List blank; NLA-only with 192 bit also worked in the original trial |
+| **Proxy** | HTTP dropdown at default; no server/credentials entered |
+| **Gateway** | Transport Auto; server/domain/credentials blank |
+| **SSH tunnel** | Disabled |
 
 ![KRDC General settings](screenshots/05-krdc-general-settings.png)
 
-![KRDC Security settings from the working-configuration investigation](screenshots/06-krdc-security-settings.png)
+![KRDC interim Security settings](screenshots/06-krdc-security-settings.png)
 
-**Screenshot qualification:** The Security screenshot was captured when **all four** security boxes were checked, while the final reported working selection was **NLA + TLS + RDP, Ext off**. The later all-four-checkbox screenshot is evidence of the 192-bit setting, **not** an exact image of the final four checkboxes. Do not blindly replicate the image instead of the table.
+**Historical screenshot caveat:** `06-krdc-security-settings.png` showed all **four** security boxes selected, though the final working choice was NLA + TLS + RDP, **Ext off**. The image supports the **192-bit setting**, not the final exact checkbox set.
 
-### 3.2 NLA and TLS: what was actually learned
+### 3.2 Negotiation observations and limits
 
-- GNOME refused **TLS-only with NLA unchecked**. The debug log included `ERRCONNECT_HYBRID_REQUIRED_BY_SERVER`: the server required NLA.
-- **NLA-only** worked at the 192-bit KRDC setting. This **does not mean unencrypted RDP**: CredSSP/NLA uses TLS. KRDC's GUI “192 bit” is a security-level configuration, **not proof of the actual negotiated TLS cipher/key size**.
-- NLA + TLS + RDP worked at 192 bit. Earlier 256-bit attempts had failed; the tests **suggest** the TLS-level setting mattered but do not establish a precise cryptographic cause or a version-specific defect.
-- Do **not** enable legacy RDP security or reduce security requirements outside this isolated troubleshooting experiment without understanding what the client actually negotiates. NLA remains required for the demonstrated server.
+- **TLS-only with NLA unchecked** failed with `ERRCONNECT_HYBRID_REQUIRED_BY_SERVER`; GNOME required NLA for this setup.
+- **NLA-only at the KRDC 192-bit setting** worked, but NLA/CredSSP is itself TLS-based. “192 bit” is a KRDC security-level setting, **not** the measured TLS cipher's key length.
+- **NLA + TLS + RDP at 192 bit** also worked. Earlier 256-bit attempts failed; the underlying cryptographic or configuration cause was **not established**.
+- A KRDC GUI checkbox permitting classic RDP is **not evidence that classic RDP security was negotiated**. A production `joetoo-kwin` recipe should establish a verified, no-unsafe-downgrade negotiation policy before unattended use.
+- `QtKeychain`/KWallet error and `file:///media` redirection warnings were observed, but not proven causal.
 
-Earlier, the debug log also included `QtKeychain read error: Process org.kde.kwalletd6 exited with status 255`, and a default redirect warning for nonexistent `file:///media`. Neither was proven to be the root cause after the 192-bit setting yielded working connections.
+Original evidence:
 
-**Evidence — KRDC Remote Login (GDM):**
+![KRDC remote GDM login](screenshots/04-krdc-remote-login.png)
 
-![KRDC presenting the Ubuntu GDM greeter](screenshots/04-krdc-remote-login.png)
+![KRDC physical Desktop Sharing](screenshots/07-krdc-desktop-sharing.png)
 
-**Evidence — KRDC Desktop Sharing (3390):**
+**New `q552u01` Wayland evidence:**
 
-![KRDC sharing the Ubuntu local desktop](screenshots/07-krdc-desktop-sharing.png)
+![KRDC Remote Login 3389 on Wayland](screenshots/22-wayland-krdc-remote-login.png)
 
-**Display usability:** The shared physical desktop was about **1920×1080**, often too large inside KRDC's own toolbar/sidebar. Use KRDC **Full Screen** for practical 1:1 use, or scale the remote display rather than scrolling around an unscaled oversized desktop. These are **viewer presentation** choices, not GNOME authentication controls.
+![KRDC Desktop Sharing 3390 on Wayland](screenshots/19-wayland-krdc-desktop-sharing.png)
+
+The existing physical desktop was about 1920×1080; inside KRDC's toolbar/sidebar view, use **Full Screen** or client scaling rather than assuming a cropped display is a connection failure.
 
 ---
 
-## 4. Remmina on Gentoo — both modes verified
+## 4. Remmina — profile-based graphical client
 
-**Installed:** `net-misc/remmina-1.4.43`, with RDP support enabled. The working interface differed from KRDC: create/edit a saved connection profile with **`+`** and use **Save and Connect**; saved rows can subsequently be opened from the Remmina main window (including via right-click **Connect**). A profile is not a shell command and does not require a KRDC-style green launch arrow.
+**Installed:** `net-misc/remmina-1.4.43` with RDP support. The working flow was to create/edit a saved profile with `+`, **Save and Connect**, and subsequently open its row (including right-click **Connect**). Remmina is a **client**; the saved profile is not itself a separate remote server.
 
-### 4.1 Saved profiles
+### 4.1 Original working profiles
 
 | Field | Remote Login | Desktop Sharing |
-|---|---|---|
+| --- | --- | --- |
 | Name | `Quick Connect - raspiubuntu401 remote login` (later renamed) | `Quick Connect - raspiubuntu401 shared desktop` (later renamed) |
 | Protocol | RDP | RDP |
 | Server | `raspiubuntu401:3389` | `raspiubuntu401:3390` |
 | Username | `joe` | `joe` |
-| Password | System-level GRD RDP password | User-level GRD sharing password |
-| Domain | **blank** | **blank** |
-| Share folder | blank | blank |
-| Security protocol negotiation | **Automatic negotiation** | **Automatic negotiation** |
-| TLS Security Level | **Default** | **Default** |
-| Quality | Initially Poor/Fastest; later tried Best | Later **Good** |
-| Audio output mode | Off | Off |
-| SSH tunnel | Not enabled | Not enabled |
+| Password | System-level GRD credential | User-level GRD credential |
+| Domain / share folder | **blank** | **blank** |
+| Security protocol negotiation | Automatic negotiation | Automatic negotiation |
+| TLS Security Level | Default | Default |
+| Quality | Initially Poor/Fastest, later Best tried | Later Good |
+| Audio output | Off | Off |
+| SSH tunnel | Off | Off |
 
-The Advanced tab's **Gateway transport type: HTTP** was a dropdown/default with **no gateway server configured**; it does **not** mean the actual direct RDP connection used an HTTP proxy or RD Gateway.
+The Advanced page showed an **HTTP gateway-transport dropdown** with *no gateway server configured*. This does **not** establish use of an HTTP proxy or Remote Desktop Gateway. **Do not copy KRDC's 192-bit setting into Remmina**: Remmina passed at its own default setting.
 
-![Remmina Basic profile settings](screenshots/08-remmina-profile-basic.png)
+![Remmina Basic settings](screenshots/08-remmina-profile-basic.png)
 
-![Remmina Advanced profile settings](screenshots/09-remmina-profile-advanced.png)
+![Remmina Advanced settings](screenshots/09-remmina-profile-advanced.png)
 
-![Remmina saved Remote Login and Desktop Sharing profiles](screenshots/13-remmina-saved-profiles.png)
+![Remmina saved profiles](screenshots/13-remmina-saved-profiles.png)
 
-**Do not transfer KRDC's 192-bit setting to Remmina.** Remmina worked with its **Default** TLS Security Level; altering it is not necessary or justified by the observations.
+### 4.2 Connection and session evidence
 
-### 4.2 Connections, certificate prompt, and visuals
+Remmina Remote Login initially displayed a transient white/blank view for about ten seconds before reaching GDM and a usable remote GNOME desktop. After deliberately disconnecting **without logging out**, a later Remote Login reconnection resumed the same graphical session. **Session persistence through client disconnect** was therefore verified in the original trials; this does not mean a remote session survives a **server reboot**.
 
-Remmina Remote Login connected after an initial white/blank delay of about ten seconds, then showed the graphical login and usable GNOME desktop. The user deliberately disconnected **without logging out**, later reconnected to Remote Login, and resumed the existing session. This was direct evidence of remote-session persistence.
+![Remmina Remote Login](screenshots/10-remmina-remote-login.png)
 
-![Remmina Remote Login, active GNOME session](screenshots/10-remmina-remote-login.png)
+On 3390, Remmina prompted for a **different sharing certificate**, whose fingerprint matched the user GRD certificate in §1.4.
 
-Remmina Desktop Sharing prompted for its **different port-3390 certificate**, whose fingerprint exactly matched the user-level certificate above:
+![Remmina sharing certificate](screenshots/11-remmina-cert-3390.png)
 
-![Remmina certificate acceptance for user-level GRD](screenshots/11-remmina-cert-3390.png)
+An attempted sharing connection while an active, disconnected Remote Login session still existed could not establish the physical sharing target:
 
-An attempted Desktop Sharing connection while a persistent Remote Login session was still running failed/retried:
+![Remmina sharing reconnect/failure](screenshots/12-remmina-connection-retry.png)
 
-![Remmina reconnect screen when sharing was unavailable](screenshots/12-remmina-connection-retry.png)
+After explicitly logging out of remote GNOME, logging into `joe` locally and leaving GNOME unlocked, sharing worked:
 
-After an explicit GNOME **Log Out** from Remote Login, KVM-switching to Ubuntu and logging in **locally**, then switching back to Gentoo, Remmina Desktop Sharing worked immediately:
+![Remmina sharing physical desktop](screenshots/14-remmina-desktop-sharing-window.png)
 
-![Remmina window showing shared physical GNOME desktop](screenshots/14-remmina-desktop-sharing-window.png)
+![Remmina scaled-to-window view](screenshots/15-remmina-desktop-sharing-scaled.png)
 
-![Remmina scaled-to-window presentation](screenshots/15-remmina-desktop-sharing-scaled.png)
+The full-size physical desktop can be cropped inside a smaller viewer. Remmina's **scale-to-window** and full-screen settings are viewing conveniences, not server-side GNOME authentication changes. Quality presets were tried but no controlled bandwidth, latency or CPU comparison was performed.
 
-**Scaling:** Sharing inherits the existing local desktop resolution (about 1920×1080). In a smaller window it may crop and show scrollbars; choose Remmina's **scaled mode** or **full-screen**. Scaling a 1920×1080 image to a small viewer makes text small. Remote Login can use the RDP client's virtual display size and is more flexible. Good/Best quality selections were tried, but no comparative bandwidth/latency benchmark was collected; don't label one faster based on this session alone.
+**New `q552u01` Wayland evidence:**
+
+![Remmina Remote Login 3389 on Wayland](screenshots/21-wayland-remmina-remote-login.png)
+
+![Remmina Desktop Sharing 3390 on Wayland](screenshots/20-wayland-remmina-desktop-sharing.png)
 
 ---
 
-## 5. GNOME session lifecycle and operational limits
+## 5. SDL FreeRDP — additional cross-backend Remote Login result
 
-### 5.1 The critical state machine
+FreeRDP 3.32.1 with SDL support provides the installed `sdl-freerdp` frontend. The maintainer tested the following **same command** on **both** `gmki91` X11 and `q552u01` Wayland:
 
-**Do not confuse these operations:**
+```bash
+sdl-freerdp /v:raspiubuntu401:3389 /u:joe /network:auto /dynamic-resolution
 
-- **Close/disconnect viewer:** stops this RDP network connection; **Remote Login's GNOME session can remain running** for later reconnection. This was explicitly verified with Remmina.
-- **Log Out inside GNOME:** ends the actual `joe` graphical user session; when sharing that session, the RDP viewer is disconnected because its target vanishes.
-- **Lock GNOME's local desktop:** Desktop Sharing is blocked/disconnected. Unlock **at the local console** to permit new sharing connections in the tested environment.
-- **Remote Login as `joe` while another `joe` graphical session exists:** GDM may show **Session Already Running** and offer **Cancel** or **Force Stop**. Force Stop terminates the existing graphical session/processes and risks unsaved work.
-
-Operational procedures:
-
-**To switch Remote Login → Desktop Sharing**
-
-1. In the remote GNOME desktop, save work and select **Log Out** (not just close the client window).
-2. Use the KVM/physical console to log in locally as `joe`; leave GNOME **unlocked**.
-3. From Gentoo, connect to **port 3390** with sharing credentials.
-
-**To switch Desktop Sharing → Remote Login**
-
-1. Save work in the shared physical GNOME session; explicitly **Log Out** within GNOME if ready to abandon that local session.
-2. Connect to **port 3389** with system-level RDP credentials, then log in at GDM.
-3. Expect a possible several-second dark/charcoal or blank screen during graphical-session initialization. In this investigation one attempt remained dark after Force Stop and was closed; a later attempt reached a usable desktop after ~10 seconds. A persistent dark screen is **not** proof of successful login.
-
-**To temporarily disconnect a Remote Login client while preserving work:** close/disconnect the RDP viewer **without** choosing GNOME Log Out, and reconnect later to **3389**. The continued GNOME login may prevent local `joe` login in the meantime.
-
-### 5.2 Evidence of lock-related sharing denial
-
-One early Desktop Sharing attempt **passed RDP authentication and graphics-channel setup**, then immediately terminated with client:
-
-```text
-ERRINFO_LOGOFF_BY_USER (0x0000000C)
+# End of commands
 ```
 
-The **server log at the same time** was more diagnostic:
+Both tests produced a visible, usable GNOME Remote Login desktop:
+
+![SDL FreeRDP Remote Login from gmki91 X11](screenshots/24-x11-sdl-freerdp-remote-login.png)
+
+![SDL FreeRDP Remote Login from q552u01 Wayland](screenshots/25-wayland-sdl-freerdp-remote-login.png)
+
+**What this establishes:** SDL FreeRDP can serve as a working graphical RDP *client* when invoked from either of the joetoo native test desktop environments. This is important because Gentoo explicitly masks `>=net-misc/freerdp-3 wayland` in `profiles/base/package.use.mask` due to the older upstream Wayland frontend. That mask does **not** disable the independently built SDL frontend or prevent an X11 client from running under XWayland.
+
+**What remains open:** The screenshots do **not** identify the actual SDL video driver or prove the SDL window was native Wayland rather than XWayland. They also do **not** establish a working `sdl-freerdp` **Desktop Sharing 3390** case, exact PID→KWin UUID registration, managed placement, credential-prompt ownership, or the security of automatic certificate acceptance. The SDL command line shown includes no password; the visible terminal logs still include certificate verification warnings for a self-signed GNOME certificate. PKI trust and frontend dialog behavior require explicit review before automated integration.
+
+---
+
+## 6. GNOME session lifecycle and operational limitations
+
+### 6.1 Do not conflate remote viewer and GNOME session state
+
+- **Disconnect or close RDP viewer:** ends that connection. A GNOME **Remote Login** user session may remain alive and be reconnected to; Remmina reconnection verified this on the tested server.
+- **Log Out inside GNOME:** terminates the graphical login session. A viewer attached to it disconnects because the remote desktop has ended.
+- **Lock existing local GNOME desktop:** in the observed setup, **Desktop Sharing** connections were inhibited or disconnected until the physical session was unlocked locally.
+- **Attempt Remote Login as `joe` when `joe` is already graphically logged in:** GNOME/GDM may report **Session Already Running** and offer **Cancel** or **Force Stop**. Force Stop risks terminating an existing user session and unsaved work. It must not be automated casually.
+
+**Switching Remote Login → Desktop Sharing:** save work, log out of the remote GNOME session (do **not** just close the client), log in locally as `joe`, leave the desktop unlocked, then connect to `3390` using user-scoped GRD credentials.
+
+**Switching Desktop Sharing → Remote Login:** save work and log out of the local GNOME session when appropriate, then connect to `3389` using system-scoped GRD credentials and complete GDM login. During initialization a gray/charcoal or blank screen may appear transiently; one attempt stayed dark and was closed, another reached the GNOME desktop after ~10 seconds. A persistent blank screen is not a successful session.
+
+**Preserve a Remote Login session temporarily:** close only the viewer; reconnect later to `3389`. The disconnected graphical `joe` session may continue to prevent a competing local `joe` login.
+
+![GDM warns that joe session is already running](screenshots/16-freerdp-session-already-running.png)
+
+### 6.2 Screen-lock inhibition and later viewer disappearance
+
+One early 3390 attempt authenticated far enough to establish graphics channels, then terminated with `ERRINFO_LOGOFF_BY_USER (0x0000000C)`. The contemporaneous **server** journal was more diagnostic:
 
 ```text
-Nov 03 20:50:23 ... Failed to start remote desktop session:
+Failed to start remote desktop session:
 GDBus.Error:org.freedesktop.DBus.Error.Failed: Session creation inhibited
 ... ERRINFO_RPC_INITIATED_DISCONNECT [0x00010001]
 ```
 
-After the user returned to Ubuntu via the KVM, **unlocked the local GNOME desktop**, switched back, and repeated the 3390 connection, sharing succeeded. Taken together, this strongly supports the local screen lock as the reason session creation was inhibited. The exact locking-event log was not shown, so the explanation is **high-confidence inference** rather than direct proof of an exact lock timestamp.
+After using the local KVM to **unlock** GNOME, Desktop Sharing worked. That supports the lock explanation strongly, though the specific lock event timestamp was not independently captured.
 
-**Later Remmina event:** The shared desktop viewer spontaneously “exploded” (the configured Plasma window-close animation). A timed GNOME screen lock was **likely**, and the behavior is consistent with the earlier verified lock limitation; there is **no matching journal captured for this later occurrence**. Preserve that distinction if investigating a possible Remmina crash.
+A later Remmina shared-desktop viewer closed with Plasma's configured “explode” animation. This was **likely** another inactivity-lock event, but no matching server journal for that specific disappearance was saved. The animation itself is not evidence of a Remmina graphics crash.
 
-### 5.3 logind is authoritative, not window-counting
+### 6.3 `loginctl` session accounting
 
-At one point `loginctl list-sessions` showed:
+A captured `loginctl list-sessions` output contained an SSH session, a `joe` systemd user manager, GDM greeter entries, and a single remote Wayland graphical session for `joe`. An inspected remote graphical session showed `Service=gdm-password`, `Type=wayland`, `Remote=yes`, a nonblank `RemoteHost`, and `State=active`.
 
-```text
-10  joe  ... SSH session
-3   joe  ... systemd-user manager
-34  gdm-greeter-2 ... systemd-user manager
-36  joe  ... remote Wayland graphical user session
-c9  gdm-greeter-2 ... local GDM greeter (tty1)
-```
-
-`loginctl show-session 36` reported `Service=gdm-password`, `Type=wayland`, `Remote=yes`, `RemoteHost=192.168.62.137`, `State=active`. That snapshot had **one active `joe` graphical user session**, **not two**. An SSH TTY, systemd user manager, greeter and remote GNOME session must not be casually counted as multiple conflicting graphical logins.
-
-Another later local-session snapshot showed `joe` at `seat0` on `tty2` and the user manager, consistent with a local session available for sharing. Session IDs change; never hardcode IDs such as 36 or 37 into automation.
-
-Read-only inspection commands:
+**Do not infer two graphical logins merely from multiple `loginctl` rows.** Session IDs are ephemeral; do not hardcode values into scripts. Useful diagnostics:
 
 ```bash
 loginctl list-sessions
 loginctl show-session SESSION_ID \
-  -p Name -p Type -p Class -p Service -p Remote -p RemoteHost -p State -p Active -p TTY -p Leader
+  -p Name -p Type -p Class -p Service -p Remote -p RemoteHost \
+  -p State -p Active -p TTY -p Leader
 who -a
 systemd-inhibit --list
 ps -eo pid,ppid,user,tty,stat,etime,args --forest | \
   grep -E 'gnome-shell|gnome-session|gdm|gnome-remote-desktop|Xwayland|sshd|systemd --user'
+
+# End of commands
 ```
 
-A reboot was once reportedly refused with other-session warnings. The subsequently captured `systemd-inhibit --list` included normal sleep inhibitors and an unattended-upgrades shutdown inhibitor; **the precise cause of that earlier reboot refusal was not established**. Avoid indiscriminate `loginctl terminate-user joe`, Force Stop, or forced reboot while work may be unsaved.
+A previously refused reboot was associated with other-session warnings, but the exact blocker was **not established**. Avoid indiscriminate `loginctl terminate-user joe`, Force Stop, or forced reboot while work may be unsaved.
 
-![Remote Login detects another existing joe session](screenshots/16-freerdp-session-already-running.png)
+### 6.4 New post-reboot observation (2026-11-04)
 
----
-
-## 6. What did **not** work / misleading diagnostics
-
-| Observation | Actual diagnosis or outcome |
-|---|---|
-| `xfreerdp3: command not found` | Gentoo FreeRDP 3.32.1 packaged its X11 client as `xfreerdp`. |
-| Initial TCP reset on **3389** despite `grdctl --system status` showing RDP enabled | System journal explicitly reported **`Credentials are not set, denying client`**. Setting system GRD credentials and restarting the system service preceded success. |
-| Testing `/u:rdplogin` after configuring username `joe` | Wrong example username suggested during troubleshooting. Use the **username actually configured**, `joe`. |
-| `/v:joe@raspiubuntu401:3389` | FreeRDP treated `joe@raspiubuntu401` as hostname and DNS resolution failed; separate `/v:host:port` and `/u:joe`. |
-| GNOME self-signed certificate warning | Expected for default generated certs; explicitly compare fingerprint; no PKI integration yet. |
-| Desktop Sharing first failed with `ERRCONNECT_LOGON_FAILURE` and server NTLM `MIC verification failed` | User-level GRD credentials had not been correctly reset; using `sudo ... --system` changed the **wrong credential scope**. Use plain `grdctl` as joe. |
-| Repeating Desktop Sharing after accepted credentials made viewer briefly appear then disappear | Server said **`Session creation inhibited`**; unlocking physical GNOME session immediately permitted sharing. |
-| Entering `.brendler` as RDP Domain | `.brendler` is DNS namespace, not authentication domain. Leave Domain blank. |
-| KRDC malformed URL from GUI | Use a correctly parsed address or command-line `krdc 'rdp://joe@host:port'`; avoid double-encoding URI scheme. |
-| KRDC TLS-only / NLA disabled | Server rejected negotiation, including **`ERRCONNECT_HYBRID_REQUIRED_BY_SERVER`**; GNOME required NLA. |
-| KRDC early 256-bit TLS security-level configuration | Connection failed; at **192-bit level** and NLA selected, both modes worked. Precise cause/cipher **not determined**. |
-| KRDC QtKeychain/KWallet and `file:///media` warnings | Observed but not demonstrated to cause failure. Avoid treating them as established root causes. |
-| Remmina shared desktop while disconnected Remote Login session still existed | Black screen/reconnection attempts; a persistent `joe` remote graphical session can block starting a local shareable session. Explicit GNOME logout cleared the workflow. |
-| Remmina brief white screen before Remote Login | Connection completed after roughly 10 seconds; a transient blank screen alone did not imply failure. |
-| Desktop 1920×1080 inside GUI viewer | Oversized/cropped image in nonfullscreen window; use full-screen or scaling, especially for local Desktop Sharing. |
-| FreeRDP `-aad` warning | `aad` USE flag unnecessary for local NLA/GNOME credentials; no need to rebuild to remove informational warning. |
-| FreeRDP XKB warnings or clipboard `CB_RESPONSE_FAIL` | Nonfatal in these tests. Bidirectional **plain-text** clipboard verified in both modes. |
-| FreeRDP `ERRINFO_LOGOFF_BY_USER` | A protocol reason from server; does **not** prove a human clicked Log Out. Investigate GNOME/logind/journal for why it was sent. |
+The maintainer **rebooted `raspiubuntu401` and successfully connected by Remote Login again**. This supersedes the original report's suggestion that Remote Login *had not been tried at all* after a reboot. It demonstrates post-reboot service usability, **not** survival of an existing GNOME user session through reboot. The supplied statement does not independently establish whether that Remote Login occurred before any local user login, nor whether both sockets and Desktop Sharing were rechecked after boot. Those remain narrower follow-up questions, not grounds to repeat the six already completed client/mode tests.
 
 ---
 
-## 7. Troubleshooting reference: start with the *right* service
+## 7. Troubleshooting reference and corrected interpretations
 
-From Ubuntu (`raspiubuntu401`):
+| Observation | Established cause or qualified interpretation |
+| --- | --- |
+| `xfreerdp3: command not found` | FreeRDP 3.32.1 on this Gentoo host installs `xfreerdp`. |
+| TCP reset on 3389 while system GRD said enabled | System journal: `[RDP] Credentials are not set, denying client`; set **system** RDP credentials. |
+| Trying `/u:rdplogin` | That was not the configured name; the configured RDP username was `joe`. |
+| `/v:joe@raspiubuntu401:3389` | Invalid FreeRDP host argument for these tests; pass `/v:raspiubuntu401:3389 /u:joe`. |
+| Self-signed or changed host certificate warning | GRD uses separate original self-signed certificates; compare the actual server fingerprint before any trust decision. PKI validation not established. |
+| Desktop Sharing `ERRCONNECT_LOGON_FAILURE`, NTLM `MIC verification failed` | User GRD credentials incorrectly set in the system scope; corrected with user-scoped `grdctl`. |
+| Sharing viewer appears then closes | Server `Session creation inhibited` and unlock-then-success support local screen lock as cause. |
+| Entering `.brendler` as RDP Domain | DNS suffix is not the RDP auth domain; leave blank here. |
+| KRDC malformed URL | GUI encoded URI scheme into address; use `krdc 'rdp://joe@host:port'`. |
+| KRDC TLS-only, NLA off | Server rejected negotiation with `ERRCONNECT_HYBRID_REQUIRED_BY_SERVER`. |
+| KRDC 256-bit level failure then 192-bit success | Verified configuration difference; exact negotiated cipher/cause undetermined. |
+| KRDC KWallet/QtKeychain or `file:///media` warning | Observed but not proven to cause auth failures. |
+| Remmina shared-desktop retry while remote `joe` session persisted | Remote session and local shareable user session conflicted; logging out remote GNOME cleared the workflow. |
+| Initial blank Remmina window | Approximately ten-second startup delay before usable GNOME; not necessarily failure. |
+| 1920×1080 desktop cropped by viewer | Client scaling/full-screen presentation issue, not GRD auth failure. |
+| FreeRDP `-aad` or XKB warnings, clipboard `CB_RESPONSE_FAIL` | Nonfatal in the original tests; ordinary text clipboard was bidirectional. |
+| `ERRINFO_LOGOFF_BY_USER` | Protocol reason, not proof a human chose Log Out; cross-check server journal. |
+| FreeRDP 3 `(-wayland)` | Confirmed Gentoo base-profile package USE mask of deprecated old client frontend; **not** proof that `xfreerdp` or `sdl-freerdp` fails in a Wayland Plasma session. |
+| SDL FreeRDP TLS verification warning despite visible desktop | Working graphics is not authenticated certificate-chain verification; evaluate the actual trust decision and negotiated policy separately. |
+
+### Read-only server diagnostics
 
 ```bash
-# Shared environment and listeners
+# Listeners and two independent configuration scopes
 sudo ss -ltnp | grep -E ':(3389|3390)\b'
 sudo grdctl --system status
 grdctl status
 
-# Remote Login: system service
+# System-level Remote Login
 systemctl status gnome-remote-desktop.service --no-pager -l
 sudo journalctl -b -u gnome-remote-desktop.service -n 60 --no-pager -l
 
-# Desktop Sharing: user service
+# User-level Desktop Sharing
 systemctl --user status gnome-remote-desktop.service --no-pager -l
 journalctl --user -b -u gnome-remote-desktop.service -n 60 --no-pager -l
 
-# GDM and session state
+# GDM and graphical session state
 systemctl status gdm.service --no-pager -l
 loginctl list-sessions
+
+# End of commands
 ```
 
-For a specific failure, bracket timestamps, for example:
+For a specific failure, use corresponding timestamps in both client and server logs, changing one variable at a time:
 
 ```bash
 journalctl --user -b -u gnome-remote-desktop.service \
   --since '2026-11-03 20:50:00' --until '2026-11-03 20:51:00' \
   --no-pager -l
+
+# End of commands
 ```
 
-From Gentoo (`gmki91`), start with `xfreerdp` for clearer client logs. When debugging graphical clients, **do not change server credentials, client TLS/security settings, display mode, and login state all at once**. One variable at a time produced the successful diagnosis here.
+---
+
+## 8. Implications for `joetoo-kwin` Step 1.5c.5c
+
+This study establishes a **working RDP server/client interoperability baseline on both joetoo native test platforms**, but it does **not** itself implement a managed RDP launch recipe in `joetoo-kwin`.
+
+1. **Viewer lifecycle ≠ GNOME login-session lifecycle.** Closing the local viewer might preserve a Remote Login GNOME session; never equate closing a window, disconnecting TCP and logging out remotely.
+2. **Server responsibilities remain external.** GRD configuration, GDM login policy, local console locks, credential stores, TLS certificates and host firewall are prerequisites managed independently. `joetoo-kwin` should initially manage only local client launch, positive KWin window identity, desktop/slot/geometry/layer placement, and truthful launch/transport reporting.
+3. **Credentials and server identity are independent of window placement.** System Remote Login and user Desktop Sharing require separate RDP credentials and certificates. Never commit passwords or automatically waive certificate warnings in an unattended invocation.
+4. **Native backend support is now demonstrated at the GUI interoperability level.** `xfreerdp`, KRDC and Remmina were all manually observed in both server modes under KDE X11 and KDE Wayland; SDL FreeRDP remotely logged in from both. This is sufficient to consider them *pilot candidates*, not to assert exact KWin UUID enrollment or whether SDL used native Wayland versus XWayland.
+5. **Protocol/client security remains a gate.** Determine the actual negotiated NLA/TLS behavior, certificate chain/name validation, downgrade handling and credential UI. A checked GUI option or successful remote desktop alone does not establish a verified cryptographic policy.
+6. **Positive desktop-window identity must be proved before integration.** Authentication dialogs, saved-profile delegation and potential reuse of a single client process require targeted PID/UUID testing. We cannot automatically repurpose the TigerVNC enrollment assumptions.
+7. **Display policy is client- and server-mode-dependent.** Remote Login can use virtual dimensions/dynamic resolution; physical Desktop Sharing mirrors an already running display. Neither should silently override the joetoo shared geometry or initial placement contract.
+8. **Failure classification should remain specific.** GNOME lock, expired/changed TLS cert, missing credentials, ongoing remote session, transient black screen and graphical client exit are distinct conditions. Keep logs visible rather than converting every failure into “window launch failed.”
+9. **Preserve the accepted VNC-over-SSH path.** It remains a separate working baseline; this study establishes RDP feasibility rather than acceptance of a replacement implementation.
+
+These GNOME/GDM observations should **not** be assumed to describe a Gentoo `krdpserver`, `xrdp`, SDDM, or Windows RDP server without separate evidence. Windows remote login/attended-sharing remains an explicit future evaluation target, not a result of the Ubuntu tests.
+
+## 9. Remaining work and evidence limitations
+
+- **Server reboot:** Remote Login was successfully re-established after reboot (**now verified**). The exact first-login sequence before any local console login, post-boot listener inventory, and Desktop Sharing after that same reboot were **not separately documented**.
+- **Certificate policy:** Replace the two self-signed certificates with SAN-correct certificates from the maintainer's existing PKI, then verify trust chains, hostname matching and any pinning behavior in KRDC, Remmina and FreeRDP (system and user listeners separately). **Not yet done**.
+- **Negotiated RDP security:** Determine actual TLS cipher/protocol and NLA or downgrade behavior, particularly KRDC's 192-bit setting. Do not infer cryptographic strength from a UI label.
+- **SDL frontend:** Identify the actual SDL video driver on `q552u01` (native Wayland or XWayland), establish its certificate-dialog/credential behavior, and optionally test SDL Desktop Sharing (3390). SDL Remote Login on both platforms **is already demonstrated**.
+- **Managed client pilot:** Verify exact KWin PID/UUID identity, authentication pre-window, desktop/slot/geometry/stack, window reuse, cancellation and exit for selected RDP clients. **No such `joetoo-kwin` RDP integration tests were performed.**
+- **Lock behavior:** Correlate an actual GNOME inactivity lock with journal timestamps. Earlier `Session creation inhibited` evidence is strong; a later spontaneous Remmina close remained inferred.
+- **Performance and peripheral features:** No controlled latency, CPU/network, codec or audio redirection benchmarks. Plain-text clipboard was originally tested in both directions; file transfers and arbitrary MIME types were not established.
+- **Windows server:** Windows RDP host capability, local console semantics, certificates and remote login/attended sharing have **not** been tested in this Ubuntu study.
+- **Access policy:** No firewall-rule modification was documented. Keep RDP limited to approved LAN/VPN exposure; no unreviewed public Internet forwarding.
+- **Client versions:** The documented investigation used FreeRDP 3.32.1, KRDC 26.04.3 and Remmina 1.4.43. Recheck versions and settings if updating the packages.
+
+## 10. Screenshot evidence index
+
+Original collection files `01`–`17` are retained as-is. The new `18`–`25` files are supplied in the accompanying evidence bundle and should be placed in the same `task_step1.5/screenshots/` directory. Screenshots may depict intermediate settings or nonfatal diagnostics; source-specific written working configurations take precedence.
+
+| Relative screenshot path | What it establishes |
+| --- | --- |
+| `screenshots/01-freerdp-remote-login-gdm.png` | Initial X11 FreeRDP/GDM login |
+| `screenshots/02-freerdp-remote-login-session.png` | Original X11 FreeRDP Remote Login GNOME desktop |
+| `screenshots/03-freerdp-desktop-sharing.png` | Original X11 FreeRDP Desktop Sharing |
+| `screenshots/04-krdc-remote-login.png` | Original X11 KRDC GDM login |
+| `screenshots/05-krdc-general-settings.png` | Original KRDC General settings |
+| `screenshots/06-krdc-security-settings.png` | KRDC 192-bit security setting; interim all-four-boxes screenshot |
+| `screenshots/07-krdc-desktop-sharing.png` | Original X11 KRDC Desktop Sharing |
+| `screenshots/08-remmina-profile-basic.png` | Remmina Basic settings |
+| `screenshots/09-remmina-profile-advanced.png` | Remmina Advanced settings |
+| `screenshots/10-remmina-remote-login.png` | Original X11 Remmina Remote Login |
+| `screenshots/11-remmina-cert-3390.png` | Remmina user GRD certificate prompt |
+| `screenshots/12-remmina-connection-retry.png` | Remmina sharing connection retry/failure |
+| `screenshots/13-remmina-saved-profiles.png` | Two separate Remmina RDP profiles |
+| `screenshots/14-remmina-desktop-sharing-window.png` | Original X11 Remmina sharing at physical resolution |
+| `screenshots/15-remmina-desktop-sharing-scaled.png` | Original X11 Remmina scaled sharing view |
+| `screenshots/16-freerdp-session-already-running.png` | GDM session conflict/Force Stop warning |
+| `screenshots/17-krdc-initial-malformed-url.png` | Earlier KRDC URI parsing failure |
+| `screenshots/18-wayland-xfreerdp-desktop-sharing.png` | **NEW:** `q552u01` Wayland, `xfreerdp`, Desktop Sharing port 3390; visible cert warning |
+| `screenshots/19-wayland-krdc-desktop-sharing.png` | **NEW:** `q552u01` Wayland, KRDC, Desktop Sharing 3390 |
+| `screenshots/20-wayland-remmina-desktop-sharing.png` | **NEW:** `q552u01` Wayland, Remmina, Desktop Sharing 3390 |
+| `screenshots/21-wayland-remmina-remote-login.png` | **NEW:** `q552u01` Wayland, Remmina, Remote Login 3389 |
+| `screenshots/22-wayland-krdc-remote-login.png` | **NEW:** `q552u01` Wayland, KRDC, Remote Login 3389 |
+| `screenshots/23-wayland-xfreerdp-remote-login.png` | **NEW:** `q552u01` Wayland, `xfreerdp`, Remote Login 3389 |
+| `screenshots/24-x11-sdl-freerdp-remote-login.png` | **NEW:** `gmki91` X11, `sdl-freerdp`, Remote Login 3389 |
+| `screenshots/25-wayland-sdl-freerdp-remote-login.png` | **NEW:** `q552u01` Wayland, `sdl-freerdp`, Remote Login 3389 |
 
 ---
 
-## 8. Relevance to `joetoo-kwin` task_step1.5
-
-This investigation provides a **known-good, non-SSH graphical remote-access baseline** from Gentoo Plasma (`gmki91`) to Ubuntu GNOME (`raspiubuntu401`). For the joetoo-kwin work, retain these distinctions:
-
-1. **RDP connection state ≠ graphical login-session state.** Closing a FreeRDP/KRDC/Remmina window may leave an active Remote Login session and processes behind. A wrapper/window-placement tool must not assume disconnect implies logout or safe process termination.
-2. **Graphical session selection matters.** The remote GNOME user can be logged in through GDM as a Wayland session while the physical console is on a separate GDM greeter; Desktop Sharing targets an *existing* local desktop, not an arbitrary detached headless session.
-3. **Authentication has layers.** For Remote Login there is RDP NLA credentials, server certificate trust, then GDM Linux-account authentication. For Desktop Sharing there are separate user-scoped RDP credentials and the unlocked local desktop requirement.
-4. **Do not infer process ownership from visible windows.** Use `loginctl`, `RemoteHost`, `Service`, `Type`, `Class`, `Leader` and user/system GRD journals. Keep shell/SSH sessions distinct from graphical sessions.
-5. **Display behavior differs by mode.** Desktop Sharing mirrors an existing 1920×1080 display, with client-side clipping/scaling/full-screen tradeoffs; Remote Login can use a virtual display and dynamic resolution.
-6. **Locked-session behavior needs explicit policy.** A local GNOME lock may expel a Desktop Sharing viewer. Treat this as expected unless server evidence suggests otherwise. Do not automatically disable screen locking or force-stop sessions in automation.
-7. **Client failure reasons must remain visible.** Preserve CLI and server journal logs when abstracting FreeRDP/KRDC/Remmina into automation. A Plasma “explode” effect is only the local presentation of a closing viewer window.
-8. **Security and secrets.** Do not hardcode RDP credentials into scripts or Git. The two live self-signed certificate fingerprints can be used for provenance but should eventually be replaced with the user’s PKI, with appropriate SANs and trust distribution.
-
-This report concerns **GNOME's server on Ubuntu and clients running on Gentoo**, not KDE's `krdpserver` or the separate joetoo-kwin SSH/Konsole placement proof of concept. The session-lifecycle observations are potentially transferable; the specific GNOME/GDM semantics should not be assumed to describe KWin or SDDM without testing.
-
-## 9. Remaining work / limitations of the evidence
-
-- Verify each mode and listener after a **fresh Raspberry Pi reboot**, including initial Remote Login before any user opens a local desktop. This was not yet reported as a complete post-reboot test.
-- Optionally inspect which TLS cipher was negotiated under KRDC's 192-bit security-level setting rather than interpreting the UI label as cipher strength.
-- Replace both self-signed GRD certificates with appropriate certificates issued by the existing **private PKI**, after separately testing system and user service identity/trust/permissions. Not yet performed.
-- Check client behavior under **GNOME inactivity auto-lock** with synchronized log timestamps. One early failure was diagnosed strongly from `Session creation inhibited` plus unlock/retry; the later spontaneous Remmina expulsion remains inferred.
-- Consider connection-quality benchmarks (CPU usage on Pi 4, latency, dynamic-resolution behavior, clipboard formats, audio redirection). No quantitative comparison was performed.
-- Verify Remmina/KRDC options after upgrades; screen-grab versions captured here are **26.04.3 KRDC / 1.4.43 Remmina / 3.32.1 FreeRDP**.
-- Windows 11 Microsoft Remote Desktop was contemplated but **not tested**.
-- Firewall constraints were discussed, but no firewall rule change was documented. RDP should remain limited to trusted LAN/VPN, not exposed directly to the Internet.
-
-## 10. Screenshot index
-
-All screenshots are from the investigation and are bundled in the sibling `screenshots/` directory. Some show interim troubleshooting values; the **written final working configurations above take precedence**.
-
-| File | Evidence |
-|---|---|
-| `01-freerdp-remote-login-gdm.png` | Initial FreeRDP/GDM login view |
-| `02-freerdp-remote-login-session.png` | FreeRDP GNOME Remote Login desktop |
-| `03-freerdp-desktop-sharing.png` | FreeRDP active Desktop Sharing |
-| `04-krdc-remote-login.png` | KRDC GDM login |
-| `05-krdc-general-settings.png` | KRDC General settings |
-| `06-krdc-security-settings.png` | KRDC 192-bit security configuration (all four checkboxes in captured interim state) |
-| `07-krdc-desktop-sharing.png` | KRDC sharing existing GNOME desktop |
-| `08-remmina-profile-basic.png` | Remmina Basic profile |
-| `09-remmina-profile-advanced.png` | Remmina Advanced profile |
-| `10-remmina-remote-login.png` | Remmina Remote Login |
-| `11-remmina-cert-3390.png` | Remmina Desktop Sharing certificate acceptance |
-| `12-remmina-connection-retry.png` | Remmina failed sharing attempt/reconnection |
-| `13-remmina-saved-profiles.png` | Two distinct Remmina saved connection profiles |
-| `14-remmina-desktop-sharing-window.png` | Remmina full-resolution shared display in window |
-| `15-remmina-desktop-sharing-scaled.png` | Remmina scaled view |
-| `16-freerdp-session-already-running.png` | GDM session conflict and Force Stop warning |
-| `17-krdc-initial-malformed-url.png` | Initial KRDC URI parsing failure |
-
----
-
-**Result:** GRD itself, the two independent credential scopes, both TLS endpoints, both session modes, all three Gentoo clients, and plain-text clipboard in both directions were verified. The most important operational lesson for `joetoo-kwin` is that **viewer lifecycle, authentication, GNOME desktop state, display topology, and actual logind session lifetime are distinct layers**.
+**Updated conclusion (2026-11-04):** The GRD server's two independent service modes, credentials and certificates were established; three GUI clients worked in both modes on **each** joetoo KWin test backend; SDL FreeRDP additionally worked for Remote Login on **both** backends; and Remote Login was reconfirmed after reboot. GNOME-session state, authenticated server identity, client GUI window identity and managed `joetoo-kwin` placement remain conceptually separate. The study now establishes a **cross-backend RDP feasibility baseline**, not production RDP security acceptance or an implemented joetoo-kwin RDP recipe.
