@@ -236,6 +236,9 @@ Native SFTP-specific active-desktop focus, new/changed host-key prompts, uncommo
 | 31 | Codex (2026-11-02), final installer integration correction | Clean starting task branch HEAD `ee534cd7744d71fd7623428c76f6ac1f26d0215f`; only existing installer, existing OpenRC/registry installer tests and this iteration row changed | 23 focused installer tests PASS; 362 full Python PASS without skips; 5 Node discovery files PASS; installer sh syntax/ShellCheck, Python test compilation and diff whitespace PASS. First regression run found an old test pinning exactly six mappings; updated it to retain registry coverage while permitting the added dependencies. All installer execution used temporary HOME and mocked OpenRC | Existing install/update/check/backup and destination-safety paths now include all three VNC Python helpers under user .local/libexec at 0644; missing/outdated detection, six-file upgrade, backup content/modes, symlink refusal, running-service update refusal and content-idempotence covered. Maintainer reports X11 cases 1–4 completed and Wayland/XWayland actual desktop registration after delayed authentication, auth-window exclusion, independent Dolphin placement, verified stacking and 2/2 success after manual module staging. New installer removes that manual step; maintainer reviews and verifies ordinary update/check reports nine current files. No launch behavior changes, new configuration utility/document, production install/service/network operations or publication by Codex; milestone acceptance remains maintainer-controlled. |
 | 32 | Codex (2026-11-02), integrated installer archive and content deduplication | Same task branch HEAD `ee534cd7744d71fd7623428c76f6ac1f26d0215f`; preserved the pending nine-file correction and row 31; only existing installer, its two existing test files and this row changed | 33 focused installer tests and 372 full Python tests PASS without skips; 5 Node discovery files PASS; installer sh syntax/ShellCheck, embedded Python/test compilation and diff whitespace PASS. Mutating installer tests used temporary HOME and mocked OpenRC; actual installed legacy files were inspected read-only | Changed components are copied before installation into `${XDG_STATE_HOME:-$HOME/.local/state}/joetoo-kwin/archive/COMPONENT/SHA256/ORIGINAL_NAME`, with first-archive provenance JSON and preserved modes/timestamps. Unchanged bytes create no backup; existing versions require byte equality; symlinks, unsafe archive paths, corrupt versions and copy failures abort without replacing active components. All nine components covered, including independent same-basename namespaces and VNC modules at 0644. New existing-installer `--preview-legacy-backups` reports content groups, hashes and original paths without modifying history: current preview found 171 legacy files / 50 component-local versions (registry 21 / 2). Legacy migration is NOT performed: maintainer reviews preview, then separately authorizes copying/verifying unique versions with a full original-path manifest before any consolidation/deletion. Installation failure retains archived previous contents; no automatic rollback or retention policy added. Next actor: maintainer reviews combined uncommitted diff and verifies installer update/check; native launch behavior unchanged; no production install/service/network operations, publication or milestone acceptance by Codex. |
 | 33 | Codex (2026-11-02), standalone legacy migration Gates A/B candidate | Same task branch HEAD `ee534cd7744d71fd7623428c76f6ac1f26d0215f`; all pending installer/tests and rows 25–32 preserved. Added only separate migration utility/test file and this row; no installer/runtime changes | 23 migration tests and 405 full Python tests PASS without skips; 5 Node discovery files PASS; Python compilation, existing installer sh syntax/ShellCheck and diff whitespace PASS. Real read-only Gate A re-inventoried 171 legacy paths / 50 component-local versions / 121 duplicate copies, exactly matching supplied six-component counts: 50 payloads new, 0 reused, 4 preexisting VNC archive files. Repeated no-atime inventory confirmed all original/installed/archive file snapshots unchanged | Gate B implemented/tested ONLY in disposable HOME: representative 4-path/3-version fixture created 2 payloads, reused 1; component archive files 6→10, all originals/installed files unchanged, full manifest verified and retry created 0 payloads. Legacy metadata/filenames/embedded timestamps live in durable resumable `archive/migrations/legacy-INVENTORY_ID.json`, separate from strict installer provenance; copy uses atomic no-replace publication, stale/source checks and failure-safe staging. Utility reuses trusted installer archive helper definitions without running installer entry points; requires Linux no-atime/no-replace facilities. Real Gate B NOT executed; actual archive still 4 files. Maintainer reports deployed nine-file installer Current/restart/D-Bus PASS and 382 Python / 53 JS PASS; not Codex native testing. Next: maintainer reviews candidate and Gate A JSON, then performs separately reviewed copy/verify on gmki91; no other hosts, deletion/Gate C, deployment or publication by Codex. |
+| 34 | Codex (2026-11-03), 1.5c.5c server-first RDP feasibility | Clean approved branch `task/joetoo-kwin-step1.5c5c-rdp-feasibility`, HEAD `76dba5b968f38d2c80ff178c932046c6023ae664`; merge base/local main/origin-main `d8aad51e9ea894c49c78bdb7a8a5bea8b83df550` (merged PR 27). Only Section 5 of this HANDOFF edited | Read current architecture/scope, installed package metadata/manpages, exact cached KRDC/KRDP/FreeRDP/Remmina release sources, selected profile ancestry and primary upstream docs. Remmina 1.4.43 installation confirmed. No clients/services launched, credentials read, remote sessions opened or regressions rerun; documentation whitespace/scope/link checks only | Findings below are inspected/documented capabilities, not native RDP acceptance. Recommend Ubuntu GNOME Remote Login pilot, then KRDC versus SDL3 FreeRDP comparison; retain accepted TigerVNC-over-SSH. Maintainer chooses pilot host/session/trust policy and separately authorizes native tests before any executable RDP contract. No installation, configuration, protected-repository edits or publication. |
+| 35 | Codex (2026-11-03), focused RDP PKI/Windows/Shadow follow-up | Preserved pending iteration 34 and findings on unchanged `76dba5b`; only agent-owned Section 5 updated | Inspected exact FreeRDP 3.32.1 Shadow/crypto source, installed build flags and PAM/X11 linkage, plus primary GNOME/xrdp/Microsoft documentation. No keys, credentials, clients or services accessed; no native RDP result inferred | Existing private CA workflow is maintainer-reported. Added certificate integration, Windows login versus attended sharing, SAM-NLA versus TLS/PAM and Shadow X11 limits. `raspiubuntu401` test remains in progress elsewhere; maintainer reviews findings and supplies pilot outcomes before an implementation contract. |
+
 
 
 
@@ -264,6 +267,161 @@ Native SFTP-specific active-desktop focus, new/changed host-key prompts, uncommo
 | C23 | ChatGPT (2026-11-01), Step 1.5c.5 scope reconciliation and handoff draft | Reviewed committed `099096e` architecture, README, 1.5c.5 scope, and existing Step 1.5c.4 closure handoff; proposed branch and complete active-task HANDOFF replacement. No repository edits, commits, native operations or transport tests. | Verified that the published scope establishes Dolphin SFTP → working TigerVNC-over-SSH POC adaptation → RDP feasibility/decision, with endpoint grammar and RDP implementation still separately gated. The maintainer reports signed `099096e` on `main` and `origin/main`. | Maintainer approves/installs revised HANDOFF and creates task branch after planning merge. Codex then undertakes 1.5c.5a endpoint-contract investigation; stop for maintainer decision before executable SFTP dispatch. |
 | C24 | ChatGPT (2026-11-01), 1.5c.5a closure and 1.5c.5b activation | Reviewed maintainer-supplied X11/Wayland SFTP positive/negative transcripts, the final Codex cleanup and current handoff; verified published `b8120f7` and the archived VNC POC on GitHub. Proposed this replacement HANDOFF and unified diff, with no repository edits or native tests. | The X11 positive NSS/TCP transcript (`resolved/open/22`) was supplied but incorrectly marked pending in the prior acceptance summaries. Base managed SFTP and advisory behavior are demonstrated on both backends; remaining security/endpoint/focus variants stay qualified. | Maintainer directs 1.5c.5a closure and authorizes beginning 1.5c.5b POC/security/identity inspection; separate contract approval precedes executable VNC implementation. No new standalone planning document, native operations or publication by cloud agent. |
 On subsequent iterations, record only material changes, actual evidence and unresolved work. Keep detailed logs, temporary patches, input files and generators alongside this handoff under `task_step1.5/` as appropriate; keep live source/tests in the normal project-root paths.
+
+
+### 1.5c.5c findings — 2026-11-03 (research; native RDP untested)
+
+**Server/session decision first.** Sharing exposes an existing graphical session;
+remote login starts one without a physical user login; headless means no physical
+display, not necessarily no session; persistence means reconnecting after network
+loss, not recovering a session after logout/reboot. Client X11/Wayland and server
+Xorg/Wayland are independent choices across RDP.
+
+| Server | Session model and prerequisites | Assessment |
+| --- | --- | --- |
+| GNOME Desktop Sharing | Existing logged-in GNOME session; user service/Mutter/PipeWire; sharing credentials | Does not meet logged-out login goal. |
+| GNOME Remote Login | GNOME 46+/GDM; system GRD service; entry credentials then OS-user login. Upstream 47 adds persistent remote-login sessions | First Ubuntu pilot. Ubuntu 24.04 supports login; verify persistence/backports separately. Prefer an existing 26.04/GNOME 50 host if available. Documented service setup uses systemd; Gentoo/OpenRC server portability is unestablished. |
+| xrdp + xorgxrdp | xrdp/sesman/PAM creates separate virtual Xorg desktop; no physical login or GDM required; reconnect policy configurable | Alternative for persistent independent sessions. Needs an Xorg-capable desktop (e.g. Xfce), not a Wayland-only GNOME session. Upstream permits non-systemd builds; local Gentoo/OpenRC packaging/PAM integration not established. |
+| KRDP 6.7.5-r1 | Shares current Plasma Wayland session; screencast/portal, user authentication; virtual monitor does not create a new login | Defer as solution to logged-out remote login. Installed without systemd USE; upstream KCM service-control instructions cannot be assumed to work on OpenRC. |
+
+Sources: [Ubuntu sharing/login](https://documentation.ubuntu.com/desktop/en/24.04/how-to/share-your-desktop-remotely/),
+[GNOME configuration](https://github.com/GNOME/gnome-remote-desktop/blob/main/docs/configuration.md),
+[46 login](https://release.gnome.org/46/), [47 persistence](https://release.gnome.org/47/),
+[Ubuntu 26.04 GNOME 50](https://documentation.ubuntu.com/release-notes/26.04/changes-since-previous-interim/),
+[xrdp 0.10.5](https://github.com/neutrinolabs/xrdp/tree/v0.10.5),
+[session policy](https://github.com/neutrinolabs/xrdp/blob/v0.10.5/sesman/sesman.ini.in).
+KRDP assertions checked against cached `krdp-6.7.5.tar.xz` server/main.cpp,
+SessionController.cpp, RdpConnection.cpp and Gentoo patchset (no NLA changes).
+
+**gmki91 installed clients, ranked provisionally.** Exact cached release source
+and installed manpages inspected; none has demonstrated native KWin identity yet.
+There is no executable RDP recipe in `-o`; the proposed pilot uses clients manually.
+
+| Candidate | Invocation/security | Identity/backend tradeoff |
+| --- | --- | --- |
+| 1. KRDC 26.04.3, rdp/ssh/vnc/wayland | `krdc rdp://HOST:PORT`; prompts/KWallet; certificate and changed-certificate dialogs | Fresh QApplication/MainWindow per invocation in main.cpp; Qt X11/Wayland capable. Best first managed-client candidate; separate auth dialogs and pre-login main-window placement need native acceptance. |
+| 2. SDL3 FreeRDP 3.32.1 | `sdl-freerdp /v:HOST:PORT`; shared FreeRDP cert/security controls; no password argv | SDL3 has X/Wayland support locally; dialogs/viewport/window lifecycle require observation. Installed SDL3 supports both backends. |
+| 3. Remmina 1.4.43, rdp/ssh/vnc/wayland/kwallet | `remmina -c PROFILE.remmina` or password-free RDP URI; cert_ignore defaults off in plugin source | GTK3 X/Wayland capable; GApplication command delegation/tab reuse complicates exact launched-PID ownership. `--new` creates a profile, not an isolated process. |
+| Reference: xfreerdp 3.32.1 | `/v:HOST:PORT`, `/u:USER`, `/d:DOMAIN`, `/size:WxH`; stdin/interactive credentials | X11/XWayland, not native Wayland. Simpler per-process reference; native client/dialog identity still untested. |
+
+`wlfreerdp` is absent. The inherited **Gentoo base**
+`profiles/base/package.use.mask:334` masks `>=net-misc/freerdp-3 wayland` because
+the old frontend is broken/deprecated ([bug 930197](https://bugs.gentoo.org/930197));
+profile ancestry was inspected, not attributed to joetoo hardening. Exact 3.32.1
+Wayland CMake marks that frontend unmaintained. This does not disable SDL3,
+GTK or Qt Wayland support. FreeRDP installed USE includes client/X/sdl/server,
+but not kerberos; do not promise Kerberos SSO. q552u01 inventory is deferred
+until preparing the native client comparison, not assumed identical.
+
+**Security and integration gates.** Existing VNC supervisor uses strict SSH
+host-key checking, BatchMode, dedicated owned master, no agent/X11 forwarding,
+and local/remote loopback forwarding; local listener/teardown were natively
+accepted. Remote VNC listener exposure remains independently checked, not proven
+by the forwarding destination. RDP is not intrinsically safer than this design.
+Require verified CA/name or independently confirmed certificate pins, no ignore
+or automatic TOFU, no password in URI/argv/logs, and no classic-RDP downgrade.
+KRDC's core/krdc.kcfg defaults NLA/TLS/**classic RDP** all on; a pilot needs explicit
+policy. Remmina cert_ignore is off by default but is configurable. xrdp's stable
+0.10.5 template permits TLS/classic negotiation; use a TLS-only policy if selected.
+Do not assume server NLA: [xrdp NLA PR 3868](https://github.com/neutrinolabs/xrdp/pull/3868)
+is open; KRDP 6.7.5 RdpConnection.cpp explicitly sets NlaSecurity=false/TlsSecurity=true,
+contrary to its stale README NLA-only claim. Record actual Ubuntu negotiation.
+Use existing restricted LAN/VPN access; no Internet forwarding or VPN gate.
+An SSH-carried RDP alternative would still need certificate-name/redirection tests.
+
+Source anchors: current [VNC supervisor](../libexec/joetoo_kwin_vnc_launch.py)
+ssh_argv/control_argv; broker _poll_correlation requires new source-consistent
+UUID/exact PID and rejects ambiguity. [KRDC main](https://github.com/KDE/krdc/blob/v26.04.3/main.cpp),
+[KRDP security](https://github.com/KDE/krdp/blob/v6.7.5/src/RdpConnection.cpp),
+[SDL3 frontend](https://github.com/FreeRDP/FreeRDP/tree/3.32.1/client/SDL/SDL3),
+[Remmina source](https://gitlab.com/Remmina/Remmina/-/tree/v1.4.43).
+No RDP class/title/window-order adoption or reuse of TigerVNC role signaling is justified.
+
+**Focused follow-up: private PKI and Windows (2026-11-03).** The maintainer
+already operates root/intermediate CA and certificate-administration utilities on
+three workstations. Reuse that workflow; no CA, key or credential material was
+inspected. Recommend server-authentication leaf certificates with matching DNS
+SANs (IP SANs for literal-IP connections), suitable key usage and protected,
+service-readable matching private keys. Serve leaf plus intermediate certificates;
+trust the root through the actual client trust store. Never deploy CA signing keys.
+FreeRDP 3.32.1 crypto/x509_utils.c loads OpenSSL default trust paths; KRDC/SDL use
+FreeRDP but actual trust-store/name checks still need native verification. A valid
+certificate authenticates the server, not the user, and does not replace NLA/PAM.
+Do not assume intermediate fetching or automatic revocation checks.
+
+| Server | Existing-PKI integration and renewal assessment |
+| --- | --- |
+| GNOME Remote Login | `grdctl --system rdp set-tls-cert` / `set-tls-key` select service-readable certificate/key files for the system service, separate from Desktop Sharing user settings. Use the CA-issued chain instead of generating a self-signed identity. Verify chain/name through login and any session handover; upstream configuration alone does not establish deployed handover behavior. |
+| xrdp | `certificate=` / `key_file=` accept PEM; upstream TLS guidance supports a PEM certificate bundle, not PKCS#7. Protect key access and select TLS-only policy. Documentation calls for service restart; verify renewed endpoint certificate afterward. |
+| KRDP 6.7.5 | Server certificate/key settings load through FreeRDP PEM readers; that library accepts a leaf/intermediate chain. Configure the issued identity explicitly rather than relying on generated self-signed defaults. Native chain presentation and renewed-certificate activation remain untested. |
+| FreeRDP Shadow 3.32.1 | Reads `<FreeRDP ConfigPath>/shadow/shadow.crt` and `shadow.key`; no dedicated certificate/key-path CLI switches in this release. PEM chain support verified in FreeRDP crypto source. Installed `WITH_WINPR_TOOLS=OFF` means missing files cannot be auto-generated by this code path. Key loading has no interactive passphrase callback; a protected service-readable key and controlled restart are needed. |
+| Windows RDP | Import leaf/private key into Local Computer Personal (PFX is the portable import route), root/intermediates into their appropriate trust stores, then bind the listener certificate and grant its service identity key-read access. Microsoft documents `SSLCertificateSHA1Hash` and NETWORK SERVICE for standalone Windows Server listeners; the property selects a certificate, not its signature algorithm. Check the actual Windows edition/build before choosing a binding procedure. RDS role certificates have separate management. Renewal generally changes the thumbprint and needs rebinding unless established enrollment policy handles it. |
+
+Renew through the existing CA process, retain complete chain and correct names,
+and verify the certificate actually presented after the supported reload/restart;
+no hot-reload/session-continuity guarantee has been established. CA-valid same-name
+renewals avoid manual leaf-pin churn; pinned clients need deliberate pin rollover.
+Windows RDS documents serverAuth EKU and PFX/export requirements for role import;
+do not generalize exportability to every key generated in place. Existing CA
+algorithm policy should be checked against each server/client before deployment.
+Sources: [GNOME certificate configuration](https://github.com/GNOME/gnome-remote-desktop/blob/main/docs/configuration.md),
+[xrdp TLS/PEM bundle](https://github.com/neutrinolabs/xrdp/wiki/TLS-security-layer),
+[Windows RDS certificates](https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/remote-desktop-services-certificates),
+[Windows Server listener binding](https://learn.microsoft.com/en-us/troubleshoot/windows-server/remote/remote-desktop-listener-certificate-configurations).
+
+**Shadow is a sharing server, not remote login.** Exact 3.32.1 server/shadow source
+shows NLA/EXT/TLS/classic RDP enabled as negotiation choices by default; do not
+mistake defaults for an NLA-only policy. NLA uses CredSSP with NTLM SAM-backed
+verification (`/sam-file`); it does not automatically validate Unix/PAM passwords.
+Kerberos paths exist upstream, but installed `WITH_KRB5=OFF` excludes that option.
+Explicit `/sec:tls` disables NLA/EXT/classic RDP and permits the X11 subsystem's
+PAM authentication callback when compiled in. gmki91's installed subsystem links
+libpam and imports pam_authenticate/pam_acct_mgmt; actual PAM policy/login remains
+untested. In TLS/PAM mode the password is available to the server inside TLS,
+not plaintext on the network when TLS is enforced and verified. Do not disable
+authentication or weaken certificate checks to bypass SAM provisioning.
+The X11 subsystem opens DISPLAY and captures its existing root window; it neither
+creates sessions nor captures a complete Wayland compositor desktop through
+XWayland. SDL client Wayland support does not change this server limitation.
+No Shadow server was started, SAM database read or authentication configured.
+Source: [exact Shadow 3.32.1](https://github.com/FreeRDP/FreeRDP/tree/3.32.1/server/shadow)
+(shadow_server.c, shadow_client.c, cli/shadow.c, X11/x11_shadow.c), plus cached
+crypto/certificate.c and crypto/tls.c (PEM chain parsing/presentation).
+
+**Windows target distinction.** Pro/Enterprise/Education and Windows Server can
+host native RDP; Home cannot. Linux FreeRDP-based clients are candidates for those
+hosts, subject to certificate/NLA and credential testing. Native Windows client-OS
+RDP transfers interactive access to the remote session and leaves the physical
+console at login/lock, rather than providing simultaneous attended console sharing;
+reconnecting may resume existing work. Windows Server RDS supports a different,
+configured/licensed multi-session model. Record target edition/build and account
+model before selecting a pilot. [Microsoft host editions](https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/remotepc/remote-desktop-allow-access),
+[console/session semantics](https://learn.microsoft.com/en-us/windows/win32/termserv/consoles-vs-terminals).
+For attended Windows console collaboration, Quick Assist has no documented Linux
+helper client; Intune Remote Help explicitly does not support Linux (web access
+may function, not a supported substitute). RustDesk is a cross-platform,
+self-hostable candidate for a separately approved attended-sharing evaluation,
+not an RDP recipe. FreeRDP Remote Assistance invitation support and RDS shadowing
+are not established as a usable Linux-to-Windows console workflow here.
+[Quick Assist](https://learn.microsoft.com/windows/client-management/quick-assist),
+[Remote Help platforms](https://learn.microsoft.com/en-us/intune/remote-help/plan/),
+[RustDesk](https://rustdesk.com/docs/en/index.html).
+
+**Revised next gate:** maintainer reports GNOME Remote Desktop configured on
+`raspiubuntu401` (Raspberry Pi 4, Ubuntu 26.04.1), with a FreeRDP test being prepared
+in another conversation. Setup and successful login/persistence/certificate
+verification have not been independently established here; do not duplicate that
+work. Incorporate its actual results when supplied. Continue to prefer KRDC for
+simple KDE operation, with SDL3 FreeRDP as the direct comparison; Remmina is
+optional given the maintainer's UI preference. No legacy Wayland frontend unmask
+is recommended. Compare identical server/security settings, reconnect behavior,
+certificate verification, and each auth/main window's PID/UUID/type before any
+managed-client proposal. Obtain q552u01 inventory only when that comparison needs it.
+Next decisions: whether Ubuntu results meet the no-physical-login/persistence goal;
+which Windows edition/build and login versus attended-sharing goal to pilot;
+which CA identity/trust and renewal procedure to validate; then which client and
+readiness/ownership contract merits separate implementation authorization.
+No RDP implementation, native test or certificate operation was performed here.
 
 ## 6. Current gate — Step 1.5c.5b TigerVNC-over-SSH contract review
 
