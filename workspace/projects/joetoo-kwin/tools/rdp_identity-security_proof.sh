@@ -40,8 +40,13 @@ BUILD=$(date +%Y%m%d)
 
 maintainer="joe"
 # require command, host and user to be named on cmdline - do not hard code them
-rdp_cmd=${1:?"Usage: $PN command host[:port] [username]"}
-rdp_target=${2:?"Usage: $PN command host[:port] [username]"}
+# var=${1:?...} displays error if null or unset
+if [ -z "$1" ] || [ -z "$2" ]; then
+    j_msg "-${err}" -p "Usage: $PN command host[:port] [username]"
+    exit 1
+fi
+rdp_cmd="$1"
+rdp_target="$2"
 rdp_user=${3:-$USER}
 
 project_dir="/home/${maintainer}/joetoo-ai/workspace/projects/joetoo-kwin"
