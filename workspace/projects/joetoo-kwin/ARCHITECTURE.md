@@ -352,7 +352,7 @@ modifiable by unrelated processes.
 | --- | --- |
 | `-c [-f CONFIG]` | Validate config and display a colorized dry-run plan without launching |
 | `-o [-f CONFIG]` | Confirm then launch and positively register/position managed windows |
-| `-L DESKTOP PROGRAM MODE TARGET [LAYER] | Confirm then launch and positively register/position one managed window |
+| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | Confirm then launch and positively register/position one managed window |
 | `-m l|r` | Two-panel active-window geometry on current desktop |
 | `-m DESKTOP` | Change active window's desktop, preserve geometry |
 | `-m DESKTOP l|r` | Two-panel placement on specified desktop |

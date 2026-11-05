@@ -1,0 +1,102 @@
+#!/bin/bash
+# Copyright 2025-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# restart_joetoo-kwind - restart joetoo-kwind service; optionally run unit tests
+
+# shellcheck source=/usr/sbin/script_header_joetoo.shellcheck_var_stub
+# shellcheck source=/usr/sbin/script_header_joetoo.shellcheck_func_stub
+source /usr/sbin/script_header_joetoo
+
+PN=${0##*/}   #  like =$(basename $0) but w/o subshell and function call
+
+BUILD=$(date +%Y%m%d)
+
+[ -z "$verbosity" ] && verbosity="${notice}"  # assign default if null; allow calling program to dictate
+
+user="joe"
+project_dir="/home/${user}/joetoo-ai/workspace/projects/joetoo-kwin"
+bus=org.joetoo.KWinBridge
+path=/org/joetoo/KWinBridge
+
+# ShellCheck thinks varlist is unused, but it is in script_header_joetoo
+# shellcheck disable=SC2034
+varlist="PN BUILD user rlv.project_dir bus path"
+
+usage() {
+    local msg=""
+    msg="${BWon}usage: ${BGon}${PN}${Boff} [test|notest]"
+    j_msg "-${notice}" -p "$msg"
+    msg="${BYon}Note: ${BGon}${PN}${Boff}${Con} will ask if you want to test, if you supply no arg${Boff}"
+    j_msg "-${notice}" -p "$msg"
+}
+
+[ $# -gt 1 ] && { usage; exit 1 ; }
+[[ "$1" == "-h" ]] && { usage; exit 0 ; }
+
+separator "$(hostname)" "${PN}-${BUILD}"
+show_config
+j_msg "-${notice}" -mp ""
+
+old_dir="$(pwd)"
+j_msg "-${notice}" -p "PWD: [$PWD]"
+j_msg "-${notice}" -p -n "Moving to [$project_dir]"
+cd "$project_dir" || die "failed to cd $project_dir"
+right_status 0
+
+j_msg "-${notice}" -p -n "Stopping joetoo-kwind service"
+rc-service -U joetoo-kwind stop &>/dev/null
+right_status $? "$notice"
+
+j_msg "-${notice}" -p "Running ./tools/joetoo-kwind-install-poc --update"
+./tools/joetoo-kwind-install-poc --update | sed 's|^|    |'
+j_msg "-${notice}" -p -n "Update done; result:"
+handle_result $? "" "" "$notice"
+
+j_msg "-${notice}" -p -n "Unloading joetoo-bridge KWin script"
+output=$(qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript joetoo-bridge)
+handle_result $? "$output" "$output" "$notice"
+
+j_msg "-${notice}" -p -n "Starting joetoo-kwind service"
+rc-service -U joetoo-kwind start >/dev/null 2>&1 | sed 's|^|    |'
+right_status $? "$notice"
+
+if [ $# -eq 0 ]; then
+    answer=""
+    yn_prompt "${BYon}Do you want to run python and javascript unit tests?${Boff}"
+else
+    answer="$1"
+fi
+case "${answer:0:1}" in
+    [yYtT])
+        j_msg "-${notice}" -p "Running python unit tests"
+        python3 -m unittest discover -s tests -p 'test_*.py' -v
+        j_msg "-${notice}" -p -n "python tests done; result:"
+        handle_result $? "" "" "$notice"
+        j_msg "-${notice}" -p "Running javascript unit tests"
+        node --test tests/test_*.js
+        j_msg "-${notice}" -p -n "javascript tests done; result:"
+        handle_result $? "" "" "$notice"
+        ;;
+    [nN]) ;;  # no testing
+    *) die "invalid answer in $PN" 2 ;;
+esac
+
+j_msg "-${notice}" -p "Running ./tools/joetoo-kwind-install-poc --check"
+./tools/joetoo-kwind-install-poc --check | sed 's|^|    |'
+j_msg "-${notice}" -p -n "Checks done; result:"
+handle_result $? "" "" "$notice"
+
+separator "${PN}-${BUILD}" "(available methods)"
+qdbus6 "$bus" "$path" | sed 's|^|    |'
+
+j_msg "-${notice}" -p -n "Returning to [$old_dir]"
+cd "$old_dir" || die "failed to cd $old_dir"
+right_status 0
+
+j_msg "-${notice}" -mp ""
+j_msg "-${notice}" -p "Make these abbreviation assignments to facilitate use of these methods"
+j_msg "-${notice}" -mp "bus=\"$bus\""
+j_msg "-${notice}" -mp "path=\"$path\""
+j_msg "-${notice}" -mp ""
+j_msg "-${notice}" -p "Example: qdbus6 \$bus \$path \$bus.ListManaged | jq ."
