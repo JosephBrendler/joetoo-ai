@@ -207,18 +207,24 @@ j_msg "-${notice}" -p "${BYon}Do this for each --${Boff}"
 j_msg "-${notice}" -p " - ${Con}find target section in the debug console and take screenshots"
 j_msg "-${notice}" -p " - ${Con}move the new screenshots to the associated subdir in rdp_proof_dir"
 phases=(
-    '1. Credential dialog visible'
-    '2. Credential - debug console evidence collected'
-    '3. Credential dialog still visible after 20+ seconds'
-    '4. Credentials submitted; credential dialog dismissed'
-    '5. Viewer window visible'
-    '6. Viewer - debug console evidence collected'
-    '7. GDM greeter visible'
-    '8. GDM login submitted'
-    '9. Authenticated GNOME desktop usable'
-    '10. GNOME desktop -  debug console evidence collected'
-    '11. User logged out of GNOME desktop'
-    '12. Viewer closed normally'
+    '1. RDP connection failed before authentication'
+    '2. RDP viewer reconnection attempted'
+    '3. NLA Credential dialog visible'
+    '4. NLA Credential - debug console evidence collected'
+    '5. NLA Credential dialog still visible after 20+ seconds'
+    '6. NLA Credential dialog cancelled by user'
+    '7. NLA Credentials submitted; NLA Credential dialog dismissed'
+    '8. NLA Credentials rejected; retry offered'
+    '9. NLA Credentials RE-submitted'
+    '10. NLA Credentials accepted'
+    '11. Viewer window visible'
+    '12. Viewer - debug console evidence collected'
+    '13. GDM greeter visible'
+    '14. GDM login submitted'
+    '15. Authenticated GNOME desktop usable'
+    '16. GNOME desktop -  debug console evidence collected'
+    '17. User logged out of GNOME desktop'
+    '18. Viewer closed normally'
 )
 
 for phase in "${phases[@]}"; do
@@ -244,6 +250,10 @@ for phase in "${phases[@]}"; do
         *) die "invalid response in $PN" 1;;
     esac
 done
+
+# now collect from the user a text statement describing the outcome
+msg="$(read -rE -p "Describe outcome in one line: "; printf '%s\n' "$REPLY")" 
+record_phase "$msg"
 
 # Wait for the SDL FreeRDP process to exit.
 j_msg "-${notice}" -p -n "Waiting for SDL FreeRDP PID [$rdp_pid] to exit"
