@@ -70,7 +70,7 @@ fi
 case "${answer:0:1}" in
     [yYtT])
         j_msg "-${notice}" -p "Running python unit tests"
-        python3 -m unittest discover -s tests -p 'test_*.py'
+        python3 -m unittest discover -s tests -p 'test_*.py' -v
         j_msg "-${notice}" -p -n "python tests done; result:"
         handle_result $? "" "" "$notice"
         j_msg "-${notice}" -p "Running javascript unit tests"

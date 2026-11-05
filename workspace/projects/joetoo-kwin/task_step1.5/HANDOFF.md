@@ -239,6 +239,10 @@ Native SFTP-specific active-desktop focus, new/changed host-key prompts, uncommo
 | 34 | Codex (2026-11-03), 1.5c.5c server-first RDP feasibility | Clean approved branch `task/joetoo-kwin-step1.5c5c-rdp-feasibility`, HEAD `76dba5b968f38d2c80ff178c932046c6023ae664`; merge base/local main/origin-main `d8aad51e9ea894c49c78bdb7a8a5bea8b83df550` (merged PR 27). Only Section 5 of this HANDOFF edited | Read current architecture/scope, installed package metadata/manpages, exact cached KRDC/KRDP/FreeRDP/Remmina release sources, selected profile ancestry and primary upstream docs. Remmina 1.4.43 installation confirmed. No clients/services launched, credentials read, remote sessions opened or regressions rerun; documentation whitespace/scope/link checks only | Findings below are inspected/documented capabilities, not native RDP acceptance. Recommend Ubuntu GNOME Remote Login pilot, then KRDC versus SDL3 FreeRDP comparison; retain accepted TigerVNC-over-SSH. Maintainer chooses pilot host/session/trust policy and separately authorizes native tests before any executable RDP contract. No installation, configuration, protected-repository edits or publication. |
 | 35 | Codex (2026-11-03), focused RDP PKI/Windows/Shadow follow-up | Preserved pending iteration 34 and findings on unchanged `76dba5b`; only agent-owned Section 5 updated | Inspected exact FreeRDP 3.32.1 Shadow/crypto source, installed build flags and PAM/X11 linkage, plus primary GNOME/xrdp/Microsoft documentation. No keys, credentials, clients or services accessed; no native RDP result inferred | Existing private CA workflow is maintainer-reported. Added certificate integration, Windows login versus attended sharing, SAM-NLA versus TLS/PAM and Shadow X11 limits. `raspiubuntu401` test remains in progress elsewhere; maintainer reviews findings and supplies pilot outcomes before an implementation contract. |
 | 36 | Codex (2026-11-04), Ubuntu GNOME native evidence review | Clean approved RDP feasibility branch, HEAD `3eb587bda2a4d50ab6985df728a7db012b8e509f`; reviewed maintainer report and all 17 supporting screenshots read-only; updated only Section 5 | Recorded six working mode/client combinations, Remmina reconnect persistence, separate service credentials/certificates, session-state limitations and qualified TLS observations. Screenshot 01 duplicates KRDC screenshot 04 despite its FreeRDP label. Evidence files preserved byte-for-byte; documentation checks only, no native operations or tests | Recommend GNOME Remote Login as demonstrated Ubuntu baseline and KRDC as provisional managed-client candidate; retain xfreerdp diagnostic and Remmina working alternatives. PKI, fresh-boot login, Windows, Wayland client and positive KWin identity evidence remain outstanding; implementation still requires maintainer decision. |
+| 37 | Codex (2026-11-04), SDL lifecycle diagnostic, temporary evidence transport and maintainer runner | Approved RDP feasibility branch at `6922be6d9f17621e5be41b92284932ab01b623b7`. Preserved four untracked diagnostic/receiver candidates; added `tools/joetoo-rdp-diagnostic-run.sh`, extended existing receiver tests, and updated only this agent-owned record | Prior transport iteration: 424 Python / 91 JavaScript PASS. Current: 58 focused Python (42 receiver + 16 wrapper), 440 full Python and 91 JavaScript PASS; no failures/skips. Bash syntax, ShellCheck, Python compilation and whitespace checks PASS. Wrapper execution used disposable fake header/KWin/receiver/proof tools only | Observation-only candidate, not RDP enrollment. Persisted readiness precedes proof; bounded export, receipts and sender confirmation remain separate from lifecycle coverage. Partial evidence retained; no production changes or native sessions. Maintainer reviews candidate and decides when to run the focused X11 diagnostic; native execution/publication remain gated. |
+| 38 | Codex (2026-11-05), native capture analysis and authorized X11 activity-property experiment | Same approved branch/HEAD; preserved all existing edits. Added only `tools/joetoo-rdp-x11-use.py`, its isolated KWin linkage companion `.js`, and `tests/test_rdp_x11_use.py`/`.js`, plus this row | Maintainer's accessible X11 capture independently verified: 175 transport records, intact capture, both temporary and persistent marked windows activated and shared recorded birth attributes. New tests: 26 Python / 6 JS focused PASS, including real libxcb against an isolated socketpair peer; full repeat 466 Python under umask 077 / 97 JS PASS without skips. An earlier full run had one existing wrapper-fixture assertion failure; isolated and full reruns passed, cause unestablished. Python/JS syntax and whitespace PASS | Source-inspected SDL 3.4.18 updates per-window `_NET_WM_USER_TIME` after input presses; companion observes property changes only, never key/button events or text. Establish baseline, continue waiting through absent/unchanged values, latch once per candidate, then remove its property watch. Private bounded evidence, pinned KWin sender, exact live getClient XID/UUID links, generation/late-event guards and explicit unlinked/discovery-gap counts; no automatic role conclusion. Candidate native run is maintainer-operated and pending. Registration and placement remain separate proposed decisions; no production enrollment/control or protected-tool changes. Native Wayland requires separate follow-up because its internal lastUsageSerial is not exposed by the inspected scripting API. |
+| 39 | Codex (2026-11-05), authorized single-command X11 diagnostic integration | Same approved branch/HEAD; changed the existing candidate runner, X11 observer, their two Python test files, and this row only; prior candidate and maintainer edits preserved | 66 receiver/runner and 30 X11 focused Python PASS; 478 full Python under umask 077 and 97 JavaScript PASS, no failures/skips. Bash syntax, ShellCheck, Python compilation and tracked/new-file whitespace PASS. Combined execution used disposable fake header/KWin/proof/X11 services only | Runner gates proof on main persisted readiness plus live, pinned-owner X11 status after a confirmed linker round trip. Both evidence sets share one private diagnostic archive. Finish/owned-child cleanup/UUID-linker unload and independent verification are integrated; X11 failure still drains primary export and cannot yield combined success. Native Wayland defaults to X11 companion disabled, explicitly qualified. Unchanged proof still raises Debug Console: no screenshots required; skip screenshot-evidence claims and distinguish logout from manual viewer close. New private Status inspection does not renew linker liveness. Mock startup allowance is three seconds for combined fixtures; production startup default remains fifteen seconds. Maintainer runs/reviews the combined X11 capture next. No native execution, production changes, publication or automatic enrollment by Codex. |
+| 40 | Codex (2026-11-05), authorized native-Wayland identity contract investigation | Same approved branch/HEAD; preserved maintainer organization and revised twelve proof phases. Only two focused cases added to the existing diagnostic JS tests, plus this agent-owned record and findings below; no diagnostic runtime or production changes | 92 existing Python ownership/observation/viewer regressions PASS; 44 focused JS and 99 full JS PASS, no skips/failures. Two isolated in-memory broker reproductions: an unmarked credential alone can register under the generic evaluator; credential plus marked viewer is ambiguous. Persistent Wayland archive inspected in place, no native sessions or raw evidence copies | Native marker/PID/new-UUID contract is feasible for a verified native backend and bounded single-desktop profile; generic PID selector and fifteen-second lease cannot be reused unchanged. No interaction observer, new service or resident instrumentation required for this investigation. Proposed SDL-specific predicate must reject role ambiguity and retain complete lifecycle/source guards; registration remains separate from post-login placement. Negative/retry/reconnect native behavior and security/production contracts remain gated. See findings and artifact accounting below; maintainer reviews and operates the bounded native check. |
 
 
 
@@ -468,6 +472,177 @@ Next actor: maintainer selects the client and login/sharing scope, then authoriz
 any further identity/security validation and a bounded endpoint/credential/readiness
 contract. No implementation, new network session or host administration occurred
 in this review; no FreeRDP legacy Wayland unmask is recommended.
+
+
+### SDL lifecycle diagnostic and temporary transport — candidate, 2026-11-04
+
+Subsequent explicit maintainer conversation authorization covers the standalone
+observational diagnostic, temporary receiver, focused tests and the new
+maintainer-run wrapper. This is diagnostic preparation, not authorization for
+Codex-operated GUI/network activity or production RDP integration. The earlier
+research and native-evidence records above remain historical; this entry does
+not repeat interoperability testing or declare a desktop-role discriminator.
+
+- [Observer](../tools/joetoo-rdp-window-diagnostic.js) records bounded, sequenced
+  creation/property/activation/move-resize/removal evidence. Unsupported fields
+  are explicit. Captions are filtered to the generated proof marker; unrelated
+  captions, input contents, credentials and certificate contents are excluded.
+  Activation does not establish operator intent; a marker invoked from Konsole
+  records Konsole at invocation, not the previously active viewer.
+- The reported startx session routes KWin descriptors to tty1; no usable current
+  console-log capture was established. Exact local KWin X11 6.7.5/Qt 6.11.2
+  sources were inspected. KWin's asynchronous `callDBus` suppresses JavaScript
+  callbacks on D-Bus errors, requiring an independent acknowledgement deadline.
+- [Temporary receiver](../tools/joetoo-rdp-diagnostic-receiver.py) uses the existing
+  Unix session bus, pins KWin's unique owner/UID, and writes private exclusive
+  evidence. `Append` acknowledges only after persistence. `Probe` confirms
+  observing/draining and receipt of the end acknowledgement; `Status` exposes
+  readiness/completion. Independent verification checks framing, sequences,
+  schema, hashes and receipts. No production bridge method or service changes.
+- Observation defaults to 1,800 seconds; `RDP_DIAG_SECONDS=2400` is preserved
+  when supplied. Default buffer: 1,024 events. ACK/liveness defaults: 3,000/5,000
+  ms. Export ceiling is derived as `(maxRecords + 3) * ackTimeoutMs` (3,081,000 ms
+  by default), covering the full buffer plus drain/end/sender confirmation;
+  an individual missing acknowledgement fails after 3 seconds. Full-buffer
+  disposable persistence/verification took 2.35 seconds in the prior full run;
+  that is not native throughput evidence. Overflow and interrupted output remain
+  explicitly incomplete. `transport_complete`, `sender_confirmed_end_ack` and
+  `internal_capture_intact` are distinct; native lifecycle coverage is unassessed.
+- [Maintainer runner](../tools/joetoo-rdp-diagnostic-run.sh) uses the installed
+  joetoo header/AAR and pseudo-boolean conventions, confirms the native action,
+  creates private storage, owns one receiver, refuses an existing diagnostic,
+  gates the unchanged proof on persisted readiness, exports/verifies, unloads
+  only its diagnostic, stops only its receiver and archives without overwrite.
+  Python/Linux pidfd support is required for automatic receiver cleanup; failure
+  retains evidence and reports the remaining receiver. Viewer/remote-session
+  termination is never a cleanup action. Failure/interruption retains partial
+  evidence and cannot count as acceptance. The existing proof archive remains
+  separate; correlate its PID/title/phase markers/screenshots with diagnostic
+  UUID/event history. No changes to either maintainer-owned tool.
+
+Current headless evidence: **440 Python / 91 JavaScript passed**, no skips or
+failures; 58 focused receiver/wrapper tests passed. Wrapper paths ran with fake
+KWin, receiver, header and proof commands in disposable fixtures, including
+readiness/cancellation/failure/interrupt cleanup, unrelated-process preservation,
+argument arrays, reporting faults and archive non-overwrite. The real proof and
+restart tools were neither executed nor modified. All five tool/test candidate
+files are untracked; this HANDOFF update is uncommitted. No native diagnostic,
+RDP connection, service restart, deployment or publication was performed.
+
+**Next actor:** maintainer reviews the candidate and authorizes/runs one gmki91
+X11 temporary-to-persistent lifecycle capture. A valid receipt does not establish
+coverage through authentication, GDM, GNOME and viewer removal; check those
+against the proof evidence before deciding whether a repeatable role discriminator
+exists. Evaluate X11 findings before selecting additional Wayland observations.
+Production enrollment, fixed-delay selection and any RDP executor remain outside
+this diagnostic increment. Commit/push/PR/native execution require their separate
+maintainer decisions.
+
+### Native-Wayland SDL viewer identity — investigation, 2026-11-05
+
+**Determination (proposed contract, not production acceptance):** existing KWin
+observations can support a native-Wayland SDL-specific marker/PID/new-UUID role
+predicate without input observation. The generic managed-launch selector cannot
+be used unchanged: `_poll_correlation()` selects by PID, treats the title only as
+a hint, and uses a fifteen-second deadline. Isolated broker fixtures reproduced
+registration of an unmarked credential window alone and ambiguity when that
+window coexisted with the marked viewer. These are limitations for the proposed
+SDL reuse, not defects in the accepted Konsole/Dolphin contract.
+
+**Maintainer-native provenance:** the original capture was
+`/tmp/joetoo-rdp-stage-a.uXBwj934`; its verified current private archive is
+`~/.local/share/joetoo-ai/rdp-evidence/joetoo-rdp-stage-a.uXBwj934.tbz2`, SHA-256
+`b7e392d31c7bf00b814453ee896270418c52938444fc3d24a9822e723e790c4b`.
+It reports native `wayland`, PID 1763685, credential UUID
+`17559f9c-a1c8-4607-8b8b-d2b19e90ebd3` without the launch marker (events 11–762),
+and viewer UUID `70f7e047-fe6f-4fd4-b363-58bf0e6130ca` with the exact marker at
+addition 763 through removal 1236. The 2,403 samples showed one observer source
+and one viewer-caption value; before/after inventories were synchronized.
+First samples containing credential addition and viewer addition were more than
+five minutes apart: the generic fifteen-second lease does not cover this proof.
+These sample times are not exact window-creation timestamps. Client exit 2 and
+remote logout/disconnect remain separate from identity. Raw archives were read
+in place, not copied into this public repository.
+
+**Inspected source:** local distfiles FreeRDP 3.32.1 (`client/SDL/SDL3/`),
+SDL 3.4.18 (`src/video/wayland/SDL_waylandwindow.c`, `SDL_video.c`, `SDL_hints.c`),
+and KWin 6.7.5 (`waylandwindow.cpp`, `xdgshellwindow.cpp`, `wayland_server.cpp`).
+`SdlContext::windowTitle()/createWindows()` passes the configured title into
+`SdlWindow` creation properties; credential/retry dialogs use their own titles.
+SDL publishes the title through xdg-shell or libdecor. KWin propagates title
+changes and gets the native client PID from its Wayland connection. Its native
+window-added path waits for mapping/painting readiness after a configured
+surface commit with a buffer; this supports stronger lifecycle evidence than raw
+SDL object creation, but does not prove indefinite persistence or remote login.
+Source supports multiple display windows, so restrict the first recipe to a
+single desktop window, excluding multimonitor/RemoteApp behavior. Installed
+versions on q552u01 should be recorded during the remaining check; the old
+archive's client log does not establish its exact FreeRDP/SDL versions.
+
+**Necessary broker-owned predicate:** arm before launch; pin live process,
+request nonce, source/revision and baseline; require a new normal-window UUID
+with a complete added lifecycle, matching launched PID/application and exact
+marker. A late caption can qualify that same UUID; a changed-only snapshot
+cannot establish creation. Track marker-bearing UUIDs as existing observations
+arrive, including competitors that subsequently disappear; coalesced latest
+snapshots alone cannot establish absence of competitors. More than one eligible
+UUID, history loss, source replacement, expiry/cancellation, process mismatch or
+exit, lost marker before commit, disappearance or prior ownership must not
+register. There is no last-window or quiet-delay role rule and no required
+predecessor. Treat other token-bearing/decorated candidates conservatively as
+competitors rather than silently ignoring them. After registration, a new UUID
+requires a new authorized transaction; never silently retarget the record.
+Existing `WindowRegistry.register_match()` supplies source/PID/live-UUID/baseline
+and duplicate-ownership checks, not the missing SDL role predicate.
+
+The backend must actually be native Wayland, not inferred from the Plasma
+session. SDL3's canonical child-only override is `SDL_VIDEO_DRIVER=wayland`;
+source selects only that backend when it is the sole requested driver. The old
+`SDL_VIDEODRIVER` spelling is a fallback alias. Confirm `backend.txt` on native
+runs. No backend/session configuration was changed here. Existing resident
+caption signals and the standalone diagnostic suffice; normal-caption evidence
+is already captured by the diagnostic. No additional input observer is proposed.
+
+**Remaining bounded native check:** use the existing runner on q552u01 with
+`SDL_VIDEO_DRIVER=wayland RDP_DIAG_X11_USE=` and the revised proof, no screenshots.
+Across short separate captures, cancel naturally presented credentials, inspect
+one failed/retried NLA attempt only if account policy safely permits it, and
+check a maintainer-chosen connection failure. Include one delayed successful
+attempt while an unrelated SDL viewer remains open to verify distinct PID/nonce
+and UUID histories. Use a naturally available retry/reconnect path if available;
+do not change networking/services/credentials to manufacture it. Record an
+unexercised reconnect as untested and reject UUID replacement in the initial
+contract. Any marked auxiliary window or multiple eligible UUIDs invalidates
+title-only selection for that path. No enrollment occurs in these diagnostics.
+Wrong GDM credentials inside an already valid viewer are a remote-login outcome,
+not evidence that the local viewer is the wrong window. The twelve proof phases
+now separate observation, screenshots, graphical login, logout and viewer close.
+
+**Smallest subsequent implementation, subject to separate authorization:** a
+client-specific native-Wayland role policy in the existing broker-controlled
+viewer transaction plus its local launcher adapter, configurable readiness
+bounds and focused regressions. Preserve registry and generic launch semantics;
+no new observation service. Both `SubmitManagedLaunch()` and the VNC-specific
+`CompleteManagedViewer()` currently couple registration with placement, so they
+cannot implement placement-held registration unchanged. Start with a narrowly
+reviewed registration-only SDL slice; separately approve the post-login release
+and exact-UUID placement contract. Title identity does not prove GDM login,
+remote-session health or production certificate validation.
+
+**Checks and artifacts:** 92 Python regressions; 44 focused / 99 full JavaScript
+regressions passed without skips. Two diagnostic-only test additions cover late
+caption arrival/loss and simultaneous same-PID marked UUIDs, preserving privacy
+and no-selection behavior. No production selector has been implemented or
+validated by those tests. New `/tmp/step1.5c5c-wayland-identity-*.log` files are
+reproducible/disposable once these results are retained. Unique new assertions
+remain in `tests/test_rdp_window_diagnostic.js`; findings are retained here.
+Existing untracked diagnostic source/tests remain **retain**, pending review and
+publication. Private native tarballs are **retain** in the verified `rdp-evidence`
+directory; original `/tmp` captures are not presumed retained. Older review
+patches already represented by current source are redundant exports; other old
+intermediates and maintainer-organized generators/backups were not reassessed
+for disposal and remain **needs maintainer review**. No relocation, deletion,
+new archive, broad cleanup or new standalone report was performed.
 
 ## 6. Current gate — Step 1.5c.5b TigerVNC-over-SSH contract review
 

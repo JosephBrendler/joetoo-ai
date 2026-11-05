@@ -171,6 +171,7 @@ class InstallerIntegrationTests(unittest.TestCase):
                 self.assertEqual(module.stat().st_mtime_ns, before)
                 self.assertEqual(self.conf.read_bytes(), config)
                 module.write_bytes(original)
+                module.chmod(0o644)
                 self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
 
     def test_upgrade_six_file_install_adds_vnc_modules_and_is_content_idempotent(self):

@@ -207,14 +207,18 @@ j_msg "-${notice}" -p "${BYon}Do this for each --${Boff}"
 j_msg "-${notice}" -p " - ${Con}find target section in the debug console and take screenshots"
 j_msg "-${notice}" -p " - ${Con}move the new screenshots to the associated subdir in rdp_proof_dir"
 phases=(
-    '1. Credential dialog visible; debug console evidence collected'
-    '2. Credential dialog still visible after 20+ seconds'
-    '3. Credentials submitted; credential dialog dismissed'
-    '4. Viewer window visible; debug console evidence collected'
-    '5. GDM greeter visible'
-    '6. GDM login submitted'
-    '7. Authenticated GNOME desktop usable; debug console evidence collected'
-    '8. Viewer closed normally'
+    '1. Credential dialog visible'
+    '2. Credential - debug console evidence collected'
+    '3. Credential dialog still visible after 20+ seconds'
+    '4. Credentials submitted; credential dialog dismissed'
+    '5. Viewer window visible'
+    '6. Viewer - debug console evidence collected'
+    '7. GDM greeter visible'
+    '8. GDM login submitted'
+    '9. Authenticated GNOME desktop usable'
+    '10. GNOME desktop -  debug console evidence collected'
+    '11. User logged out of GNOME desktop'
+    '12. Viewer closed normally'
 )
 
 for phase in "${phases[@]}"; do
