@@ -121,6 +121,8 @@ desktop_session_list=(
     "2|dolphin|local||under"
     "2|konsole|local|btop|over"
     "4|dolphin|local|Documents|panel"
+    "4|dolphin|sftp|sftp://joe@nuthuvia.brendler/etc|panel"
+    "4|vncviewer|ssh|ssh://joe@yorsqui/display/2|panel"
 )
 # End of configuration
 ```
