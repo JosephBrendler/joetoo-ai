@@ -414,8 +414,9 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.3** | Original local Bash, `ssh_wrapper` and unavailable SSH placeholders | Accepted |
 | **1.5c.4** | Desktop capacity, Dolphin local launches, XDG discovery, application-independent `under/panel/over`, grouped launches, bounded initial stack/focus | Accepted, merged; native X11/Wayland closure evidence in Step 1.5 task |
 | **1.5c.5a** | Dolphin SFTP integration | Accepted and closed; managed X11/Wayland launches and remote browsing demonstrated; optional post-confirmation NSS/TCP advisories remain non-enforcing diagnostics |
-| **1.5c.5b** | TigerVNC viewer over authenticated SSH | Implemented on task branch; native X11 and Wayland/XWayland viewer identification, UUID placement, SSH tunnel and teardown checks passed; milestone PR/merge pending |
-| **1.5c.5c** | Comparative RDP feasibility and decision | Evaluate installed candidates, security, capability and user value; an accepted secure/reliable RDP workflow may supersede legacy VNC as primary graphical remote access; implementation requires explicit follow-up authorization |
+| **1.5c.5b** | TigerVNC viewer over authenticated SSH | Accepted and retained as a peer-level managed graphical remote-access option; native X11 and Wayland/XWayland identity, placement, SSH tunnel and teardown demonstrated |
+| **1.5c.5c** | Comparative RDP feasibility and decision | **Closed:** affirmative feasibility accepted; SDL3 FreeRDP selected for first RDP implementation, not as a preferred/default client |
+| **1.5c.5d** | Managed RDP implementation, beginning with SDL3 FreeRDP | **Planned, incrementally gated:** native-Wayland registration first, then X11 identity, placement release, configured integration and security/native acceptance; no runtime tranche yet authorized |
 | **1.5d** | add -L, -l; conduct integrated native X11/Wayland regression of completed Step 1.5 capabilities | Cross-feature ownership, Busy, focus, desktop membership, failures and completeness; not an implicit feature-development gate |
 | **1.6** | Managed `-a`, `-d`, `-x` | Selective safe close, never unrelated windows |
 | **1.7** | Runtime JSON checkpoint and same-session reconciliation | Broker restart and exact source/UUID reconciliation |
@@ -497,26 +498,40 @@ stacking and usable remote desktop on `gmki91` X11 and `q552u01` Wayland,
 and confirmed viewer and dedicated SSH process teardown after normal close.
 These observations do not imply that the program independently verifies VNC
 authentication or remote usability, nor that all failure or host-key paths
-have been tested. The task branch awaits maintainer review and merge;
-Step 1.5c.5c RDP evaluation remains a separate authorization gate.
+have been tested. The accepted TigerVNC-over-SSH implementation remains a
+fully supported peer of subsequent managed remote-desktop clients.
 
-**1.5c.5c — RDP feasibility and decision (third).** Deliberately evaluate
-*each viable graphical remote-desktop client candidate* identified in the
-original 1.5c.4 inventory and the now-installed toolset; at minimum assess
-KRDC, Remmina (if available), and appropriate installed or installable
-FreeRDP graphical clients. For each candidate report exact executable and
-installed-version evidence per test host, KWin X11/Wayland integration,
-RDP/TLS negotiation and certificate verification, authentication and
-credential exposure, invocation/endpoint grammar, PID→UUID identity,
-window/dialog lifecycle, usability, feature support, failure reporting,
-operational complexity, and security advantages/disadvantages. Compare them
-with the TigerVNC-over-SSH workflow and present a ranked, reasoned
-implementation recommendation. **A reliable and demonstrably secure RDP
-client is the preferred prospective primary graphical remote-access method;
-legacy TigerVNC-over-SSH remains a compatibility/fallback candidate.**
-Feasibility assessment does not itself authorize RDP implementation.
-If the maintainer approves an RDP implementation, define a separate bounded
-candidate and native acceptance gate before integrating it.
+**1.5c.5c — RDP feasibility and decision (third; closed).** The maintainer
+accepted an affirmative RDP feasibility determination following comparison
+of KRDC, Remmina and relevant FreeRDP graphical clients and native X11 and
+Wayland SDL FreeRDP investigations. Native-Wayland evidence includes a marked
+viewer distinct from the credential dialog, cancellation, failed NLA,
+connection refusal and coexistence with an unrelated viewer. X11 evidence
+shows successive marker-bearing temporary and persistent windows, requiring
+a separate positive role discriminator. These are observation results, not
+production registration, placement or certificate-trust acceptance. Fresh-client
+connection does not establish in-process reconnect or remote-session identity.
+See the [Step 1.5 HANDOFF](task_step1.5/HANDOFF.md) for evidence and limitations.
+
+**Peer-capability policy.** Managed TigerVNC-over-SSH, the planned SDL3
+FreeRDP client and any later authorized RDP clients are independent,
+user-selectable peers; their implementation order confers no primary,
+secondary, default or fallback status. Retain TigerVNC functionality.
+Each client needs its own validated invocation, endpoint/security and
+window-role contract, layered on shared KWin UUID ownership and placement
+invariants. Do not impose SDL-specific identity assumptions on other clients
+or introduce a speculative general-purpose client plugin framework.
+
+**1.5c.5d — Managed RDP implementation (next, separately gated).** Implement
+SDL3 FreeRDP first. Begin with native-Wayland broker-owned, registration-only
+identity (launch claim, PID, application identity, exact generated title
+marker, complete new-window lifecycle and exact KWin UUID). Reject ambiguous,
+missing or stale evidence; never silently adopt a replacement UUID. Add X11
+viewer-role discrimination separately, then controlled placement release,
+configured `desktop_session_list` integration and full security/native
+acceptance. Registration must not by itself place a viewer or imply GDM login,
+remote usability or validated server identity. Each increment requires its
+own HANDOFF authorization; the first source tranche is **not yet authorized**.
 
 **Implementation scope:** The [Step 1.5c.5 implementation scope](task_step1.5/Step1.5c5_implementation_scope.md) elaborates the proposed remote-access increments and their acceptance gates. It does not supersede this architecture or independently authorize implementation; current task permissions are controlled by the separately approved `HANDOFF.md`.
 
@@ -537,17 +552,14 @@ reported `mc` build has `-sftp`; do not assume SFTP support without
 rebuilding or inspecting capabilities. Availability does **not** establish
 that these candidates belong in the immediate implementation tranche.
 
-**Security and sequencing:** RDP transport protection and certificate
-verification must be evaluated as properties of a concrete client and
-configured connection, not inferred from the word `tls`. Existing network
-reachability/VPN assumptions are not a substitute for verifying SSH tunnel
-binding or TLS trust where those properties are part of the chosen contract.
-Do not require a new generic VPN detector. Inspect both X11 and Wayland and
-report differences. First approve 1.5c.5a interface+implementation, then
-inspect/approve 1.5c.5b, then undertake the 1.5c.5c comparison and obtain a
-**new** decision for any RDP implementation. Step 1.5d begins after the
-selected integrations are accepted or explicitly deferred. No new HANDOFF
-permissions are granted by this document.
+**Security and sequencing:** The affirmative feasibility result does not
+establish production TLS certificate trust, server identity or secure
+negotiation policy. Validate those for each client/endpoint; do not infer
+them from `tls`, NLA or successful remote use, and do not weaken certificate
+checks to obtain a passing demonstration. Preserve TigerVNC's independently
+approved SSH tunnel/host-key protections. Step 1.5c.5d precedes the
+separately authorized Step 1.5d integrated X11/Wayland regression; this
+architecture grants no source, native-execution or publication authority.
 
 ### Phase 2 — Optimization and refinement
 
@@ -571,8 +583,9 @@ tasks rather than broad speculative rewrites.
 - What are the exact syntax and selection safeguards for `-a` and `-S`?
 - Which remote-resource endpoint grammars, connection/credential policies and
   application lifecycles best fit each 1.5c.5 candidate?
-- Can any RDP client provide verified secure negotiation, convenient workflow
-  and robust managed-window identity under both KWin backends?
+- How should each managed RDP client establish production certificate trust,
+  exact window-role identity and authorized placement release on each KWin
+  backend, without claiming remote desktop readiness from local window state?
 - Should joetoo's Bash planner be evaluated for non-KWin environments such as
   LXQt/GNOME in a separately authorized later effort? This is not a version 1
   portability commitment.

@@ -6,7 +6,7 @@ in `joetoo-ai`, not yet the packaged version 1 application. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for accepted and proposed product contracts,
 including the next remote-access tranche.
 
-## Current status — November 3, 2026
+## Current status — November 5, 2026
 
 **Step 1.5c.4 is accepted and merged.** The tested implementation baseline was
 `a3c50fc`, with maintainers' X11 and Wayland acceptance and subsequent
@@ -25,8 +25,8 @@ recorded in the [Step 1.5 handoff](task_step1.5/HANDOFF.md) and
 [SFTP acceptance record](task_step1.5/step1.5c5a-native-acceptance.md).
 The advisory does not itself establish SSH authentication or SFTP usability.
 
-**Step 1.5c.5b TigerVNC-over-SSH is implemented and natively validated on the
-task branch.** On `gmki91` (X11), the maintainer verified an authenticated
+**Step 1.5c.5b TigerVNC-over-SSH is accepted and merged.** On `gmki91`
+(X11), the maintainer verified an authenticated
 remote viewer, precise managed UUID identity and placement, a separate managed
 Dolphin window, stacking, loopback-only SSH forwarding, and viewer/tunnel
 teardown. On `q552u01` (Wayland/XWayland), a fresh one-window launch placed
@@ -44,16 +44,38 @@ paths: 171 on `gmki91`, 135 on `q552u01`, retained under the user state
 its tests are retained only in `archive/aborted_backup_migration_tool/`;
 no real migration run was performed.
 
-**Milestone publication remains pending maintainer PR review and merge.**
-Step 1.5c.5c (RDP comparison) and Step 1.5d (broader integration regression)
-remain separate future gates. This status report does not authorize either.
+**Step 1.5c.5c — CLOSED. Affirmative RDP feasibility accepted by the
+maintainer.** [PR #28](https://github.com/JosephBrendler/joetoo-ai/pull/28)
+merged at `be8eb276`. GNOME Remote Login interoperability and client comparison
+led to SDL3 FreeRDP as the first RDP implementation target. Native-Wayland
+evidence distinguishes the launch-owned marked viewer from credentials and
+covers cancellation, failed NLA, connection failure and an unrelated viewer.
+X11 has a distinct temporary/persistent marked-window lifecycle requiring its
+own role discriminator. The existing KWin observations support the Wayland
+identity contract without an additional user-interaction observer. Detailed
+provenance and qualifications remain in the [handoff](task_step1.5/HANDOFF.md).
+
+**Next: Step 1.5c.5d — Managed RDP Implementation.** The maintainer has selected
+this direction; only this documentation preparation/review is authorized now.
+The proposed first executable increment is native-Wayland SDL registration
+without placement, after recipe, security and interface contract approval.
+Production RDP registration/placement is not accepted. In-process reconnect
+remains untested; a fresh client connection does not prove server-session
+continuity, and viewer identity does not prove GDM login or desktop readiness.
+TLS certificate trust and server identity remain separate implementation gates.
+
+Managed TigerVNC-over-SSH and planned managed RDP clients are independent,
+user-selectable peer capabilities. SDL implementation order expresses engineering
+sequencing, with no default preference or fallback hierarchy. Future clients
+require separately approved contracts and are not promised by this milestone.
 
 | Increment | Work | Status |
 | --- | --- | --- |
 | 1.5c.5a | Dolphin SFTP, safe URI handling and independent placement/remote outcomes | Accepted and closed; X11/Wayland native evidence |
-| 1.5c.5b | Positively identified TigerVNC viewer over owned authenticated SSH tunnel | Implemented; X11/Wayland native acceptance checks passed; milestone PR pending |
-| 1.5c.5c | Compare RDP graphical clients and decide future remote-desktop preference | Future feasibility and separate authorization |
-| 1.5d | Integrated regression of accepted Step 1.5 features | Future separate gate |
+| 1.5c.5b | Positively identified TigerVNC viewer over owned authenticated SSH tunnel | Accepted and merged; supported peer capability |
+| 1.5c.5c | RDP interoperability, client comparison and viewer identity feasibility | Closed; affirmative maintainer decision; PR #28 |
+| 1.5c.5d | Add managed SDL RDP, preserving independent client contracts | Documentation preparation only; each source increment needs approval |
+| 1.5d | Broader integrated regression and `-L`/`-l` | Subsequent separate gate |
 
 **Implementation scope:** See [Step 1.5c.5 implementation scope and outline](task_step1.5/Step1.5c5_implementation_scope.md) for detailed objectives, program/mode contracts, investigation requirements, security constraints, acceptance criteria, and increment boundaries. The scope document guides planning and review; implementation authorization and execution controls are established separately in `task_step1.5/HANDOFF.md`.
 
@@ -130,14 +152,14 @@ managed-launch implementations.
 | FileZilla | 3.70.6 | SFTP/FTP GUI behavior and identity/delegation |
 | Nautilus | 49.6-r1 | GNOME file navigation and remote URI support |
 | Nemo | 6.6.4 | Cinnamon file navigation, Wayland behavior |
-| KRDC | 26.04.3 (`rdp`, `ssh`, `vnc`, `wayland` USE enabled) | RDP/VNC graphical client, potential principal RDP candidate |
+| KRDC | 26.04.3 (`rdp`, `ssh`, `vnc`, `wayland` USE enabled) | RDP/VNC client evaluated during feasibility; possible separately authorized managed integration |
 | Midnight Commander (`mc`) | 4.8.33 (`-sftp`) | **Text-mode** file manager; assess utility through a managed terminal, not as a separate KWin GUI |
 
-Also investigate appropriate Remmina and FreeRDP graphical executables
-when available. Do **not** infer they are installed merely from candidate
-status. A secure, reliably integrated RDP client would likely be preferred
-over the maintainer's functioning but legacy TigerVNC-over-SSH workflow;
-that preference is conditional on actual comparative evidence.
+The subsequent RDP comparison included KRDC, Remmina, `xfreerdp` and SDL
+FreeRDP; see the [GNOME interoperability study](task_step1.5/README_gnome_remote_desktop.md)
+and [feasibility record](task_step1.5/HANDOFF.md). Installed candidates are not
+automatically managed capabilities. Each future integration needs its own
+launch, identity, lifecycle and security contract; TigerVNC remains fully supported.
 
 ## Development and validation platforms
 

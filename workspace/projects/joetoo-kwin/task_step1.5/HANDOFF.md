@@ -1,23 +1,35 @@
 # Step 1.5c.5 — remote resources and graphical remote desktops: active task handoff
 
-**Current maintainer status (2026-11-03):** Step 1.5c.5a (Dolphin SFTP)
-is accepted and closed. The maintainer reports that Step 1.5c.5b
-(TigerVNC-over-SSH) has been merged following native X11 and Wayland/XWayland
-acceptance. **Step 1.5c.5c (RDP feasibility and decision) is now authorized
-for read-only, server-first research and a comparative recommendation only.**
-RDP client/server implementation, package or service changes, native network
-connections and Step 1.5d integrated regression are not authorized here.
-Earlier VNC investigation directions below are historical.
+**Current maintainer decision (2026-11-05): Step 1.5c.5c — CLOSED.**
+Affirmative RDP feasibility is accepted. Steps 1.5c.5a (Dolphin SFTP) and
+1.5c.5b (TigerVNC-over-SSH) remain accepted and merged. PR #28 merged the RDP
+feasibility work at `be8eb276407aed11c0353ccc789983631d0184df`.
+
+**Active task:** one coordinated documentation edit/review iteration closing
+1.5c.5c and preparing **Step 1.5c.5d — Managed RDP Implementation**. Managed
+RDP is the accepted development direction, SDL3 FreeRDP the first implementation
+target by engineering sequence. Supported TigerVNC-over-SSH and future approved
+RDP implementations are independently selectable peers; no preference/default
+or fallback hierarchy is established. **No executable increment is authorized
+now.** Section 6 is the canonical approval envelope and next-actor record.
+Earlier investigation directions and iteration rows below are historical.
 
 **Canonical location:** `workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md`.
 
-**Active 1.5c.5c branch (maintainer-approved):**
-`task/joetoo-kwin-step1.5c5c-rdp-feasibility`. Begin from the maintainer's
-merged, current `main` after verifying `git status`, remote tracking and the
-actual base SHA. This document does not assert that the new branch exists
-or that its changes have been committed/pushed. The historical 1.5c.5b
-branch was `task/joetoo-kwin-step1.5c5-remote-access` (local review merge
-`949268e`; published archive commit `c5d7f28`). SFTP/advisory baseline:
+**Verified review baseline:** current branch `main`; HEAD, local `main`, cached
+`origin/main` and live GitHub `main` all resolve to
+`be8eb276407aed11c0353ccc789983631d0184df`; worktree initially clean. Connected
+GitHub metadata confirms PR #28 merged at the same SHA. Local fetch could not
+write read-only Git metadata; SSH/HTTPS remote queries were unavailable locally,
+so remote verification used the GitHub connector without changing refs.
+
+**Proposed implementation branch, not created:**
+`task/joetoo-kwin-step1.5c5d-rdp-implementation`, to start from accepted updated
+`main` after documentation review/publication and separate source authorization.
+Do not create a branch, stage, commit, push or merge during this iteration.
+Historical feasibility branch: `task/joetoo-kwin-step1.5c5c-rdp-feasibility`;
+VNC branch: `task/joetoo-kwin-step1.5c5-remote-access` (local review merge
+`949268e`, published archive commit `c5d7f28`). SFTP/advisory baseline:
 `b8120f7c9aad608e26b5c147561a5eee5756a8e9`.
 
 **Authoritative design:** [ARCHITECTURE.md](../ARCHITECTURE.md) and [Step 1.5c.5 approved scope](Step1.5c5_implementation_scope.md). This HANDOFF grants operational permissions only within that design. Governing root/workspace/project `AGENTS.md` and applicable `.agents/skills/` take precedence. `joetoo` and `joetoo-upstream` retain their read-only/advisory restrictions for AI.
@@ -25,7 +37,7 @@ branch was `task/joetoo-kwin-step1.5c5-remote-access` (local review merge
 **Accepted 1.5c.5a evidence:** [Native acceptance record](step1.5c5a-native-acceptance.md), [implementation review](step1.5c5a-review.md) and [URI/security contract](step1.5c5a-dolphin-sftp-contract.md). See Section 4 for corrected interpretation of the previously omitted X11 positive advisory. Earlier Step 1.5c.4 acceptance remains in [its native closure](step1.5c4-native-acceptance.md).
 
 **Step 1.5c.5b native closeout evidence (maintainer, 2026-11-03;
-formal milestone merge pending):** `gmki91` X11 registered and placed the
+subsequently accepted and merged):** `gmki91` X11 registered and placed the
 actual TigerVNC desktop viewer, verified coexistence with an independently
 managed Dolphin window and stacking, observed loopback-only SSH forwarding,
 and confirmed viewer/SSH teardown. `q552u01` Wayland/XWayland used the final
@@ -51,7 +63,11 @@ not a pending migration requirement. The active installer preserves replaced
 versions in its separate content-addressed archive and avoids new timestamped
 backups in production directories.
 
-## Active authorization — Step 1.5c.5c RDP feasibility (2026-11-03)
+## Historical authorization — Step 1.5c.5c RDP feasibility (2026-11-03)
+
+The following records the original investigation authorization, not current
+execution authority. The closeout and peer-capability decision above supersede
+its former ranking language; Section 6 governs the next task.
 
 **Maintainer decision and motivation.** Investigate RDP starting with the
 *server/session model*, then clients. The maintainer has working
@@ -141,14 +157,13 @@ publication. Step 1.5d remains a separate gate.
 
 **Original proposed success criteria (now assessed for the bounded Step 1.5c.4 candidate):** configuration dry run present the "plan" but never launches; configured windows register and reach expected geometry; SSH placeholder is not classified as a placement failure; existing windows remain unaffected; X11/Wayland native results agree; window/session-state race condition risks are mitigated; headless regression suite remains green.
 
-**Current phase:** Steps 1.5c.5a and 1.5c.5b are accepted; the maintainer
-reports the 1.5c.5b branch merged. Step 1.5c.5c is authorized for read-only,
-server-first RDP feasibility and comparative decision support as defined in
-the active authorization above. Earlier VNC investigation and execution
-directions below document historical approvals, not present instructions.
-No RDP implementation, native RDP connection, or Step 1.5d work is authorized.
+**Current phase:** 1.5c.5a, 1.5c.5b and 1.5c.5c are closed. Only the
+1.5c.5d documentation edit/review described above is authorized. The VNC
+investigation controls in Sections 2–4 are retained as history, not live tasking.
+Section 6 prepares explicit Increment 1 approval, with Increment 0 prerequisites;
+1.5d remains the subsequent broader integrated regression and `-L`/`-l` gate.
 
-## 2. Required inspection for Step 1.5c.5b
+## 2. Historical required inspection for Step 1.5c.5b
 
 The next actor (Codex) shall establish the **actual branch, HEAD, worktree differences and governing policies** before editing anything. Inspect current CLI/planner/launch-functions, broker/resident contracts, relevant regression harnesses, template, architecture and scope. Read the relevant joetoo SSH/header, announce–act–report and pseudo-boolean skills and verify any invoked utility against source rather than relying on remembered behavior.
 
@@ -156,7 +171,7 @@ Inspect the [archived VNC proof of concept](../archive/tigervnc-poc/vnc-via-ssh-
 
 The first deliverable is a **concise POC-to-managed-launch contract presented in the conversation or a focused update to this existing HANDOFF**, not a new planning document. It must establish: accepted `DESKTOP|vncviewer|ssh|TARGET[|LAYER]` grammar; validated viewer and SSH argument arrays; whether TigerVNC `-via` or explicitly managed `ssh -L` is actually appropriate; SSH host identity/authentication; loopback-only VNC forwarding; destination/display/port handling; port collisions and readiness; viewer process/window identity versus transient dialogs; child/tunnel lifetime, cancellation and teardown; timeout and truthful independent connection/placement reporting. Identify unknowns explicitly.
 
-## 3. Roles, sequencing and review
+## 3. Historical roles, sequencing and review
 
 **Maintainer:** approves the concrete VNC endpoint and tunnel/security contract, controls native X11/Wayland and network/credential testing, and alone stages/commits/pushes/merges/deploys changes or modifies protected joetoo repositories. Approval to investigate 1.5c.5b is granted here; approval of **specific executable implementation details** remains a separate decision after inspecting the working launcher.
 
@@ -166,7 +181,7 @@ The first deliverable is a **concise POC-to-managed-launch contract presented in
 
 **Reporting discipline:** Keep historical Section 5 rows intact. Append one concise iteration row only for material new work. Reuse this HANDOFF, existing acceptance/review documents and source tests; **do not create another standalone planning, review or acceptance document without a maintainer request**.
 
-## 4. Acceptance closure and active execution controls
+## 4. Acceptance closure and historical execution controls
 
 ### Step 1.5c.5a — accepted and closed
 
@@ -176,7 +191,7 @@ The maintainer's native X11 (`gmki91`) and Wayland (`q552u01`) results establish
 
 Native SFTP-specific active-desktop focus, new/changed host-key prompts, uncommon URI/profile precedence and some IPv6/nonstandard endpoints remain explicitly **NOT TESTED**, not presumed PASS. These optional edges do not block this bounded acceptance; preserve safe host-key verification and report any later incompatibility. The final `SFTP NSS/TCP advisory observation` debug-label refinement is a non-behavioral change reported by Codex; verify its commit/diff independently before treating it as published. Step 1.5c.5a is closed regardless of its historical task-record wording; no additional SFTP implementation is authorized here.
 
-### Step 1.5c.5b — currently authorized
+### Step 1.5c.5b — historical investigation authorization
 
 | Control | Active rule |
 | --- | --- |
@@ -247,6 +262,7 @@ Native SFTP-specific active-desktop focus, new/changed host-key prompts, uncommo
 | 42 | Codex (2026-11-05), corrected Wayland proof correlation | Same `272a81d` baseline; only this agent-owned row added. Corrected proof read in memory at `/tmp/joetoo-rdp-stage-a.mceCcUHo.tbz2`, SHA-256 `2154bc110be0a3e2c5e37cf2b926ae391a036d9b22e4849fde544e9840aac9ad` | Proof matches diagnostic PID 2027485/token; native wayland, 609 synchronized samples from one source, marked viewer added at broker event 175 and removed 176 with unchanged UUID/marker. Credential events 66/174 have no marker. Maintainer recorded usable GNOME desktop and logout, skipping manual viewer close; client exit 2 remains independent. Full retained broker lifecycle has five baseline windows and four additions/removals: the two SDL windows and two unclassified normal windows with PID -1, empty class/desktop identity and no marker | Two unclassified UUIDs account for the broad diagnostic coverage concern: one has Debug Console caption evidence; the unnamed small window is not further attributed. Neither supplied the PID/class/marker evidence required by the proposed contract. Preserve capture_intact=false; do not retroactively relabel the global diagnostic PASS. This corroborates the positive native-Wayland viewer distinction without another positive run or a new input observer; cancellation/failure/retry/ambiguity acceptance remains pending. Both corrected proof and diagnostic tarballs currently exist only in verified `/tmp` locations, not in the known persistent `rdp-evidence` directory: retain privately. No new temporary artifact, extraction, relocation, runtime changes or native execution by Codex. |
 | 43 | Codex (2026-11-05), eight additional maintainer proof archives reviewed read-only | Preserved maintainer eighteen-phase/outcome edits in `tools/rdp_identity-security_proof.sh`; only this agent-owned row added. Archives read in memory, no extraction or native execution | All eight backend.txt files explicitly report x11; all filtered proof samples synchronized to one source per run, observer exit 0 and empty observation error logs. `l0TjJ6r5` cancellation, `fvriEFLc` bad NLA password and `o5Ejba3p` connection failure each retain two new unmarked UUIDs and no marked target lifecycle. Client logs respectively report CONNECT_CANCELLED, LOGON_FAILURE and CONNECT_FAILED. `jNG7fbvJ` is the aborted/mistargeted failure run. `bPd7yxLi` and `UlffFIYm` retain distinct old/new PID/UUID histories; old viewer survives the first and is removed during the second. Successful runs again contain two successive same-PID exact-marker UUIDs. `MiECZCsg` / `NLq2gMGj` are separate launches (PIDs 590564 / 596213), each with new UUIDs | Useful X11 failure/concurrency/fresh-launch evidence, not native-Wayland negative acceptance, in-process reconnect, remote session-ID continuity or production registration tests. No retry was offered after bad NLA credentials; quicker second login alone does not establish remote session continuity. No additional input observer is justified by these results; the existing native-Wayland negative checks remain bounded as below, with no need to repeat its successful positive case. Retain all eight `/tmp/joetoo-rdp-stage-a.{l0TjJ6r5,fvriEFLc,o5Ejba3p,jNG7fbvJ,bPd7yxLi,UlffFIYm,MiECZCsg,NLq2gMGj}.tbz2` archives privately; matching names absent from known persistent rdp-evidence directory. Mistargeted archive needs maintainer disposition, not automatic deletion. No new scratch artifacts, runtime changes, headless tests, relocation or publication this iteration. |
 | 44 | Codex (2026-11-05), five q552u01 native-Wayland follow-up proofs | Clean maintainer baseline `cb84248d1b523717389595d84f426f42f578107b` on existing task branch. Only this agent-owned row added; archives inspected in memory | All five backend.txt files explicitly report wayland. All 2,714 samples synchronized to one source; observer exits 0, error logs empty, managed inventories unchanged. `GxoO58Q5`: cancel, one unmarked credential UUID, CONNECT_CANCELLED. `BRKiefxH`: failed NLA, one unmarked credential UUID, LOGON_FAILURE, no retry offered. `txX5XzJf`: CONNECT_FAILED, no target-PID window in retained observations/lifecycle. `kaZuBRs6`: PID 2402545, unmarked credential events 521/588 and exact-marker viewer `eaf88abb-9f0a-4b4c-9f5d-c0b712957b20` events 767/769; all 523 current viewer samples retain marker. Unrelated PID 2401889 / UUID d2e6b937-29d9-4b6a-9106-5c3e0eccb651 remains present before/after. `4DytUoCv`: fresh PID 2411692, unmarked credential 805/856; exact-marker viewer `5c6fbcd4-7ac6-4677-9516-f2a8cf6f620a` 857/858, all 236 viewer samples retain marker. Maintainer reports 478 Python / 99 JS PASS | Requested cancellation, failed-NLA, connection-failure and unrelated-viewer native checks now support the bounded single-desktop marker/PID/new-UUID contract without a separate interaction observer. No marked temporary predecessor appeared in these Wayland histories. Test E is a fresh client launch; remote-session resumption remains inferred, in-process reconnect untested and UUID replacement unsupported. Direct proof runs do not establish standalone diagnostic transport completeness or production enrollment acceptance. Next actor: maintainer reviews feasibility and separately authorizes a focused SDL registration-only implementation; generic PID-only launch selection remains unsuitable. Retain private `/tmp/joetoo-rdp-stage-a.{GxoO58Q5,BRKiefxH,txX5XzJf,kaZuBRs6,4DytUoCv}.tbz2`; matching names absent from known persistent archive directory. No scratch artifacts, runtime edits, headless reruns, native execution, relocation or publication by Codex. |
+| 45 | Codex coordinated documentation edit/review (2026-11-05), with architecture/scope collaborator | Initially clean main at `be8eb276407aed11c0353ccc789983631d0184df`; local/cached refs and live GitHub main match, PR 28 merged. Changed only README, ARCHITECTURE, this HANDOFF, implementation scope and narrow GNOME-study status note | Complete five-file diff inspected and cross-reviewed; whitespace PASS, balanced code fences, 121 Markdown links inspected with no new local path/anchor errors; existing archive/screenshot link gaps untouched. Iterations 43/44 byte-preserved. No runtime/headless/native tests executed; 478 Python / 99 JS results remain historical maintainer evidence | Closed feasibility by explicit maintainer decision; peer-capability model accepted; 1.5c.5d increments 0–5 and proposed Increment 1 source/test envelope prepared, no executable authority granted. Recipe/security/bounds/registration-only interface await prerequisite approval. Maintainer reviews documentation/first-tranche authority, publishes accepted main, creates or authorizes branch, then explicitly starts Increment 1. No runtime edits, Git mutations/publication, new temporary artifacts or evidence relocation. |
 
 
 
@@ -544,6 +560,11 @@ maintainer decisions.
 
 ### Native-Wayland SDL viewer identity — investigation, 2026-11-05
 
+The following records the investigation and proposed contract at iteration 40.
+Iterations 41–44 and Section 6 record subsequent evidence and the maintainer's
+feasibility closeout; the remaining-test plan below is historical, not a request
+to repeat completed native runs. Source implementation still needs approval.
+
 **Determination (proposed contract, not production acceptance):** existing KWin
 observations can support a native-Wayland SDL-specific marker/PID/new-UUID role
 predicate without input observation. The generic managed-launch selector cannot
@@ -648,10 +669,130 @@ intermediates and maintainer-organized generators/backups were not reassessed
 for disposal and remain **needs maintainer review**. No relocation, deletion,
 new archive, broad cleanup or new standalone report was performed.
 
-## 6. Current gate — Step 1.5c.5b TigerVNC-over-SSH contract review
+## 6. Current gate — 1.5c.5d documentation review and proposed Increment 1 approval
 
-**Completed gate:** Step 1.5c.5a SFTP is accepted and closed. Both X11 and Wayland have positive managed SFTP and independently observed remote browsing; the two-stage advisory has positive/negative native evidence, including the previously overlooked X11 `resolved/open/22` run. Remaining edge cases stay documented as limitations, not blockers.
+### Feasibility closeout and evidence
 
-**Active gate:** inspect the actual working KDE launcher and archived `vnc-via-ssh-launch`; recommend a safe VNC-over-authenticated-SSH invocation with loopback-only forwarding, reliable actual viewer-window PID/UUID correlation, conservative timeout/partial-failure behavior and deterministic tunnel cleanup. Distinguish GUI launch, transport establishment, server authentication and window placement. No network or graphical actions by Codex; no executable code changes until the specific contract is approved.
+**Step 1.5c.5c — CLOSED. Affirmative feasibility determination accepted by the
+maintainer.** GNOME Remote Login interoperability and the comparative client
+investigation support adding managed RDP. SDL3 FreeRDP is the first implementation
+target, without ranking it above TigerVNC or future RDP integrations. The
+[GNOME study](README_gnome_remote_desktop.md) records server/client behavior;
+Section 5 preserves the subsequent source analysis and native identity evidence.
 
-**Next actor:** Codex performs that narrowly authorized read-only investigation and reports findings for the maintainer's next decision, using existing task records rather than creating more `.md` files. The maintainer supplies the live KDE launcher command if absent from the repository, reviews the proposed contract, and authorizes or defers implementation. RDP and integrated Step 1.5d remain separately gated. Commit/merge/deployment authority remains with the maintainer.
+Iterations 43/44 remain unchanged. The five native-Wayland proof archives
+`joetoo-rdp-stage-a.{GxoO58Q5,BRKiefxH,txX5XzJf,kaZuBRs6,4DytUoCv}.tbz2`
+cover cancellation, failed NLA, connection refusal, unrelated-viewer coexistence
+and fresh-client connection. They corroborate the original `uXBwj934` and
+corrected `mceCcUHo` native-Wayland histories: unmarked credentials and one
+launch-owned viewer with exact marker at addition and retained UUID/marker.
+Prior X11 investigations, including `Fm6EBB11` / `7DZi9Tfj` and iteration 43,
+show a distinct temporary/persistent same-PID, same-marker lifecycle requiring a
+separate X11 role discriminator. Private raw archives are not part of this
+public documentation package. Original `/tmp` paths and verified persistent
+archive references remain in Section 5; no new relocation is assumed here.
+
+Strict launch/PID/application/marker/UUID/lifecycle correlation is feasible on
+the tested native-Wayland profile using existing KWin observations, with no
+demonstrated need for another interaction observer. This closes feasibility,
+**not production managed RDP registration or placement acceptance**. In-process
+reconnect is untested and may remain unsupported; fresh client connection does
+not establish server-session continuity. Viewer identity proves neither GDM
+login nor usable GNOME desktop. Certificate trust, endpoint identity and allowed
+security negotiation remain independent production requirements. Historical
+maintainer-run **478 Python / 99 JavaScript PASS** results are preserved, not
+rerun or claimed as validation of this documentation iteration.
+
+### Authority and first-tranche envelope
+
+| Status | Boundary |
+| --- | --- |
+| Decided | Feasibility closed; managed RDP direction accepted; SDL first by implementation chronology; VNC and future approved clients remain user-selectable peers. |
+| Authorized now | Coordinated edits/review of README, ARCHITECTURE, this HANDOFF and the existing scope document, with narrowly necessary status corrections; documentation checks only. |
+| Prepared for explicit approval | **Step 1.5c.5d, Increment 1 — Native-Wayland SDL FreeRDP Registration Only**, subject to the Increment 0 executable-contract gate. No source authority is granted by this draft. |
+| Not authorized | Runtime edits, branch creation, later increments, native execution/deployment, staging, commit, push, PR, merge or protected-repository modifications. |
+
+The complete Increment 0–5 sequence and acceptance gates belong in
+[the implementation scope](Step1.5c5_implementation_scope.md). Before executable
+work, the maintainer must approve Increment 0's exact executable/recipe and
+endpoint grammar, credential/TLS/NLA policy, configurable bounds, transaction
+states and any additive interface. Preserve
+`DESKTOP|PROGRAM|MODE|TARGET[|LAYER]`; exact SDL values remain **unapproved**.
+Do not derive a production trust policy from proof-script arguments. No passwords
+in config/argv/logs, unverified certificate exceptions or insecure defaults.
+
+**Inspected code envelope proposed for Increment 1 (not yet editable):**
+
+| Path / interface | Proposed bounded role |
+| --- | --- |
+| `libexec/joetoo-kwind` | Broker-owned SDL registration state/evaluator, using `_new_correlation()`, `_begin_managed_launch()`, `_set_managed_launch_pid()`, existing observation ingestion and expiry patterns as resources. Preserve generic `_poll_correlation()` and TigerVNC semantics; do not route SDL through their current selectors unchanged. |
+| Local SDL adapter: proposed new `libexec/joetoo_kwin_rdp_launch.py` | Minimal safe argv, child-only native-Wayland selection, actual launched PID handoff and bounded registration result/lifecycle reporting. This path is proposed, not an existing facility. Entry point and wire contract require Increment 0 approval; no configured `-o` dispatch yet. |
+| `libexec/joetoo_kwin_registry.py` and `joetoo-kwin-resident.js` | Reuse `WindowRegistry.begin_launch()/mark_running()/register_match()/finish_failed()` and current added/caption/source observations. Read-only by default for this tranche; stop if a modification is necessary. |
+| Existing `tests/test_step1_3a.py`, `tests/test_step1_3b.py`, `tests/test_step1_4b_broker.py`, `tests/test_vnc_broker.py`, `tests/test_vnc_launch.py` | Reuse headless broker loader/observation fixtures and regression coverage; narrowly extend associated fixtures only if needed. Proposed new `tests/test_rdp_broker.py` and `tests/test_rdp_launch.py` hold SDL-specific cases. |
+| `joetoo-kwin-template.conf` and existing task documentation | Only approved configurable RDP bounds and minimal contract/test instructions. No public recipe values until approved; no changes to VNC defaults. |
+
+Existing `SubmitManagedLaunch()/SetManagedLaunchPid()/PollManagedLaunch()` and
+TigerVNC-specific `SubmitManagedViewerLaunch()/TakeManagedViewer()/CompleteManagedViewer()`
+are actual interfaces, **not a preapproved SDL wire contract**. Generic and VNC
+completion paths currently couple registration to placement. Increment 0 must
+resolve a registration-only adapter/broker entry and terminal response without
+changing those semantics. Any specific additive D-Bus change must be reviewed
+and approved before implementation; this task does not invent its name/signature.
+Installer/deployment changes are outside this first envelope. If safe standalone
+execution requires additional files or interface authority, stop for review.
+
+**Required registration behavior:** arm before spawning; capture synchronized
+source, event floor and existing-window baseline; issue a unique exact marker;
+bind actual child PID/application identity; qualify only a new live normal UUID
+with complete added evidence. A late marker qualifies only that observed UUID.
+Retain competing candidate history, including disappeared competitors; do not
+use only the latest coalesced snapshot. Reject missing/lost marker, ambiguity,
+history loss, source/PID mismatch, disappearance, cancellation, exit and expiry.
+Exclude credentials, auxiliaries and existing unrelated viewers. Register once,
+never silently transfer ownership, and produce no placement request or mutation.
+No class/PID/title-only, last-window or fixed-delay role selection.
+
+**Headless approval criteria:** positive exact-UUID registration and late-caption
+arrival on the same UUID; credentials-only/cancel, wrong-NLA and refused-connection
+fixtures never register; marker loss, simultaneous or disappeared competitors,
+preexisting unrelated viewers, wrong class/PID/source, incomplete added history,
+process exit, cancellation, expiry and duplicate ownership fail closed. Test
+stable terminal results and inert late callbacks. Every path must assert no
+placement submission/desktop/geometry/stack/focus mutation. Exercise the real
+broker/registry through existing mocks; retain generic-launch and VNC regressions
+without modifying their behavior. Headless remote outcomes are simulations,
+not authentication evidence.
+
+**Native gate (maintainer only, after source review):** on q552u01 verify actual
+SDL `wayland` backend and registration of the observed persistent viewer UUID,
+with no placement or movement and credentials excluded, plus bounded cancellation,
+failed-NLA, refused-connection and unrelated-viewer checks. Synthetic ambiguity,
+history-loss and source failures remain headless tests; do not manufacture risky
+native failures. Record client/security versions and actual trust policy. No
+registration-only acceptance authorizes X11, placement or configured RDP launch.
+
+**Exclusions:** X11 SDL registration (Increment 2), placement release (3),
+configured `-o` integration (4), additional clients or plugin framework, VNC
+changes, client preference/fallback, in-process reconnect/UUID reassignment,
+multimonitor/RemoteApp, interaction observers, unrelated refactoring, unsafe
+certificate exceptions, protected-repository edits and agent native execution.
+Security/full regression acceptance is Increment 5; broader integration and
+`-L`/`-l` remain Step 1.5d.
+
+**Stop for maintainer review:** credentials cannot be reliably excluded; exact
+UUID or complete lifecycle evidence cannot be established; registration requires
+unsafe placement coupling; ambiguity can adopt another application; VNC/generic
+semantics would change; or any unapproved interface/security-policy change or
+file-envelope expansion is required.
+
+**Next actor and approval:** maintainer reviews this coordinated documentation
+diff and the proposed Increment 1 authority, resolves/approves the Increment 0
+contract before executable work, and publishes accepted documentation to main.
+The maintainer then creates the proposed branch from that accepted baseline (or
+separately authorizes its creation) and explicitly starts Increment 1. No later
+increment or publication authority is implied. Agents stop at this review gate.
+
+**Iteration artifact disposition:** retained work is the uncommitted documentation
+diff in the existing checkout; no new report, patch file or `/tmp` artifact was
+created. Existing private archives and historical intermediates were not moved,
+reassessed for disposal or copied into Git. Maintainer retains their disposition.
