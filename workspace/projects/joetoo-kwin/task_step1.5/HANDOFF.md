@@ -2,13 +2,11 @@
 
 **Active task:** Step **1.5c.5d, Increment 1** — native-Wayland SDL FreeRDP registration of the exact KWin viewer UUID, **without placement**.
 
-**Phase:** Registration-only private core and additive D-Bus development-interface candidate implemented. Maintainer verification progressing; Increment 1 is **not yet accepted**.
+**Phase:** Registration-only private core, additive D-Bus development interface and ten-component installer implemented. **Native Begin/Cancel smoke gate ACCEPTED by maintainer on 2026-11-06.** Development of the persistent SDL registration launcher is now authorized. Increment 1 is **not yet accepted**.
 
 **Branch:** `task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`
 
-**Current integration checkpoint:** `2938ec9` — local merge of current `origin/main` into the task branch, following implementation commits through `6dee4ce`. Verify actual HEAD and working-tree state at the beginning of each subsequent iteration; this checkpoint is not a permanent branch-head assertion.
-
-**Repository state:** The SDL candidate, associated tests, interface contract and maintainer changes to `tools/restart_joetoo-kwind` are committed on the task branch. Documentation from `main` through `9e6a061` has been integrated locally. The updated task branch still requires a push to `origin`.
+**Published checkpoint:** `2bb9c74` — committed, pushed to `origin`, and synchronized on `gmki91` and `q552u01`. Verify actual checkout and working-tree state before acting.
 
 ## Authoritative references
 
@@ -16,68 +14,59 @@
 | --- | --- |
 | Governing instructions | Repository-root, workspace and project `AGENTS.md`; `workspace/README.md` |
 | Product architecture | [ARCHITECTURE.md](../ARCHITECTURE.md) |
-| Detailed requirements, implementation increments and gates | [Step 1.5c.5 scope](Step1.5c5_implementation_scope.md), §5A |
+| Detailed requirements and incremental gates | [Step 1.5c.5 scope](Step1.5c5_implementation_scope.md), §5A |
 | Historical outcomes and decisions | [Task README](README.md) |
 | RDP feasibility and diagnostic findings | [Remote-desktop research](README_remote_desktop_research.md) |
-| Current SDL D-Bus contract and implementation evidence | [SDL interface contract](step1.5c5d-sdl-interface-contract.md), especially §5 and §6 |
+| SDL D-Bus contract and implementation evidence | [SDL interface contract](step1.5c5d-sdl-interface-contract.md), §§1–6; next evidence in §7 |
 
 ## Current authority and boundaries
 
-**Previously authorized:** Increment 1 native-Wayland registration-only implementation, four additive SDL development D-Bus methods, and bounded non-destructive headless tests.
+**Maintainer decision — 2026-11-06: ACCEPTED.** The q552u01 native Begin/Cancel smoke test satisfies its bounded acceptance gate. No further approval of that completed gate is pending.
 
-**Next proposed development task:** Maintainer validation of `tools/joetoo-kwind-install-poc` and maintainer-operated Begin/Cancel D-Bus smoke test.
+**Maintainer decision — 2026-11-06: AUTHORIZED.** Codex may implement and headlessly validate the smallest development-only persistent SDL registration launcher supporting Begin → direct SDL child → Bind → Poll/Cancel, within the existing four-method contract and approved process/FD provenance requirements.
 
-**Reserved decisions:** Any alternative caller-provenance mechanism, changed public signatures, production TLS/NLA or certificate policy, native SDL/RDP connection tests, X11 registration, window placement, configured RDP recipes, subsequent increments, production deployment and publication of the implementation to `main`.
+Authorized work includes focused launcher code, relevant headless tests and a concise §7 evidence update to the SDL interface contract. Codex must preserve existing generic/VNC behavior, current public D-Bus signatures and the accepted registration-only boundary. Any required expansion of source scope or security/interface design must be escalated.
 
-**Invariants:** Register only a positively verified, launch-owned native-Wayland viewer UUID. Fail closed on ambiguous, lost or contradictory evidence. Registration must never request desktop, geometry, stacking or focus changes. Existing generic and TigerVNC behavior remains unchanged.
+**Operational authority:** Headless, non-networked implementation/testing only. Native SDL execution, actual RDP connections, installation, service restarts and native Bind/UUID registration testing remain separately reserved for maintainer approval.
 
-**Stop/escalate:** Missing authorization, incomplete process/FD provenance, ambiguous KWin lifecycle, unexpected source changes, regression failures, new interface/security requirements or expansion into a reserved operational gate.
+**Reserved decisions:** Alternative caller provenance, changed public interfaces, production TLS/NLA/certificate policy, X11 registration, window placement, configured RDP recipes, later increments, production deployment and publication to `main`.
 
-## Latest result — maintainer validation, 2026-11-06
+**Invariants:** Positively verify the exact launch-owned native-Wayland viewer UUID. Fail closed on ambiguous or incomplete evidence. Never request desktop, geometry, stacking or focus changes in Increment 1. Preserve existing generic and TigerVNC behavior.
 
-**Codex implementation:** Four additive development methods are implemented:
+**Stop/escalate:** Missing or contradictory identity evidence; unapproved interface/security changes; unreliable SDL backend evidence; unexpected source changes; regression failures; or actions beyond authorized source/headless scope.
 
-- `BeginSdlRegistration`
-- `BindSdlRegistration`
-- `PollSdlRegistration`
-- `CancelSdlRegistration`
+## Latest result — maintainer verification, 2026-11-06
 
-The implementation and focused evidence are preserved in the committed task branch. Codex originally reported 97 focused Python, 575 full Python and 99 JavaScript tests passing.
+**Committed candidate:** `2bb9c74` includes the corrected ten-component installer, development-interface tests, persistent-connection Begin/Cancel smoke client and supporting documentation.
 
-**Maintainer regression verification on `gmki91`:**
+**gmki91:** 156 focused Python tests PASS. Installer update/check PASS; SDL adapter matches source, owned by `joe`, mode 0644. OpenRC service started; four SDL development methods exposed with expected signatures.
 
-- Python: **575 PASS**, including after the documentation merge.
-- JavaScript: **99 PASS**, including after the documentation merge.
-- `git diff --cached --check`: clean before completing the merge.
-- The merge was completed at `2938ec9`.
+**q552u01:** Fast-forward to `2bb9c74` PASS. 156 focused Python tests PASS. Ten-component installation/check PASS; adapter matches source with correct owner/mode. `/usr/bin/sdl-freerdp` available. All four development D-Bus signatures exposed.
 
-**Live D-Bus introspection on `gmki91`:** After the maintainer ran `tools/restart_joetoo-kwind`, all four SDL development methods appeared on `org.joetoo.KWinBridge`, with the expected signatures. This establishes method exposure, not successful live Begin/Bind/Poll/Cancel transaction execution.
+**Native Wayland Begin/Cancel smoke — PASS, ACCEPTED:**
 
-**D-Bus process-identity prerequisite on `q552u01`:** A read-only preflight in the existing non-root Plasma graphical session returned `ProcessFD`, `ProcessID`, `UnixUserID` and `UnixGroupIDs`, with UID and PID matching the caller. **ProcessFD is available on the tested session bus.** No broker installation or restart was needed for this preflight.
+- Executed locally in q552u01 Plasma/Konsole using one persistent D-Bus connection.
+- Two Begin/Cancel cycles completed.
+- Client returned `ok:true`, `cancelled_transactions:2`, `active_requests:0`, `managed_count:0` and `placement:"IDLE"`.
+- Broker owner and observation source unchanged; inventory remained synchronized.
+- Final registry: `request_count=2`, `failed=2`, `pending=0`, `running=0`, `succeeded=0`, `ambiguous=0`, `timeout=0`.
+- Both failed records are intentional cancellations, not failed smoke-test outcomes.
+- No SDL process spawned, remote connection initiated, viewer registered or placement requested.
 
-**Installer gap:** (pending maintainer verification) `tools/joetoo-kwind-install-poc` currently installs and checks the original ten managed files but does not manage `libexec/joetoo_kwin_rdp_launch.py`. Therefore the new D-Bus method signatures are exposed, but the complete SDL implementation has not yet been verified through the installed-user-service path.
+**Operational qualification:** An earlier q552u01 restart-wrapper invocation encountered a D-Bus session-address error and subsequently reported the user service stopped. Later direct local Wayland-session operations succeeded; a subsequent read-only check confirmed service started and a populated Unix session-bus address. Maintainer owns the separate wrapper correction.
 
-**Not yet verified:** Live Begin/Cancel transaction, Unix-FD marshalling, complete SDL child binding, actual native-Wayland viewer UUID registration, production TLS/NLA or certificate trust. No window placement or configured RDP capability has been accepted.
+**Remaining Increment 1 work:** Native Bind Unix-FD marshalling, direct SDL child/process/log provenance, timely verified `wayland` backend evidence and registration of the exact live KWin viewer UUID without placement. These are not established by the completed smoke test.
 
+Detailed implementation and test evidence resides in the SDL interface contract. Preserve §6 as historical preparation; record this accepted smoke milestone and ensuing launcher-development evidence concisely in §7.
 
-**Codex follow-up (2026-11-06):** installer/client candidate prepared; 156 focused,
-591 full Python and 99 JavaScript tests pass. Adapter now participates in the
-ten-file lifecycle; test-model/direct-discovery fixes are verified. Runtime and
-restart-wrapper sources are preserved. See [focused installer/smoke evidence](step1.5c5d-sdl-interface-contract.md#6-installer-integration-and-non-networked-smoke-preparation--2026-11-06).
-Maintainer review/approval of the corrected installer and non-networked
-Begin/Cancel procedure is next; no operational smoke test was run by Codex.
+## Next actor and authorized task
 
+**Codex — authorized now:** Implement and headlessly validate the bounded persistent SDL development launcher. Review the complete existing interface contract and source before editing. Do not introduce a configured RDP recipe, production endpoint/security policy or alternative identity mechanism.
 
-## Next actor and decision
+**Next handoff:** Codex returns the complete reviewable diff, actual headless test results, unresolved log/FD/lifecycle questions and a proposed maintainer-operated native SDL/Bind/UUID test procedure. No commit, push or native execution by Codex without separate approval.
 
-**Maintainer:** verification/wayland smoke test
-
-**Next acceptance gate:** Review the corrected installer and local D-Bus smoke-test procedure before operational execution. Actual native SDL registration and remote connection testing remain separate decisions.
-
-The successful `ProcessFD` preflight does not authorize the alternative self-pidfd design, which remains unnecessary for the tested host and unimplemented.
-
-No further implementation, native test or publication permission is implied by this dispatcher itself.
+**Next reserved acceptance gate:** Maintainer review and authorization of native SDL child launch, Bind and exact UUID registration on q552u01, still without placement. Increment 2 (X11), subsequent increments and publication remain outside this authorization.
 
 ---
 
-**Maintenance convention:** Keep this file limited to the current task, authorized scope, latest result and next decision. Record detailed implementation evidence in focused documents and durable milestones in the task README. Do not recreate the historical iteration table.
+**Maintenance convention:** Keep HANDOFF limited to current task, maintainer authority, latest result and next action. Detailed evidence belongs in focused documents and durable milestones in the task README. Do not recreate the historical iteration table.

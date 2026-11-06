@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Private SDL development adapter; no CLI, D-Bus API or configured recipe.
 
-The future approved launcher must arm the broker before spawning, then pass its
-actual child handle and this bounded log reader to _bind_rdp_process().
+The development launcher arms the broker before spawning, then binds its
+actual direct child and private stdout descriptor through the existing API.
 This module neither selects production security flags nor launches a connection.
 """
 import fcntl
@@ -69,20 +69,29 @@ def development_argv(host, port, username, marker):
 
 
 def development_environment(environment):
-    """Child-only driver selection; log evidence must still confirm the driver."""
+    """Child-only driver/log profile; observed backend evidence is still required.
+
+    FreeRDP 3.32.1 consumes these WLOG overrides before its SDL main. A
+    redirected appender, custom prefix or inherited filter can defeat the
+    bounded parser. Restore the known console layout, not a logging attestation
+    or a libc flush guarantee. Never alter the parent environment.
+    """
     result = dict(environment)
     result.pop('SDL_VIDEODRIVER', None)
     result['SDL_VIDEO_DRIVER'] = 'wayland'
+    for name in ('WLOG_APPENDER', 'WLOG_PREFIX', 'WLOG_FILTER', 'WLOG_LEVEL'):
+        result.pop(name, None)
+    result['WLOG_APPENDER'] = 'CONSOLE'
     return result
 
 
 class BackendEvidence:
     """Read a private regular child log, never a pipe or a raw log export.
 
-    The future launcher redirects its owned child to this 0600 regular file.
+    The development launcher redirects its owned child to this 0600 regular file.
     pread() keeps reader/writer offsets independent. Closing our duplicate never
     breaks a running viewer's output pipe or signals the child. The launcher
-    owns log retention and process lifetime; no native launcher is wired yet.
+    owns log retention and process lifetime; this reader never launches a child.
     """
     def __init__(self, process, log, bounds):
         self.limit = settings(bounds)['rdp_backend_log_byte_limit']

@@ -424,3 +424,212 @@ no-child/no-placement success, quiescence/introspection guards, missing ProcessF
 lost cancel reply, owner replacement and cleanup. Native service execution was
 not attempted. The next maintainer decision is approval of this installer/client
 candidate and the above bounded Begin/Cancel procedure before operational execution.
+
+## 7. Accepted smoke and persistent launcher candidate — 2026-11-06
+
+**Accepted maintainer evidence:** q552u01 at `2bb9c74` passed two native
+Begin/Cancel cycles: zero active requests/managed windows, unchanged owner/source,
+IDLE placement, and two intentional terminal cancellations. The maintainer has
+accepted that bounded gate and previously verified ProcessFD. The 156 focused
+checks and ten-component installation/signatures passed on both hosts. These
+are maintainer results, not native executions by Codex. §6 remains the earlier
+preparation record; its pending smoke decision is superseded by this acceptance.
+
+**Candidate baseline:** `2bb9c741d817ada9f3ab7577b9f37b73e4f2c7aa`, branch
+`task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`. Pre-existing maintainer
+changes to HANDOFF and the restart wrapper are preserved without agent edits.
+
+### Implemented ownership and lifetime
+
+`tools/joetoo-sdl-registration-launch.py` uses one explicit existing local Unix
+session-bus connection, pins the broker owner and checks all four signatures.
+It validates arguments/executable and synchronized/quiescent broker state, then
+Begins before directly spawning `/usr/bin/sdl-freerdp`. No shell, wrapper, path
+search, log-forwarding pipe or alternate executable is used. POSIX Python Popen
+waits for its exec error pipe before returning (`subprocess.py:1938–1949` on the
+inspected Python 3.14 installation); positive native child verification remains
+mandatory regardless of this source behavior.
+
+It retains a child pidfd, checks parent/executable, and Binds the actual PID plus
+a separately opened read-only UnixFd duplicate of the private stdout inode.
+The existing broker independently verifies bus ProcessFD, UID, parent, start
+identity, executable, environment, descriptor and full KWin lifecycle/UUID.
+Polling never supplies a chosen UUID or renews the Begin deadline. Reply IDs and
+registration-only result fields are checked; owner substitution/unknown IDs are
+errors. There is no reconnect/retry/UUID replacement path or placement call.
+
+SIGINT/SIGTERM request cancellation through ordinary control flow. Pending
+failure uses best-effort same-connection Cancel, then closes the connection even
+if a reply/ID is lost. A disconnected sender issues no further external call.
+The launcher stops/reaps only its direct child: retained pidfd TERM, bounded
+wait, pidfd KILL, bounded wait. The configurable call timeout (default 3000ms,
+100–30000ms) also bounds each cleanup wait. If child pidfd allocation fails before
+Bind, ordinary Popen cleanup is restricted to its still-owned unreaped direct
+child in this single-threaded launcher; no provenance fallback is offered to the
+broker. Cleanup failure is an error, never successful registration.
+
+After registration it reports the exact UUID/managed ID promptly and stays in
+the foreground supervising/reaping the child. Broker replacement/disconnection
+**after success** does not trigger child closure. Operator cancellation or log
+integrity/budget failure stops its own child; success never unregisters or
+transfers the UUID. Child exit status is reported separately; launcher exit 0
+means local registration occurred, not remote login/transport success. SIGKILL
+or host/process failure cannot guarantee user-space cleanup.
+
+Logs are created atomically at 0600 in a new 0700 temporary directory, retained
+on success and failure, never echoed or automatically removed. stdout and stderr
+share this regular file. Evidence reads remain capped by the existing byte
+budget. The supervisor checks metadata/size every configured poll interval,
+including after registration, and stops the child on excess. This is **not a
+hard filesystem quota**: writes can overshoot between checks/while stopping.
+No truncation or evidence synthesis hides that outcome. Private logs may contain
+endpoint/authentication context; retain them locally, outside public Git.
+
+### Logging qualification and proposed remedy boundary
+
+The matching FreeRDP 3.32.1 source cited in §6 confirms console DEBUG output to
+stdout, but its `fprintf` has no explicit flush. `wlog.c:117–167,742–760,885–900`
+and `Layout.c:404–441` establish inherited `WLOG_APPENDER`, `WLOG_FILTER`,
+`WLOG_LEVEL` and `WLOG_PREFIX` overrides. The narrow adapter change clears those
+four child-only overrides, explicitly selects `CONSOLE`, and retains the existing
+SDL DEBUG filter and canonical Wayland driver setting. The parent is unchanged.
+No TLS/NLA/certificate flag or parser acceptance is changed. Merging stderr into
+the same private stdout inode preserves diagnostics; it does not attest which
+stream emitted a line or make caller-writable evidence independent.
+
+**Still unverified:** timely visibility of the real backend line while SDL is
+alive with this regular-file redirection. Neither Popen `bufsize` nor flushing the
+parent's file flushes the child's libc stdout. A no-flush disposable-child test
+expires without registration; raising timeouts is not positive backend evidence.
+If native testing confirms buffering prevents registration, stop that gate.
+A minimal evidence-preserving remedy for **separate approval** is a validated
+root-owned `libstdbuf` preload into the direct SDL exec with `_STDBUF_O=L` (or 0),
+without a wrapper/pipe or inode change. Cached coreutils 9.12 `src/libstdbuf.c`
+implements `_STDBUF_O` with `setvbuf`; `src/stdbuf.c` injects LD_PRELOAD then
+execs. Library path/ownership, dependency and loader/trust implications require
+review; **no preload or stdbuf is implemented or approved here**. Do not substitute
+FILE/UDP logging, accept environment alone, fake/flush a backend line, or weaken
+process/UUID evidence. Timeliness remains a native gate, not a headless claim.
+
+### Proposed q552u01 procedure — requires maintainer approval before execution
+
+Use the existing non-root local Plasma/Konsole session. Review this diff first;
+update/check the installed adapter through the already approved maintainer-owned
+installation procedure. This candidate deliberately refuses an installed adapter
+whose bytes/UID/0644 mode differ from the checkout. No restart-wrapper repair or
+installation was performed by Codex. Keep other launch/move/restart activity idle.
+Use an unoccupied desktop/slot and a maintainer-approved endpoint/test account
+with acceptable existing certificate/negotiation behavior. This launcher provides
+no password argument, certificate exception or security-negotiation override.
+Stop on an unresolved trust/security prompt; this procedure grants no exception.
+
+In terminal A, after the reserved native authorization:
+
+```bash
+./tools/joetoo-kwind-install-poc --check
+rc-service -U joetoo-kwind status
+qdbus6 org.joetoo.KWinBridge /org/joetoo/KWinBridge
+read -r -p 'Approved test host: ' RDP_TEST_HOST
+read -r -p 'Test username (no password): ' RDP_TEST_USER
+python3 tools/joetoo-sdl-registration-launch.py "$RDP_TEST_HOST" "$RDP_TEST_USER" --desktop 1 --slot 1 --rdp-registration-timeout-ms 300000
+# End of commands
+
+```
+
+Expected (not yet observed natively): private evidence directory, actual child
+PID/start and request ID, then either a redacted failure or `registered` with exact
+UUID/managed ID, `placement:not_requested`, `remote_session:unverified`. Keep A
+alive. At the unmarked NLA dialog, leave it visible briefly and use terminal B:
+
+```bash
+bus=org.joetoo.KWinBridge
+path=/org/joetoo/KWinBridge
+qdbus6 "$bus" "$path" "$bus.RegistryStatus" | jq '{observation,placement_transaction,managed_count,request_counts}'
+qdbus6 "$bus" "$path" "$bus.ListManaged" | jq .
+read -r -p 'Child PID printed by launcher: ' RDP_TEST_PID
+ps -o pid=,ppid=,stat=,comm= -p "$RDP_TEST_PID"
+readlink "/proc/$RDP_TEST_PID/exe" "/proc/$RDP_TEST_PID/fd/1"
+# End of commands
+
+```
+
+Before an eligible viewer: no new managed entry, placement IDLE, synchronized
+source; PPID must be A's Python launcher and executable the approved SDL binary.
+Enter credentials only through SDL's own prompt. Once the real viewer appears,
+expect one exact registered UUID, never the credentials UUID. Use existing KWin
+Debug Console read-only inspection to compare viewer PID/application/exact marker
+and UUID with `GetManaged <managed_id>` observation. Compare desktop, geometry,
+stack/focus evidence before/after registration, allowing ordinary SDL/user-driven
+window creation/activation; no broker placement request is allowed. Viewer
+registration at GDM is sufficient here and proves no GNOME authentication.
+
+While the child remains alive, read only bounded backend evidence in terminal B:
+
+```bash
+read -r -p 'Evidence directory printed by launcher: ' RDP_TEST_EVIDENCE
+python3 - "$RDP_TEST_PID" "$RDP_TEST_EVIDENCE/stdout.log" <<'PYCODE'
+import json, sys
+from pathlib import Path
+from types import SimpleNamespace
+sys.path.insert(0, str(Path.home() / '.local/libexec'))
+from joetoo_kwin_rdp_launch import BackendEvidence
+with open(sys.argv[2], 'rb') as log:
+    reader = BackendEvidence(SimpleNamespace(pid=int(sys.argv[1])), log, {})
+    try:
+        print(json.dumps({'observed_backend': reader.read_backend()}))
+    finally:
+        reader.close()
+PYCODE
+# End of commands
+
+```
+
+Expect `wayland`; `null` means no complete accepted line yet. Keep raw logs private. Absence until process exit is failure of
+the timeliness gate, even if the line later appears. Do not use a second bus
+connection for Bind/Poll/Cancel; A alone owns those operations. Live FD marshalling
+and successful Bind are established only by this operational run, not by source.
+
+Close the viewer normally after collecting evidence; A must reap it and report
+child exit separately. Repeat fresh invocations for NLA cancellation, wrong NLA
+password, approved refused local endpoint and Ctrl-C while pending. Expect no
+new managed entry on those runs, no active pending/running transaction afterward,
+unchanged source/owner and IDLE placement. Leave an unrelated existing viewer
+open for a separate isolation check. Registered entries from the positive run
+may remain present/missing history; compare baseline IDs, not an assumed empty
+registry. Do not restart the broker to hide a failed cleanup. Read-only
+RegistryStatus/ListManaged/GetManaged must remain available. Any unexpected
+registration, source change, FD/backend/identity failure or placement ends the
+gate for maintainer review; no X11 or subsequent increment follows automatically.
+
+### Actual headless validation and review disposition
+
+- `PYTHONPATH=tests python3 -m unittest test_openrc_user_setup test_rdp_broker test_rdp_launch test_rdp_development_launcher -q`: **178 PASS**, 11.874s.
+- `python3 -m unittest discover -s tests -p 'test_*.py' -q`: **613 PASS**, 93.970s.
+- `node --test --test-isolation=none --test-reporter=spec tests/test_*.js`: **99 PASS**, zero failures/skips.
+- `python3 tests/test_rdp_development_launcher.py -q`: **22 PASS**, 0.304s; all classes discovered.
+- In-memory compilation of launcher/adapter/new tests; tracked and new-file
+  whitespace; protected-runtime comparisons: PASS. No Python linter/native PASS
+  is claimed. Initial new-test execution exposed a test-fixture monkeypatch
+  collision; separate test instances corrected it before these final runs.
+
+The new tests use disposable Python children, real pidfds, the actual public
+broker wrappers/private selector/registry and a fake persistent transport. They
+cover ordering, direct-child/FD provenance, pending/registered replies, cancellation,
+child exit, buffered/contradictory evidence, forged PID/substituted log, competing
+UUIDs, busy/unknown IDs, mismatched replies, owner replacement/caller loss,
+deadlines/log budget, pidfd allocation failure, reaping and no placement.
+Existing broker tests retain PID-reuse, unauthorized-sender and cross-owner gates.
+Broker, registry, resident, CLI, generic/VNC paths and smoke client are unchanged.
+
+Complete review export, including new files and clearly separable pre-existing
+maintainer HANDOFF/wrapper changes:
+`/tmp/step1.5c5d-persistent-launcher-review.patch`. Source/tests/evidence remain in
+the working tree; this export and test logs are redundant review copies. Test
+fixture directories/children are disposed; existing native evidence is untouched.
+No implementation, source or finding exists only in temporary scratch storage.
+No installation, native execution, network operation or Git publication occurred.
+
+**Next decision:** maintainer review of this candidate, then explicit authorization
+for the proposed q552u01 direct-child/Bind/backend/exact-UUID native gate. The
+buffering remedy, any security-policy/interface expansion and publication remain
+separate decisions. Increment 1 is not yet natively accepted.
