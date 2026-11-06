@@ -15,6 +15,7 @@ import math
 from copy import deepcopy
 import os
 import signal
+import secrets
 import stat
 import sys
 import time
@@ -148,6 +149,514 @@ class Broker(dbus.service.Object):
         # None of these methods is exposed as a D-Bus registration API.
         self.registry = WindowRegistry()
         self._managed_correlation = None
+        # Private SDL prototype; deliberately has no D-Bus entry points.
+        self._rdp_registration = None
+        self._sdl_pending_auth = None
+
+    def _sdl_bus_connection(self):
+        address = os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")
+        if os.geteuid() == 0 or not address.startswith("unix:") or ";" in address:
+            raise dbus.DBusException("Existing local user bus required",
+                                     name="org.freedesktop.DBus.Error.AccessDenied")
+        return self.connection
+
+    @staticmethod
+    def _sdl_error(name):
+        return dbus.DBusException("SDL registration request rejected", name=name)
+
+    @staticmethod
+    def _sdl_discard_credentials(credentials):
+        # Late asynchronous replies still own their transferred descriptor.
+        received = credentials.get("ProcessFD")
+        if received is not None:
+            try:
+                os.close(received.take())
+            except Exception:
+                pass
+
+    def _sdl_response(self, request_id):
+        result = self._rdp_report(request_id)
+        answer = {k: result[k] for k in ("state", "request_id", "managed_id", "window_uuid") if k in result}
+        answer.update(protocol=1, placement="not_requested", remote_session="unverified")
+        if result["state"] != "pending":
+            detail = result.get("detail", "")
+            reasons = (("registered", "registered"), ("Competing", "competing_uuid"),
+                       ("expired", "expired"), ("cancelled", "cancelled"),
+                       ("caller", "caller_lost"), ("child identity", "child_identity_rejected"),
+                       ("cleanup", "cleanup_failed"), ("budget", "budget_exhausted"),
+                       ("source", "source_lost"), ("history", "history_incomplete"),
+                       ("revision gap", "history_incomplete"), ("marker", "marker_lost"),
+                       ("marked viewer", "marker_lost"), ("absent", "viewer_lost"),
+                       ("client exited", "child_identity_rejected"),
+                       ("registry", "duplicate_ownership"), ("backend", "backend_unverified"))
+            answer["reason"] = next((code for text, code in reasons if text in detail), "evidence_rejected")
+        return answer
+
+    @staticmethod
+    def _sdl_owner_alive(c):
+        try:
+            return c["owner_identity"].alive() and c["owner_bus"].get_is_connected()
+        except Exception:
+            return False
+
+    def _sdl_authorize(self, request_id, sender):
+        if not isinstance(sender, str) or not sender.startswith(":"):
+            raise self._sdl_error("org.freedesktop.DBus.Error.AccessDenied")
+        c = self._rdp_registration
+        if not c or "owner_name" not in c:
+            raise self._sdl_error(IFACE + ".UnknownRequest")
+        # Authorize BEFORE polling, cancellation, expiry or child/FD inspection.
+        if sender != c["owner_name"]:
+            raise self._sdl_error("org.freedesktop.DBus.Error.AccessDenied")
+        if request_id != c["id"]:
+            raise self._sdl_error(IFACE + ".UnknownRequest")
+        return c
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s",
+                         sender_keyword="sender", async_callbacks=("reply", "error"))
+    def BeginSdlRegistration(self, payload, sender=None, reply=None, error=None):
+        """Authenticate one persistent launcher asynchronously, then arm intent."""
+        from joetoo_kwin_rdp_launch import settings, CallerIdentity, boot_ticks, executable_identity
+        started = time.monotonic()
+        def reject(name):
+            error(self._sdl_error(name))
+        try:
+            if not isinstance(sender, str) or not sender.startswith(":"):
+                return reject("org.freedesktop.DBus.Error.AccessDenied")
+            if len(payload.encode("utf-8")) > 8192:
+                raise ValueError("message size")
+            def unique(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError("duplicate key")
+                    result[key] = value
+                return result
+            def invalid_constant(value):
+                raise ValueError("nonfinite number")
+            data = json.loads(payload, object_pairs_hook=unique, parse_constant=invalid_constant)
+            if (not isinstance(data, dict) or set(data) != {"protocol", "desktop", "slot", "bounds"}
+                    or type(data["protocol"]) is not int or data["protocol"] != 1
+                    or any(type(data[k]) is not int or not 1 <= data[k] <= 256 for k in ("desktop", "slot"))
+                    or not isinstance(data["bounds"], dict)):
+                raise ValueError("schema")
+            limits = settings(data["bounds"])
+            if set(data["bounds"]) - set(limits):
+                raise ValueError("unknown bounds")
+            bus = self._sdl_bus_connection()
+        except dbus.DBusException as exc:
+            return error(exc)
+        except Exception:
+            return reject(IFACE + ".BadArguments")
+        if self._sdl_pending_auth is not None:
+            return reject(IFACE + ".Busy")
+        job = dict(deadline=started + limits["rdp_registration_timeout_ms"] / 1000,
+                   floor=boot_ticks(), timer=None, match=None)
+        self._sdl_pending_auth = job
+        def release():
+            timer, job["timer"] = job["timer"], None
+            match, job["match"] = job["match"], None
+            if self._sdl_pending_auth is job:
+                self._sdl_pending_auth = None
+            okay = True
+            for resource, action in ((timer, GLib.source_remove), (match, lambda m: m.remove())):
+                if resource is not None:
+                    try:
+                        action(resource)
+                    except Exception:
+                        okay = False
+            return okay
+        def failed(name):
+            if self._sdl_pending_auth is job:
+                release()
+                reject(name)
+        def lost(name, old, new):
+            if str(name) == sender and not new:
+                failed("org.freedesktop.DBus.Error.AccessDenied")
+        def watch():
+            if self._sdl_pending_auth is not job:
+                return GLib.SOURCE_REMOVE
+            if not bus.get_is_connected():
+                failed("org.freedesktop.DBus.Error.AccessDenied")
+                return GLib.SOURCE_REMOVE
+            if time.monotonic() >= job["deadline"]:
+                failed("org.freedesktop.DBus.Error.Timeout")
+                return GLib.SOURCE_REMOVE
+            return True
+        def authenticated(credentials):
+            if self._sdl_pending_auth is not job:
+                self._sdl_discard_credentials(credentials)
+                return
+            owner = None
+            try:
+                owner = CallerIdentity(credentials)
+                if time.monotonic() >= job["deadline"]:
+                    owner.close()
+                    return failed("org.freedesktop.DBus.Error.Timeout")
+                if not bus.get_is_connected():
+                    raise PermissionError("Caller bus disconnected")
+                executable = executable_identity()
+                spec = self._begin_rdp_registration(data["desktop"], data["slot"], limits)
+                c = self._rdp_registration
+                c.update(owner_name=sender, owner_identity=owner, owner_bus=bus, owner_match=job["match"],
+                         boot_floor=job["floor"], executable=executable, deadline=job["deadline"])
+                job["match"] = None
+                # No bus lookup on every poll: pinned sender + live ProcessFD.
+                def owner_lost(name, old, new):
+                    if str(name) == sender and not new and self._rdp_registration is c:
+                        self._rdp_finish(c, "failed", "RDP caller lost")
+                # Replace the authentication-phase handler with the transaction
+                # handler in the same non-reentrant event-loop callback.
+                c["owner_match"].remove()
+                c["owner_match"] = bus.add_signal_receiver(owner_lost, signal_name="NameOwnerChanged",
+                    dbus_interface="org.freedesktop.DBus", bus_name="org.freedesktop.DBus",
+                    path="/org/freedesktop/DBus", arg0=sender)
+                if not release():
+                    self._rdp_finish(c, "failed", "RDP cleanup failed")
+                result = self._sdl_response(spec["request_id"])
+                result.update(title_marker=spec["title_marker"], bounds=spec["bounds"])
+                reply(json.dumps(result, sort_keys=True))
+            except Exception as exc:
+                if owner is not None:
+                    owner.close()
+                c = self._rdp_registration
+                if c and c.get("owner_identity") is owner and c["state"] == "PENDING":
+                    self._rdp_finish(c, "failed", "RDP caller evidence rejected")
+                failed("org.freedesktop.DBus.Error.NotSupported" if isinstance(exc, NotImplementedError)
+                       else "org.freedesktop.DBus.Error.AccessDenied" if isinstance(exc, PermissionError)
+                       else IFACE + ".Busy" if isinstance(exc, RegistryError) else IFACE + ".InvalidRequest")
+        try:
+            job["timer"] = GLib.timeout_add(limits["rdp_registration_poll_ms"], watch)
+            if not job["timer"]:
+                raise RuntimeError("watchdog")
+            job["match"] = bus.add_signal_receiver(lost, signal_name="NameOwnerChanged",
+                dbus_interface="org.freedesktop.DBus", bus_name="org.freedesktop.DBus",
+                path="/org/freedesktop/DBus", arg0=sender)
+            proxy = bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus", introspect=False)
+            remaining = job["deadline"] - time.monotonic()
+            if remaining <= 0:
+                return failed("org.freedesktop.DBus.Error.Timeout")
+            dbus.Interface(proxy, "org.freedesktop.DBus").GetConnectionCredentials(sender,
+                reply_handler=authenticated,
+                error_handler=lambda exc: failed("org.freedesktop.DBus.Error.AccessDenied"),
+                timeout=remaining)
+        except Exception:
+            failed("org.freedesktop.DBus.Error.NotSupported")
+
+    @dbus.service.method(IFACE, in_signature="sih", out_signature="s", sender_keyword="sender")
+    def BindSdlRegistration(self, request_id, pid, log_fd, sender=None):
+        from joetoo_kwin_rdp_launch import ChildIdentity, BackendEvidence
+        descriptor = None
+        child = reader = None
+        c = None
+        try:
+            c = self._sdl_authorize(request_id, sender)
+            if c["state"] != "PENDING" or c["pid"] is not None:
+                raise self._sdl_error(IFACE + ".InvalidRequest")
+            if not self._rdp_guard(c):
+                return json.dumps(self._sdl_response(request_id), sort_keys=True)
+            descriptor = log_fd.take()
+            if isinstance(pid, bool):
+                raise ValueError("Invalid child PID")
+            child = ChildIdentity(c["owner_identity"], int(pid), descriptor, c["boot_floor"],
+                                  c["executable"], c["bounds"]["rdp_backend_log_byte_limit"])
+            with os.fdopen(os.dup(descriptor), "rb") as stream:
+                reader = BackendEvidence(child, stream, c["bounds"])
+            self._bind_rdp_process(request_id, child, reader)
+            child = reader = None  # The core now owns their descriptor cleanup.
+            return json.dumps(self._sdl_response(request_id), sort_keys=True)
+        except dbus.DBusException:
+            raise
+        except Exception:
+            if c is not None and c["state"] == "PENDING":
+                self._rdp_finish(c, "failed", "RDP child identity rejected")
+                return json.dumps(self._sdl_response(request_id), sort_keys=True)
+            raise self._sdl_error(IFACE + ".BadArguments") from None
+        finally:
+            for item in (reader, child):
+                if item is not None:
+                    item.close()
+            if descriptor is None:
+                # Even unauthorized/repeated calls must release received FDs.
+                try:
+                    descriptor = log_fd.take()
+                except Exception:
+                    pass
+            if descriptor is not None:
+                os.close(descriptor)
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s", sender_keyword="sender")
+    def PollSdlRegistration(self, request_id, sender=None):
+        self._sdl_authorize(request_id, sender)
+        self._poll_rdp_registration(request_id)
+        return json.dumps(self._sdl_response(request_id), sort_keys=True)
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s", sender_keyword="sender")
+    def CancelSdlRegistration(self, request_id, sender=None):
+        self._sdl_authorize(request_id, sender)
+        self._cancel_rdp_registration(request_id)
+        return json.dumps(self._sdl_response(request_id), sort_keys=True)
+
+    def _begin_rdp_registration(self, desktop, slot, bounds):
+        """Arm a private native-Wayland SDL intent; NEVER arm placement.
+
+        Public transport, production recipe/security policy and native invocation
+        are separate approval gates. Only an in-process launch orchestrator can
+        currently use these methods. Registry serialization is shared with the
+        existing managed paths, but their selectors/placement stay unchanged.
+        """
+        from joetoo_kwin_rdp_launch import settings, APPLICATION
+        limits = settings(bounds)
+        if any(type(v) is not int or not 1 <= v <= 256 for v in (desktop, slot)):
+            raise RegistryError("Invalid RDP desktop/slot")
+        if not callable(getattr(GLib, "timeout_add", None)):
+            raise RegistryError("RDP watchdog unavailable")
+        if self._initial_layout_active() or (self.request and self.request["state"] in
+                                             ("PENDING", "RUNNING", "VERIFYING")):
+            raise RegistryError("Placement is still active")
+        self._expire_managed_correlation()
+        if (self._managed_correlation and
+                (self._managed_correlation["state"] == "PENDING" or
+                 self._managed_correlation.get("observer_cleanup_uncertain"))):
+            raise RegistryError("Managed launch is still active")
+        if self.correlation and self.correlation["state"] == "PENDING" and time.monotonic() < self.correlation["deadline"]:
+            raise RegistryError("Diagnostic correlation is still active")
+        for record in self.registry.managed_windows.values():
+            if record.recipe.get("desktop") == desktop and record.recipe.get("slot") == slot:
+                raise RegistryError("Managed desktop/slot conflict")
+        identifier = uuid.uuid4().hex
+        marker = "joetoo-rdp-" + secrets.token_hex(32)
+        c = self._new_correlation(identifier, APPLICATION, marker)
+        c.update(bounds=limits, revision=self.observation_revision, windows={},
+                 events=0, process=None, reader=None, backend=None, timer=None)
+        c["deadline"] = time.monotonic() + limits["rdp_registration_timeout_ms"] / 1000
+        self.registry.begin_launch(identifier, source=c["source"],
+            synchronized=self.observation_synced, baseline=c["baseline"],
+            recipe={"desktop": desktop, "slot": slot, "program": "sdl-freerdp",
+                    "mode": "development-registration-only", "target": ""})
+        self._rdp_registration = c
+        def watch():
+            if self._rdp_registration is not c or c["state"] != "PENDING":
+                return GLib.SOURCE_REMOVE
+            self._poll_rdp_registration(identifier)
+            return c["state"] == "PENDING"
+        try:
+            c["timer"] = GLib.timeout_add(limits["rdp_registration_poll_ms"], watch)
+            if not c["timer"]:
+                raise RuntimeError("watchdog setup failed")
+        except Exception:
+            self._rdp_finish(c, "failed", "RDP watchdog setup failed")
+            raise RegistryError("RDP watchdog setup failed") from None
+        return {"request_id": identifier, "title_marker": marker, "bounds": deepcopy(limits)}
+
+    def _bind_rdp_process(self, request_id, process, reader):
+        """Actual owned child handle, not a caller-supplied UUID/backend claim.
+
+        reader is the private BackendEvidence adapter for that child's log.
+        Its read_backend() must establish SDL's actual native video driver.
+        Neither this broker nor the reader owns termination of the application.
+        """
+        c = self._rdp_registration
+        if not c or c["id"] != request_id or c["state"] != "PENDING" or c["pid"] is not None:
+            raise RegistryError("Inactive RDP launch")
+        if time.monotonic() >= c["deadline"]:
+            self._rdp_finish(c, "timeout", "RDP registration expired")
+            raise RegistryError("RDP registration expired")
+        if reader.pid != process.pid:
+            raise RegistryError("RDP backend reader PID mismatch")
+        self.registry.mark_running(request_id, process.pid)
+        c.update(pid=process.pid, process=process, reader=reader)
+
+    def _rdp_cleanup(self, c):
+        """Bounded, idempotent callback/reader release, without signalling viewers."""
+        timer, c["timer"] = c["timer"], None
+        reader, c["reader"] = c["reader"], None
+        okay = True
+        try:
+            if timer is not None:
+                GLib.source_remove(timer)
+        except Exception:
+            okay = False
+        try:
+            if reader is not None:
+                reader.close()
+        except Exception:
+            okay = False
+        for resource in (c.get("process"), c.get("owner_identity"), c.get("owner_match")):
+            try:
+                if callable(getattr(resource, "close", None)):
+                    resource.close()
+                elif callable(getattr(resource, "remove", None)):
+                    resource.remove()
+            except Exception:
+                okay = False
+        c["process"] = None
+        c["owner_match"] = None
+        return okay
+
+    def _rdp_finish(self, c, state, detail, identifier=None):
+        if c["state"] != "PENDING":
+            return
+        if state == "registered" and c.get("owner_identity") is not None and not self._sdl_owner_alive(c):
+            state, detail = "failed", "RDP caller lost"
+        if not self._rdp_cleanup(c):
+            state, detail = "failed", "RDP evidence cleanup failed"
+        answer = {"state": state, "request_id": c["id"], "detail": detail,
+                  "placement": "not_requested", "remote_session": "unverified"}
+        if state == "registered":
+            try:
+                record = self.registry.register_match(c["id"],
+                    dict(state="MATCHED", request_id=c["id"], evidence="pid",
+                         candidate_history_complete=True, pid=c["pid"], window_uuid=identifier),
+                    current_windows=self.observed_windows, source=self.observation_source,
+                    synchronized=self.observation_synced)
+                answer.update(managed_id=record.managed_id, window_uuid=record.window_uuid)
+            except RegistryError:
+                state, detail = "failed", "RDP registry rejected ownership"
+                answer.update(state=state, detail=detail)
+        if state != "registered":
+            self.registry.finish_failed(c["id"], state, detail)
+        c["state"] = state
+        c["result"] = answer
+        # Only one bounded terminal result remains; late events cannot revive it.
+        c["windows"].clear()
+
+    def _cancel_rdp_registration(self, request_id):
+        c = self._rdp_registration
+        if c and c["id"] == request_id:
+            self._rdp_finish(c, "failed", "RDP launch cancelled")
+        return self._rdp_report(request_id)
+
+    def _rdp_report(self, request_id):
+        c = self._rdp_registration
+        if not c or c["id"] != request_id:
+            return {"state": "unknown"}
+        return deepcopy(c["result"] or {"state": "pending", "request_id": request_id,
+                                        "placement": "not_requested"})
+
+    def _rdp_guard(self, c):
+        if c.get("owner_identity") is not None and not self._sdl_owner_alive(c):
+            self._rdp_finish(c, "failed", "RDP caller lost")
+        elif not self.observation_synced or c["source"] != self.observation_source:
+            self._rdp_finish(c, "failed", "RDP observation source lost")
+        elif self.observation_evicted_through > c["event_floor"]:
+            self._rdp_finish(c, "failed", "RDP lifecycle history incomplete")
+        elif time.monotonic() >= c["deadline"]:
+            self._rdp_finish(c, "timeout", "RDP registration expired")
+        return c["state"] == "PENDING"
+
+    def _rdp_capture(self, c, event, details):
+        """Observe each accepted caption transition BEFORE generic coalescing.
+
+        Store all new UUID births until the bounded transaction ends, even before
+        PID binding; a vanished/renamed marker must not disappear between polls.
+        Normal-window qualification comes from the existing resident contract.
+        """
+        identifier = details["uuid"]
+        if identifier in c["baseline"]:
+            return
+        entry = c["windows"].get(identifier)
+        if entry is None:
+            if len(c["windows"]) >= c["bounds"]["rdp_registration_window_limit"]:
+                self._rdp_finish(c, "failed", "RDP window budget exhausted")
+                return
+            entry = c["windows"][identifier] = {
+                "added": event == "added", "birth": deepcopy(details),
+                "latest": deepcopy(details), "marked": False, "removed": False,
+                "identity_changed": False}
+        elif event == "added":
+            self._rdp_finish(c, "failed", "RDP duplicate window lifecycle")
+            return
+        if (details["pid"] != entry["birth"]["pid"] or
+                details["resource_class"].casefold() != entry["birth"]["resource_class"].casefold()):
+            entry["identity_changed"] = True
+        entry["latest"] = deepcopy(details)
+        marker = c["title_token"]
+        if entry["marked"] and (details["caption"] != marker or event == "removed"):
+            self._rdp_finish(c, "failed", "RDP marked viewer lost or changed")
+            return
+        if marker in details["caption"]:
+            if details["caption"] != marker:
+                self._rdp_finish(c, "failed", "RDP marker is not exact")
+                return
+            entry["marked"] = True
+        entry["removed"] = event == "removed"
+
+    def _rdp_observation(self, event=None, details=None):
+        c = self._rdp_registration
+        if not c or c["state"] != "PENDING" or not self._rdp_guard(c):
+            return
+        # Missing revisions can hide a transient marked competitor, including a
+        # changed caption which the general observation cache would coalesce.
+        if self.observation_revision != c["revision"] + 1:
+            self._rdp_finish(c, "failed", "RDP observation revision gap")
+            return
+        c["revision"] = self.observation_revision
+        c["events"] += 1
+        if c["events"] > c["bounds"]["rdp_registration_event_limit"]:
+            self._rdp_finish(c, "failed", "RDP event budget exhausted")
+            return
+        if details is not None:
+            self._rdp_capture(c, event, details)
+        else:
+            # Inventory refresh is not creation evidence. Check retained births
+            # against its live state, without fabricating added/removed records.
+            for identifier, entry in list(c["windows"].items()):
+                if entry["marked"] and identifier not in self.observed_windows:
+                    self._rdp_finish(c, "failed", "RDP viewer absent from inventory")
+                    return
+            for window in self.observed_windows.values():
+                if c["state"] != "PENDING":
+                    break
+                self._rdp_capture(c, "existing", window)
+
+    def _poll_rdp_registration(self, request_id):
+        c = self._rdp_registration
+        if not c or c["id"] != request_id or c["state"] != "PENDING":
+            return self._rdp_report(request_id)
+        if not self._rdp_guard(c) or c["pid"] is None:
+            return self._rdp_report(request_id)
+        try:
+            alive = c["process"].poll() is None
+        except Exception:
+            alive = False
+        if not alive:
+            self._rdp_finish(c, "failed", "RDP client exited before registration")
+            return self._rdp_report(request_id)
+        try:
+            c["backend"] = c["reader"].read_backend()
+        except Exception:
+            self._rdp_finish(c, "failed", "RDP backend evidence unavailable")
+            return self._rdp_report(request_id)
+        if c["backend"] not in (None, "wayland"):
+            self._rdp_finish(c, "failed", "RDP native-Wayland backend required")
+            return self._rdp_report(request_id)
+        marked = [(identifier, entry) for identifier, entry in c["windows"].items() if entry["marked"]]
+        if len(marked) > 1:
+            self._rdp_finish(c, "ambiguous", "Competing RDP viewer UUIDs")
+        elif marked:
+            identifier, entry = marked[0]
+            live = self.observed_windows.get(identifier)
+            added_retained = any(e["event"] == "added" and e["window_uuid"] == identifier
+                                 and e["event_id"] > c["event_floor"] for e in self.observation_events)
+            if (not entry["added"] or not added_retained or entry["removed"] or
+                    entry["identity_changed"] or live is None or
+                    any(w["pid"] != c["pid"] or w["resource_class"].casefold() != c["expected_class"]
+                        for w in (entry["birth"], entry["latest"], live)) or
+                    live["caption"] != c["title_token"]):
+                self._rdp_finish(c, "failed", "RDP viewer ownership evidence mismatch")
+            elif c["backend"] == "wayland":
+                # Recheck the child after reading backend evidence; exit during
+                # that read cannot authorize ownership of a leftover surface.
+                try:
+                    alive = c["process"].poll() is None
+                except Exception:
+                    alive = False
+                if alive:
+                    self._rdp_finish(c, "registered", "RDP viewer registered; remote state unverified", identifier)
+                else:
+                    self._rdp_finish(c, "failed", "RDP client exited before registration")
+        return self._rdp_report(request_id)
 
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
         self._expire_managed_correlation()
@@ -1228,6 +1737,9 @@ class Broker(dbus.service.Object):
         elif self.observation_synced:
             # Legacy, unsequenced calls cannot supersede synchronized state.
             return
+        # Private SDL tracking is inactive unless explicitly armed in-process.
+        # Tap validated, ordered reports before caption changes are coalesced.
+        self._rdp_observation(event, details)
         if event == "existing" and identifier in self.observed_windows:
             # A manual refresh republishes every live window. Update current
             # state, but do NOT fabricate another window-creation event.
@@ -1346,6 +1858,7 @@ class Broker(dbus.service.Object):
                 self._refresh_registered_window(
                     identifier, self.observed_windows.get(identifier))
         self._advance_placement()
+        self._rdp_observation()
 
     # Read-only diagnostic query. Output is JSON, not a public management
     # registry: class, caption and PID are observational hints only.

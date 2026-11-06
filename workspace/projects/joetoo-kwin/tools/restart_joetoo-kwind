@@ -70,7 +70,11 @@ fi
 case "${answer:0:1}" in
     [yYtT])
         j_msg "-${notice}" -p "Running python unit tests"
-        python3 -m unittest discover -s tests -p 'test_*.py' -v
+        if (( verbosity == debug )); then
+            python3 -m unittest discover -s tests -p 'test_*.py' -v
+        else
+            python3 -m unittest discover -s tests -p 'test_*.py'
+        fi
         j_msg "-${notice}" -p -n "python tests done; result:"
         handle_result $? "" "" "$notice"
         j_msg "-${notice}" -p "Running javascript unit tests"
@@ -99,4 +103,6 @@ j_msg "-${notice}" -p "Make these abbreviation assignments to facilitate use of 
 j_msg "-${notice}" -mp "bus=\"$bus\""
 j_msg "-${notice}" -mp "path=\"$path\""
 j_msg "-${notice}" -mp ""
-j_msg "-${notice}" -p "Example: qdbus6 \$bus \$path \$bus.ListManaged | jq ."
+j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.ListManaged"
+j_msg "-${notice}" -mp ""
+j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.ListManaged | jq ."
