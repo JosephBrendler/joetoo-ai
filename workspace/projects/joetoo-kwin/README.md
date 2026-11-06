@@ -44,7 +44,7 @@ paths: 171 on `gmki91`, 135 on `q552u01`, retained under the user state
 its tests are retained only in `archive/aborted_backup_migration_tool/`;
 no real migration run was performed.
 
-**Step 1.5c.5c — CLOSED. Affirmative RDP feasibility accepted by the
+**Step 1.5c.5c — Affirmative RDP feasibility accepted by the
 maintainer.** [PR #28](https://github.com/JosephBrendler/joetoo-ai/pull/28)
 merged at `be8eb276`. GNOME Remote Login interoperability and client comparison
 led to SDL3 FreeRDP as the first RDP implementation target. Native-Wayland
@@ -55,19 +55,7 @@ own role discriminator. The existing KWin observations support the Wayland
 identity contract without an additional user-interaction observer. Detailed
 provenance and qualifications remain in the [handoff](task_step1.5/HANDOFF.md).
 
-**Next: Step 1.5c.5d — Managed RDP Implementation.** The maintainer has selected
-this direction; only this documentation preparation/review is authorized now.
-The proposed first executable increment is native-Wayland SDL registration
-without placement, after recipe, security and interface contract approval.
-Production RDP registration/placement is not accepted. In-process reconnect
-remains untested; a fresh client connection does not prove server-session
-continuity, and viewer identity does not prove GDM login or desktop readiness.
-TLS certificate trust and server identity remain separate implementation gates.
-
-Managed TigerVNC-over-SSH and planned managed RDP clients are independent,
-user-selectable peer capabilities. SDL implementation order expresses engineering
-sequencing, with no default preference or fallback hierarchy. Future clients
-require separately approved contracts and are not promised by this milestone.
+**Next: Step 1.5c.5d — Managed RDP Implementation.** This is to be incrementally gated, requiring explicit maintainer authorization for each increment. The proposed first executable increment is native-Wayland SDL registrationwithout placement, after recipe, security and interface contract approval. Production RDP registration/placement is not accepted. In-process reconnect remains untested; a fresh client connection does not prove server-session continuity, and viewer identity does not prove GDM login or desktop readiness. TLS certificate trust and server identity remain separate implementation gates.
 
 | Increment | Work | Status |
 | --- | --- | --- |
@@ -79,7 +67,7 @@ require separately approved contracts and are not promised by this milestone.
 
 **Implementation scope:** See [Step 1.5c.5 implementation scope and outline](task_step1.5/Step1.5c5_implementation_scope.md) for detailed objectives, program/mode contracts, investigation requirements, security constraints, acceptance criteria, and increment boundaries. The scope document guides planning and review; implementation authorization and execution controls are established separately in `task_step1.5/HANDOFF.md`.
 
-Additional installed clients may now be evaluated deliberately, but are not
+Additional installed RDP clients may now be evaluated deliberately, but are not
 automatically scheduled for implementation. The original 1.5c.4 scope outline
 is historical; later layer/group/focus approvals and accepted source supersede
 its obsolete ordering/protrusion assumptions.
@@ -111,20 +99,7 @@ multi-monitor guarantees.
 
 ## Window configuration at a glance
 
-`desktop_session_list` is an indexed Bash array of pipe-delimited recipes:
-
-`DESKTOP|PROGRAM|MODE|TARGET[|LAYER]`
-
-Example:
-
-```bash
-desktop_session_list=(
-    "2|konsole|ssh|nuthuvia"
-    "2|dolphin|local||under"
-    "4|dolphin|local|Documents|panel"
-)
-# End of configuration
-```
+`desktop_session_list` is an indexed Bash array of pipe-delimited recipes - see ARCHITECTURE.md
 
 The optional `LAYER` is `under`, `panel`, or `over`; omitted means `panel`.
 **`slot` is not an array field**: the planner derives the one-based entry
