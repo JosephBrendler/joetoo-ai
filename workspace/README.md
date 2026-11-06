@@ -29,7 +29,8 @@ This is the standing norm for development workflow for explicitly authorized col
 | Authorized actions and stop conditions | as stated |
 | Implementation progress | Summary and reference to file detailing this |
 | Review findings and recommendations | Summary and reference to file detailing this |
-| Acceptance/approval decisions | (maintainer only) Summary and reference to agent-authored file detailing and requesting this |
+| Latest result / recommendation | Summary of what is pending maintainer review / approval, including which actor produced it and a reference to agent-authored document(s) detailing the work, on which branch, revision, status, whether changes are committed, uncommitted or published, where the complete diff and test evidence can be obtained, and what decision or action is required. (i.e. these details are in the referenced document, only a summary is in HANDOFF.md) |
+| Acceptance / approval decisions | (maintainer only) Summary and reference to agent-authored file detailing and requesting this |
 
 The process description lives here; enforceable agent behavior lives in
 [AGENTS.md](AGENTS.md). Project READMEs hold project-specific integration commands,
