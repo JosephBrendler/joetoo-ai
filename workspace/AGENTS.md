@@ -4,44 +4,33 @@
 
 ## Agent roles and active-task discovery
 
-Caveat: this "Agent roles and active-task discovery" and following text up through the end of the table on "Division of responsibility in multi-agent-human collaborative workflow" is to be considered draft and with no instructive authority until maintainer finalizes and approves it and removes this caveat. The supplemental role files remain independently inactive while carrying their own draft notices.
+Caveat: This section and the supplemental role files remain **draft and
+non-authoritative** until the maintainer approves and removes their caveats.
 
-All agents must follow the governing repository-root, workspace, and applicable project `AGENTS.md` instructions.
+All contributors obey repository-root, workspace and applicable project
+`AGENTS.md` instructions. Local implementation agents (e.g. Codex CLI) consult
+`workspace/LOCAL_AGENTS.md`; cloud collaborators (e.g. ChatGPT) consult
+`workspace/CLOUD_AGENTS.md` when those supplements are approved. Role guidance
+cannot override a more specific repository policy or maintainer authorization.
 
-Local implementation agents (also referred to as local collaborators, local agents, or local ai), including Codex CLI, must additionally consult `workspace/LOCAL_AGENTS.md`.
+At each substantive task start or resumed iteration, verify the actual current
+checkout, governing rules, approved scope, source baseline, granted permissions,
+stop conditions and next actor. Read the canonical active `HANDOFF.md` as a
+**dispatcher**, not a chronology or source of independent architecture. Follow
+its links to the project architecture (design), current increment scope
+(requirements/tests), task README (outcomes/history) and evidence records
+(verification). Do not treat historical instructions or old handoffs as active.
 
-Cloud collaboration agents (also referred to as cloud implementation agents, cloud agents, or cloud ai), including ChatGPT, must additionally consult `workspace/CLOUD_AGENTS.md`.
+The maintainer alone designates the task, approves the executable scope, reserves
+publication and operational gates, and identifies the next responsible actor.
+Absent, stale, ambiguous or contradictory authority permits read-only
+orientation and a request for maintainer clarification, not implementation.
+A HANDOFF update does not itself grant authority or invoke another agent.
 
-These role documents supplement but do not override governing policies, project requirements, or maintainer authorization. An agent operating in both roles must observe all applicable restrictions.
+The usual relay is a cycle: **maintainer ideation/authorization → local
+collaborator → maintainer review → cloud collaborator → maintainer review/authorization (repeat).** The maintainer may authorize bounded multi-iteration work without approving every internal edit, but agents must report material results and seek approval at reserved gates. The lifecycle, minimal HANDOFF schema and document ownership are specified by `workspace/README.md`; role-specific reporting belongs in the approved LOCAL/CLOUD supplements. Do not duplicate detailed execution history or scope inside this instruction section.
 
-At the beginning of each substantive actionable turn or resumed task iteration, verify the current governing instructions, active role guidance, and task handoff. Re-read material that has changed or whose current version cannot be established. Do not substitute remembered context for unavailable source.
-
-Before executing task-specific work, establish the designated task, approved scope, source baseline, authorized operations, acceptance criteria, and next responsible actor.
-
-A missing, ambiguous, inactive, or conflicting handoff does not authorize implementation. In such circumstances, restrict activity to inspection and recommendations until the uncertainty is resolved.
-
-### Human–AI collaboration
-
-The **maintainer owns task designation and authorization**. Each active task must identify its canonical handoff location (for example, a task-specific file under the relevant project), target branch/base, permitted file edits and tool operations, acceptance tests, prohibited actions, stop conditions and next responsible actor. Do not infer that a draft task handoff or role document grants permission. Where a task identifier resolves ambiguously or to no approved handoff, request clarification , and perform only read-only orientation pending clarification.
-
-The normal relay is **cloud collaborator → maintainer authorization → local collaborator**, and **local collaborator → maintainer review → cloud collaborator**. A maintainer may explicitly authorize bounded multi-iteration agent-to-agent exchanges with per-iteration progress reports, while reserving publication, deployment, protected-repository and scope-expansion decisions. A handoff file stores state; an authorized orchestration tool or the maintainer must actually initiate each subsequent agent invocation.
-
-
-The maintainer retains authority over objectives, delegation, acceptance, publication, and protected-repository integration.
-
-The normal workflow is:
-
-**Cloud agent → Maintainer → Local agent**
-
-**Local agent → Maintainer → Cloud agent**
-
-A maintainer may authorize multiple bounded cloud/local iterations without requiring approval of every individual implementation change. The agents must remain within the approved scope and provide progress information at each material handoff.
-
-Each task or iteration must identify its next responsible actor and any outstanding approval requirement.
-
-A handoff document records state and proposed actions. It does not independently grant authorization or trigger another agent's execution.
-
-The collaboration lifecycle and handoff format are specified in `workspace/README.md`. Role-specific requirements belong in the respective supplemental role files.
+The collaboration lifecycle and handoff format are further specified in `workspace/README.md`. Role-specific requirements belong in the respective supplemental role files.
 
 ## General start-of-assignment discovery
 

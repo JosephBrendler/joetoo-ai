@@ -83,4 +83,3 @@ README/evidence destination, not in an accumulating HANDOFF table. The
 maintainer controls task and approval fields; agents can update only their
 assigned latest-result/status fields. Neither status text nor an evidence
 record independently grants execution permission.
-
