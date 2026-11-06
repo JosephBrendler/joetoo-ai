@@ -1,19 +1,20 @@
 # Step 1.5c.5 — Remote resources and graphical remote desktops: implementation scope and outline
 
-**Status:** Steps 1.5c.5a (Dolphin SFTP) and 1.5c.5b (TigerVNC-over-SSH)
-are accepted. Step 1.5c.5c (RDP feasibility) is **closed with an affirmative
-maintainer determination**. The maintainer decided to implement managed RDP
-in Step 1.5c.5d, starting with SDL3 FreeRDP; **no runtime increment has yet
-been authorized**. This scope records implementation order and acceptance
-gates, not operational permission. The canonical [HANDOFF](HANDOFF.md)
-controls branch, editable paths, native tests and publication authority.
+**Milestone status:** Steps 1.5c.5a (Dolphin SFTP) and 1.5c.5b
+(TigerVNC-over-SSH) are accepted. Step 1.5c.5c (RDP feasibility) is closed
+with an affirmative maintainer decision, recorded in PR #28. Step 1.5c.5d
+(managed RDP) is in incremental development, beginning with SDL3 FreeRDP
+native-Wayland **registration without placement**. Later increments require
+separate approval. This scope specifies requirements and acceptance gates;
+it does not grant source-edit, public-interface, native-test or publication
+authority. Refer to the [active HANDOFF dispatcher](HANDOFF.md) and explicit
+maintainer tasking for current actor, branch, permissions and next decision.
 
-**Current accepted baseline:** The 1.5c.5c work was merged into `main` by
-PR #28 at `be8eb276` (verified remote `main` for this documentation draft).
-The earlier SFTP/VNC task branches and their commits remain historical; the
-next proposed task branch is
-`task/joetoo-kwin-step1.5c5d-rdp-implementation`, to be created only after
-documentation review/publication from the subsequently accepted `main` HEAD.
+**Historical baseline:** Feasibility PR #28 merged at `be8eb276`. The
+maintainer-selected task branch is
+`task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`. Verify its actual
+HEAD and branch base in the current checkout; historical or originally proposed
+branch names are not operative instructions.
 
 **Authorities:** Current project `ARCHITECTURE.md` (especially §§3–7, 10–11), project/root/workspace `AGENTS.md`, and the active [HANDOFF](HANDOFF.md). `Step1.5c4_implementation_scope.md` is historical design evidence, not renewed authorization.
 
@@ -166,9 +167,9 @@ For **each candidate**, provide an evidence-backed comparison of:
 7. Usability and tradeoffs: clipboard, resizing, multiple monitors, scaling, keyboard shortcuts, network resilience, session persistence, server interoperability, maintenance and package complexity, and suitability for routine joetoo remote administration.
 8. Relative engineering effort and expected operational value compared with the working TigerVNC-over-SSH option.
 
-The accepted comparison and native observations are recorded in the
-[HANDOFF](HANDOFF.md), including which conclusions came from installed-client
-inspection, native diagnostics or inference. Neither choosing SDL first nor
+The accepted comparison and native observations are recorded in
+[remote-desktop research](README_remote_desktop_research.md), including original
+installed-client evidence, native diagnostics and clearly labeled inference. Neither choosing SDL first nor
 establishing feasible window identity grants production RDP acceptance.
 
 ### 5.2 Evidence and decision gate
@@ -184,83 +185,161 @@ initial implementation must reject silent UUID replacement. The maintainer's
 existing Python/JavaScript test passes remain historical evidence, not tests
 of the production RDP selector.
 
-## 5A. Increment 1.5c.5d — Managed RDP implementation (planned)
+## 5A. Increment 1.5c.5d — Managed RDP implementation
 
-**Objective:** Add independently selectable managed RDP clients as peers to
-accepted TigerVNC-over-SSH, reusing launcher, broker, registry, KWin resident,
-desktop/slot, geometry and layering invariants. SDL3 FreeRDP is first **only
-in development order**; future clients such as KRDC or Remmina require their
-own separately approved adapter and security/window-identity contract. The
-existing configuration shape remains
-`DESKTOP|PROGRAM|MODE|TARGET[|LAYER]`; precise SDL mappings remain to be approved.
+**Objective and boundary.** Add SDL3 FreeRDP as an independently selectable
+peer of accepted managed TigerVNC-over-SSH, reusing existing launcher, broker,
+registry, KWin resident, desktop/slot, geometry and layering invariants.
+Potential future clients, including KRDC and Remmina, require independently
+approved launch, identity, security and lifecycle contracts. Implementation
+chronology confers no default, preference or fallback. Do not introduce a
+general-purpose client-plugin framework.
 
-**Increment 0 — Contract and prerequisites (approval gate).** Inspect the
-current executable and configuration/launch interfaces; specify an unambiguous
-SDL program/mode/target grammar, single ordinary desktop-window scope, safe
-argv and credential handling, production TLS certificate/server-identity and
-NLA policy, configurable bounded launch/authentication/identity intervals,
-and explicit registration-versus-placement states. Do not treat acceptance of
-self-signed certificates during feasibility as an approved trust policy.
+The recipe grammar remains `DESKTOP|PROGRAM|MODE|TARGET[|LAYER]`; this
+increment does **not** approve concrete SDL recipe values. Process launch,
+viewer registration, placement, authentication, transport security and remote
+desktop readiness are separate outcomes.
 
-**Increment 1 — Native-Wayland SDL registration only (first code tranche,
-not yet authorized).** Arm the broker-owned transaction before launch and
-capture its synchronized source/revision, event floor and baseline. Bind a
-unique exact title marker, launched PID and application identity. Require a
-new, live, normal KWin viewer UUID with complete qualifying `added` lifecycle
-and exact PID/application/marker evidence. A late marker can qualify that same
-UUID only when its creation history remains complete. Exclude unmarked NLA
-credentials windows and unrelated viewers. Fail closed for lost/mismatched
-markers, competing eligible UUIDs (including removed competitors), missing
-history, source replacement, PID mismatch, process exit, window removal,
-cancellation or expiry. Register the exact verified UUID **without placement**
-and never silently retarget ownership to a successor. Reuse existing
-observation/registry infrastructure; no user-input observer, new daemon,
-PID-only selector, fixed delay or last-window heuristic.
+### Increment 0 — Preconditions and design gates
 
-Headless gate: positive registration; no-placement guarantee; credential
-cancellation, failed NLA and refusal; late/lost markers; short-lived competing
-UUIDs; unrelated viewer coexistence; incomplete events; source/PID mismatch,
-window/process exit, timeout and duplicate ownership; unchanged generic and
-VNC behavior. **Maintainer-native gate on `q552u01`:** exact viewer PID/UUID
-registration without movement, plus bounded negative paths. Feasibility
-archives are design evidence, not production-selector acceptance.
+Inspect the real installed SDL executable and existing broker/registry/public
+interfaces. Establish a single ordinary desktop-window profile, safe argv,
+no secrets in config/argv/logs, bounded transaction/resource policy and
+strict registration-versus-placement separation. Production endpoint parsing,
+TLS certificate/server identity, NLA and allowable security negotiation remain
+separate maintainer-controlled policy gates. Feasibility-only certificate
+exceptions are not accepted production defaults.
 
-**Increment 2 — SDL X11 role identity.** Add separately justified positive
-role discrimination for successive temporary and persistent marker-bearing
-SDL windows. Headless reject premature/ambiguous enrollment; maintainer
-verifies the persistent viewer UUID on `gmki91`. Neither time nor most-recent
-window order proves role. Preserve the common registration contract.
+Existing generic and TigerVNC completion paths may couple registration to
+placement; do not reuse that behavior for registration-only SDL. An additive
+D-Bus development interface requires a reviewed contract, especially caller
+identity, transaction ownership, child provenance and evidence-FD validation.
+The separate `step1.5c5d-sdl-interface-contract.md`, when present in the
+authorized working tree, is detailed design evidence rather than permission
+by itself.
 
-**Increment 3 — Controlled placement release.** Registration is distinct
-from permission to place a viewer, because its initial display may be GDM.
-An explicit maintainer/operator-confirmed release is a proposed first policy;
-automatic release requires separate reliable remote-readiness evidence. On
-release, recheck exact registered UUID, source and ownership, then apply
-existing geometry/desktop/layer/focus policy. Resolve Busy, slot reservation,
-invocation lock and initial-layout completeness without holding the general
-launcher lock through interactive authentication. Gate with headless invalid/
-expired/repeated release and maintainer-native exact-UUID placement tests.
+### Increment 1 — Native-Wayland SDL registration only
 
-**Increment 4 — Configured SDL workflow.** After separate authorization,
-integrate the accepted recipe into offline whole-plan `-c` validation and
-confirmed `-o` execution. Preserve safe argv, credential/certificate policy,
-positive registration, duplicate-slot guard, layers/focus and truthful
-independent launch/window/placement/remote-outcome reports. Reject invalid
-plans before side effects; preserve Konsole, Dolphin and TigerVNC behavior.
-No automatic reconnect, UUID replacement, multimonitor or RemoteApp support
-is implied. Gate with headless regressions and maintainer-native X11/Wayland
-configured multiwindow acceptance.
+**Viewer identity.** Arm a broker-owned transaction before child launch;
+capture synchronized observation source/revision, event floor and existing
+window baseline; generate an exact unique title marker. Bind the actual SDL
+child PID and expected application identity. Require a new, live, normal KWin
+window UUID with complete qualifying `added` lifecycle and matching source,
+PID, application and exact marker. A late marker may qualify **only the same
+positively observed UUID**, with complete lifecycle history.
 
-**Increment 5 — Security and milestone acceptance.** Verify production TLS
-certificate/endpoint identity and allowed negotiation behavior; review full
-headless regressions and maintainer native tests, record unsupported paths,
-and close only after maintainer review and integration. **Step 1.5d** remains
-a distinct later integrated regression and `-L`/`-l` milestone.
+Exclude unmarked credentials dialogs, auxiliary windows, previously present
+unrelated viewers and replacement UUIDs. Fail closed on missing/mutated/lost
+marker, simultaneous or disappeared competing candidates, incomplete/evicted
+event history, observation-source replacement, PID/class mismatch, process
+exit, window disappearance, cancellation, timeout and duplicate ownership.
+No PID-only, class-only, title-only, most-recent-window or fixed-delay selector;
+no new user-interaction observer or observation daemon.
 
-**Future peer RDP clients:** Client-specific invocation, credential, trust,
-window-role and lifecycle policies must be separately evidenced and approved;
-adding SDL first creates no client ranking, automatic fallback or promise of
-interchangeable targets. No other RDP client is authorized for this tranche.
+**Registration only.** Register the exact verified UUID and return stable
+bounded terminal results. Do **not** request placement, desktop movement,
+geometry, focus or stacking, or silently retarget a replacement window.
+Existing generic/VNC interfaces and semantics remain unchanged.
+
+**Additive development interface under separately controlled approval.**
+Codex proposed four D-Bus methods:
+
+| Method | Input → output | Registration-only role |
+| --- | --- | --- |
+| `BeginSdlRegistration` | `s → s` | Establish owner-bound transaction before launch |
+| `BindSdlRegistration` | `sih → s` | Bind launched child and bounded evidence descriptor |
+| `PollSdlRegistration` | `s → s` | Owner-only pending/terminal result |
+| `CancelSdlRegistration` | `s → s` | Owner-only cancellation and cleanup |
+
+The maintainer has separately issued bounded conditional development tasking
+for this interface; **the exact public contract and native/production security
+acceptance are not implied by this scope**. Review the actual current
+interface-contract draft and explicit maintainer direction before exposing
+methods. Authenticate the unique D-Bus sender for every call and bind its
+single persistent bus connection to the transaction. Reject cross-caller
+poll/bind/cancel, process reuse and substituted or contradictory evidence.
+Clean up on name-owner loss, cancellation, timeout and terminal result.
+
+Require reliable child PID provenance, immutable or otherwise defensible
+process-lifetime identity, parent relationship, and FD identity, ownership,
+type and bounds. A bare numeric PID or an attacker-substitutable writable
+log is not independent proof. D-Bus `ProcessFD` is **optional**; verify its
+availability on the actual target bus. If absent, do not silently weaken
+caller/process verification: propose a source-grounded alternative for approval
+or stop at that boundary. An owning same-user development launcher and its
+writable log are within an explicitly trusted launcher model; do not claim
+cryptographic SDL-log authorship or malicious-same-UID isolation.
+
+**Expected narrow source/test envelope:**
+
+| Path or component | Bounded purpose |
+| --- | --- |
+| `libexec/joetoo-kwind` | SDL-specific transaction, observation and D-Bus handling, without changing generic/VNC behavior |
+| Proposed `libexec/joetoo_kwin_rdp_launch.py` | Minimal local SDL launch adapter, only if source inspection justifies it |
+| `tests/test_rdp_broker.py`, `tests/test_rdp_launch.py` and relevant fixtures | Positive/negative headless checks and no-placement regression |
+| `libexec/joetoo_kwin_registry.py`, `joetoo-kwin-resident.js` | Read-only by default; any required edit separately approved |
+| Existing configuration template | Approved configurable bounds only; do not introduce premature `-o` recipes or change VNC defaults |
+
+**Headless acceptance:** Positive exact UUID registration and late-marker
+qualification on the same UUID; no placement in any path; credentials-only
+cancellation, failed NLA, refused connection, lost/mismatched marker,
+simultaneous or disappeared competitors, preexisting unrelated viewer,
+wrong PID/class/source, incomplete event history, PID reuse, forged or
+substituted evidence FD, unauthorized D-Bus sender, name-owner loss,
+cross-transaction interference, process exit, bounded expiry, duplicate
+ownership, stable terminal results and inert late callbacks. Exercise actual
+broker/registry behavior through mocks, preserve generic/TigerVNC regressions,
+and do not mistake mocked transport results for remote authentication.
+
+**Maintainer-native gate (separately authorized):** On `q552u01`,
+verify actual SDL backend `wayland`, exact child PID/UUID, correct viewer
+registration without any placement/movement, credentials exclusion, and
+bounded failure/coexistence checks. Record actual security/certificate
+conditions. Feasibility archives do not establish production acceptance.
+Codex must not run native/network sessions without that authority.
+
+### Increment 2 — SDL X11 viewer-role identity
+
+Add independently demonstrated role discrimination between temporary and
+persistent SDL windows bearing the same PID/title marker; reject ambiguous
+or premature enrollment. Headless and maintainer `gmki91` native evidence
+must establish the persistent UUID without premature placement. Preserve the
+shared positive registration contract.
+
+### Increment 3 — Controlled placement release
+
+Registration does not establish successful GDM login, authenticated GNOME
+desktop readiness or allowed placement. Propose explicit operator-confirmed
+release first; automatic release requires separately reliable readiness
+evidence. Revalidate exact registered UUID, owner/source and transaction
+before existing desktop/geometry/layer/focus operations. Address Busy, slot
+reservation, cancellation, expiry and initial layout completeness without
+holding the ordinary launcher lock throughout interactive authentication.
+
+### Increment 4 — Configured SDL RDP workflow
+
+With separate authorization, implement exact safe SDL recipe grammar and
+offline whole-plan `-c` validation plus confirmed `-o` execution. Reject
+unsupported/invalid plans before side effects. Preserve security policy,
+independent registration/placement/remote outcome reporting, slot ownership,
+layer/focus guarantees and Konsole/Dolphin/TigerVNC behavior. No automatic
+reconnect, UUID reassignment, multimonitor, RemoteApp or client fallback is
+implied.
+
+### Increment 5 — Security, regression and milestone closure
+
+Validate production server certificate/endpoint identity and permitted TLS/NLA
+negotiation; complete relevant full headless and maintainer-native regressions;
+record tested and unsupported cases. Close the milestone only following
+maintainer review and integration. **Step 1.5d** remains a separate broader
+integrated regression and `-L`/`-l` milestone.
+
+**Increment 1 exclusions:** X11 enrollment, any placement, configured `-o`,
+other clients, speculative plugin infrastructure, changed VNC/generic
+semantics, unapproved certificate exceptions, new interaction observers,
+installer/deployment, protected-repository edits or publication without
+separate authority. Stop on unreliable identity or any missing required
+interface/security/file permission.
 
 ## 6. Other newly available application candidates — deliberate evaluation, not wholesale implementation
 
@@ -303,32 +382,42 @@ Report for each: executable presence on each host, launch grammar, window owners
 | Remote resource | SFTP URL/argv, failure classification, mock timeout | remote listing/authentication and unreachable targets |
 | VNC tunnel | command/options, only-loopback intent, cancellation/exit cleanup under mock processes | protected actual session, tunnel endpoint, auth dialog and teardown |
 | RDP feasibility (closed) | comparative documentation, mock identity and security observations | maintainer-run X11/native-Wayland diagnostic captures; no production registration |
-| Managed RDP (1.5c.5d; later authorization) | registration-only selector, failure/ambiguity/ownership tests; then X11 role, placement and configured integration tests by approved increment | `q552u01` native-Wayland and `gmki91` X11 exact UUID/registration/placement checks at their respective gates; certificate trust verified before final acceptance |
+| Managed RDP (1.5c.5d; individually gated) | Private selector and owner/process/FD-interface tests, fail-closed identity and no placement; then X11 role, placement, configured and security tests by approved increment | `q552u01` native-Wayland and `gmki91` X11 registration/placement at separate gates; server identity/security before final acceptance |
 | Compatibility | existing Python/JS cases, Bash syntax, ShellCheck, link/diff checks | no regression to Konsole SSH placeholders and original local Bash continuity |
 
 Reuse previously accepted 1.5c.4 native evidence for unchanged contracts rather than rerunning the full graphical-layer battery in every subincrement. New network/GUI work needs actual maintainer-native acceptance on both backends. Record PASS/FAIL/NOT TESTED **by host/backend and exact implementation SHA**; separate application/placement success from remote transport/authentication success. Document missing native evidence honestly.
 
 ## 8. Authorization, stop conditions and subsequent milestone
 
-**Authority boundary:** The maintainer has decided to implement managed RDP
-and authorized a **single documentation-edit/review round**. No Increment 1
-or later source work is authorized by this scope. The canonical
-[HANDOFF](HANDOFF.md) must provide the first tranche's exact baseline/branch,
-editable source paths, tests, stop conditions, next actor and explicit
-maintainer approval; a draft HANDOFF cannot self-authorize implementation.
+**Source of authority.** This scope documents accepted requirements and
+proposed future gates; it **does not grant execution permission**. The
+maintainer-selected task branch is
+`task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`.
+Verify the actual current revision, actor, permissible paths, active
+authorization and next decision against the [current HANDOFF](HANDOFF.md),
+explicit maintainer tasking and the local checkout. Historical instructions
+and an agent-authored contract are not independent authority.
 
-**Next decisions:** Review and publish the coordinated documentation on
-`main`; create `task/joetoo-kwin-step1.5c5d-rdp-implementation` from the
-subsequently accepted baseline only after approval; then grant a bounded
-native-Wayland SDL **registration-only** implementation authorization.
-Later X11 role, placement release, configured RDP and native/security gates
-require their own approvals. No stage, commit, push, PR/merge, host execution
-or protected-repository write is implicit in a documentation approval.
+**Increment 1 progress and reserved gate.** Codex reported a private
+registration-only core and headless tests, not independently reviewed/native
+accepted or necessarily committed/published. The proposed four-operation
+additive interface is subject to explicit maintainer review. Subsequent
+conditional development authorization may permit implementation and headless
+tests without constituting final public API, ProcessFD security, transport
+policy or native acceptance. Consult the current maintainer prompt and
+HANDOFF for the exact boundary; retain detailed interface/evidence records
+outside HANDOFF.
 
-**Stop/escalate** on: conflicting task scope or repository policy; uncertain source baseline; unsupported/ambiguous endpoint semantics; inability to preserve positive window identity; unresolved cross-process Busy or ownership uncertainty; unsafe credential/certificate/host-key behavior; VNC traffic outside the approved SSH protection; orphaned tunnel risk; unapproved broker/resident API edits; need for deployment, native connections or protected repository writes; or a proposed departure from accepted layer, shell or configuration contracts. Document concrete findings and obtain the maintainer's decision before extending scope.
+**Stop/escalate** on missing or contradictory current authorization,
+uncertain branch/baseline, unexpected dirty worktree, unsafe process/FD
+provenance, missing or ambiguous complete KWin lifecycle, unavailable bus
+credentials without an approved alternative, unauthorized interface or
+security changes, generic/VNC regressions, expanded edit paths, native host
+operations/deployment or protected-repository writes. Do not weaken identity,
+authentication or trust merely to obtain a passing result.
 
-**Next actor:** Maintainer and Codex review the complementary architecture,
-implementation scope, project README and canonical HANDOFF edits together.
-The maintainer approves or revises the proposed first tranche; only then
-establishes the accepted `main` baseline and creates the 1.5c.5d branch.
-
+**Next actor and review.** The maintainer reviews the concrete interface
+implementation and headless evidence, grants or revises any remaining narrow
+security/interface authority, and separately decides native acceptance,
+publication and subsequent increments. Detailed progress belongs in task
+status/evidence records; HANDOFF remains the concise current dispatcher.
