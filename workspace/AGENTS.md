@@ -30,28 +30,7 @@ A HANDOFF update does not itself grant authority or invoke another agent.
 The usual relay is a cycle: **maintainer ideation/authorization → local
 collaborator → maintainer review → cloud collaborator → maintainer review/authorization (repeat).** The maintainer may authorize bounded multi-iteration work without approving every internal edit, but agents must report material results and seek approval at reserved gates. The lifecycle, minimal HANDOFF schema and document ownership are specified by `workspace/README.md`; role-specific reporting belongs in the approved LOCAL/CLOUD supplements. Do not duplicate detailed execution history or scope inside this instruction section.
 
-### Human–AI collaboration
-
-The **maintainer owns task designation and authorization**. Each active task must identify its canonical handoff location (for example, a task-specific file under the relevant project), target branch/base, permitted file edits and tool operations, acceptance tests, prohibited actions, stop conditions and next responsible actor. Do not infer that a draft task handoff or role document grants permission. Where a task identifier resolves ambiguously or to no approved handoff, request clarification , and perform only read-only orientation pending clarification.
-
-The normal relay is **cloud collaborator → maintainer authorization → local collaborator**, and **local collaborator → maintainer review → cloud collaborator**. A maintainer may explicitly authorize bounded multi-iteration agent-to-agent exchanges with per-iteration progress reports, while reserving publication, deployment, protected-repository and scope-expansion decisions. A handoff file stores state; an authorized orchestration tool or the maintainer must actually initiate each subsequent agent invocation.
-
-
-The maintainer retains authority over objectives, delegation, acceptance, publication, and protected-repository integration.
-
-The normal workflow is:
-
-**Cloud agent → Maintainer → Local agent**
-
-**Local agent → Maintainer → Cloud agent**
-
-A maintainer may authorize multiple bounded cloud/local iterations without requiring approval of every individual implementation change. The agents must remain within the approved scope and provide progress information at each material handoff.
-
-Each task or iteration must identify its next responsible actor and any outstanding approval requirement.
-
-A handoff document records state and proposed actions. It does not independently grant authorization or trigger another agent's execution.
-
-The collaboration lifecycle and handoff format are specified in `workspace/README.md`. Role-specific requirements belong in the respective supplemental role files.
+The collaboration lifecycle and handoff format are further specified in `workspace/README.md`. Role-specific requirements belong in the respective supplemental role files.
 
 ## General start-of-assignment discovery
 
