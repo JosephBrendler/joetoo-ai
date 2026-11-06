@@ -83,5 +83,3 @@ README/evidence destination, not in an accumulating HANDOFF table. The
 maintainer controls task and approval fields; agents can update only their
 assigned latest-result/status fields. Neither status text nor an evidence
 record independently grants execution permission.
-
-The acting agent must provide a complete review report, including changed files, validation results, unresolved issues and the next actor. Detailed records belong in the designated task README or evidence document when editing that document is authorized. HANDOFF.md contains only the current task state, a concise latest-result summary, links to supporting reports and outstanding decisions. Agents may update only their assigned portions of HANDOFF and must not modify maintainer-owned authorization fields.
