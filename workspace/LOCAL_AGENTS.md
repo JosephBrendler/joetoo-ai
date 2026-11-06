@@ -61,6 +61,12 @@ The maintainer may approve a bounded series of local-edit/test/review iterations
 
 Do not assume the cloud agent can read the local working tree or that writing a file automatically starts its next turn. Use an authorized upload, patch, repository update or other explicit transport for the report; the orchestrator must initiate the next agent action.
 
-## Task report minimum fields
+## Task reports
+
+### Task reporting requirements
+
+The acting agent must provide a complete review report, including changed files, validation results, unresolved issues and the next actor. Detailed records belong in the designated task README or evidence document when editing that document is authorized. HANDOFF.md contains only the current task state, a concise latest-result summary, links to supporting reports and outstanding decisions. Agents may update only their assigned portions of HANDOFF and must not modify maintainer-owned authorization fields.
+
+### Task report minimum fields
 
 Task ID; baseline and current branch; authorized scope; files changed (including untracked); exact validations and outcomes; any skipped or unrun checks; risks/uncertainties; unexpected side effects; outstanding decisions; required next actor; and whether maintainer approval is required before continuing. Keep reports concise and append/update only the sections delegated to this role.
