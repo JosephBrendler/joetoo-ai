@@ -17,19 +17,19 @@ This is the standing norm for development workflow for explicitly authorized col
 
 ## Human-multi-agent task handoffs
 
-- The turn-to-turn handoff document for any current task will be owned and reviewed by the maintainer and updated by agents in the workspace/projects/joetoo-kwin/task_<step_enum>/ directory (along with evidence, implementation guidance or other non-production documentation).
-- Maintainer and agents are responsible for different parts of HANDOFF.md and are authorized to change only the sections they are responsible for.
+- The turn-to-turn handoff document (HANDOFF.md) for any current task will be owned and reviewed by the maintainer and updated by agents with access to it, in the workspace/projects/joetoo-kwin/task_<step_enum>/ directory.
+- HANDOFF.md is the canonical active-task dispatch and authorization record. It contains the minimum information necessary to identify the current task, accepted baseline, permissions, stop conditions, recent status and next actor. Detailed implementation progress, validation evidence and historical decisions belong in task status and evidence documents referenced by HANDOFF. Agents update HANDOFF only when the current execution state, authority or next action changes materially.
 - The stucture of HANDOFF.md will likely evolve, but its baseline minimal content will include --
 
-|Section | Responsible party |
+|Section | Content description |
 | --- | --- |
-| Task ID, objective and accepted requirements | Maintainer, with cloud-agent drafting assistance |
-| Base commit, branch and allowed paths | Maintainer-approved task setup |
-| Authorized actions and stop conditions | Maintainer |
-| Implementation progress and changed files | Acting implementation agent |
-| Tests, outcomes and unresolved problems | Acting agent, supported by evidence |
-| Review findings and recommendations | Reviewing agent |
-| Acceptance and next authorized action | Maintainer |
+| Task ID and approval| (maintainer only) text string naming and enumerating the task, along with reference to agent-authored file(s) requesting or recommending this |
+| Objective, scope, requirements | Summary and reference to documents detailing this |
+| Base commit, branch and allowed paths | as stated |
+| Authorized actions and stop conditions | as stated |
+| Implementation progress | Summary and reference to file detailing this |
+| Review findings and recommendations | Summary and reference to file detailing this |
+| Acceptance/approval decisions | (maintainer only) Summary and reference to agent-authored file detailing and requesting this |
 
 The process description lives here; enforceable agent behavior lives in
 [AGENTS.md](AGENTS.md). Project READMEs hold project-specific integration commands,
