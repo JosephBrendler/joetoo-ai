@@ -189,10 +189,6 @@ class LaunchAdapterTests(unittest.TestCase):
             self.assertTrue(self.reader.closed)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class PublicDeclarationTests(unittest.TestCase):
     def test_real_dbus_python_declarations_without_connecting_to_a_bus(self):
         # Validate the actual decorators/signature marshalling metadata, rather
@@ -212,3 +208,115 @@ class PublicDeclarationTests(unittest.TestCase):
             self.assertEqual(fn._dbus_out_signature, 's')
             self.assertEqual(fn._dbus_sender_keyword, 'sender')
         self.assertEqual(module.Broker.BeginSdlRegistration._dbus_async_callbacks, ('reply', 'error'))
+
+
+class SmokeClientTests(unittest.TestCase):
+    def setUp(self):
+        import importlib.util
+        from importlib.machinery import SourceFileLoader
+        from test_rdp_broker import SdlInterfaceTests
+        self.fixture = SdlInterfaceTests()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        spec = importlib.util.spec_from_loader('sdl_smoke_test', SourceFileLoader('sdl_smoke_test',
+            str(Path(__file__).resolve().parents[1] / 'tools/joetoo-sdl-registration-smoke.py')))
+        self.client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.client)  # Never invoke its live main().
+        test = self
+        self.begin_count = 0
+        self.owner = ':1.broker'
+        class Bridge:
+            def Introspect(self, **kwargs):
+                return '<node><interface name="org.joetoo.KWinBridge">' + ''.join(
+                    '<method name="' + name + '">' + ''.join('<arg type="' + c + '" direction="in"/>' for c in signature)
+                    + '<arg type="s" direction="out"/></method>' for name, signature in
+                    dict(BeginSdlRegistration='s', BindSdlRegistration='sih',
+                         PollSdlRegistration='s', CancelSdlRegistration='s').items()) + '</interface></node>'
+            def RegistryStatus(self, **kwargs): return test.fixture.b.RegistryStatus()
+            def ListManaged(self, **kwargs): return test.fixture.b.ListManaged()
+            def BeginSdlRegistration(self, payload, **kwargs):
+                test.begin_count += 1
+                replies, errors = [], []
+                test.fixture.b.BeginSdlRegistration(payload, sender=test.fixture.sender,
+                                                   reply=replies.append, error=errors.append)
+                if errors: raise errors[0]
+                return replies[0]
+            def CancelSdlRegistration(self, rid, **kwargs):
+                return test.fixture.b.CancelSdlRegistration(rid, sender=test.fixture.sender)
+            def PollSdlRegistration(self, rid, **kwargs):
+                return test.fixture.b.PollSdlRegistration(rid, sender=test.fixture.sender)
+            def BindSdlRegistration(self, *args, **kwargs): raise AssertionError('Smoke must not bind/spawn')
+        self.bridge = Bridge()
+        class Daemon:
+            def GetNameOwner(self, *args, **kwargs): return test.owner
+        self.daemon = Daemon()
+        class Bus:
+            def get_object(self, name, path, **kwargs):
+                return test.daemon if name == 'org.freedesktop.DBus' else test.bridge
+            def close(self): test.fixture.bus.lost()
+        self.bus = Bus()
+
+    def run_smoke(self):
+        return self.client.smoke(self.bus, lambda obj, iface: obj, self.fixture.adapter.settings({}), 3)
+
+    def test_real_core_two_cycles_no_child_no_registration_or_placement(self):
+        result = self.run_smoke()
+        self.assertTrue(result['ok'])
+        self.assertEqual(self.begin_count, 2)
+        self.assertIsNone(self.fixture.child)
+        self.assertIsNone(self.fixture.b.registry._active_request_id)
+        self.assertEqual(self.fixture.b.registry.managed_windows, {})
+        self.assertEqual(self.fixture.b.registry.requests[self.fixture.b._rdp_registration['id']].state, 'failed')
+
+    def test_unsynchronized_inventory_refuses_before_begin(self):
+        self.fixture.b.observation_synced = False
+        with self.assertRaisesRegex(RuntimeError, 'synchronized'): self.run_smoke()
+        self.assertEqual(self.begin_count, 0)
+
+    def test_active_placement_refuses_before_begin(self):
+        self.fixture.b.request = dict(id='unrelated', state='PENDING')
+        with self.assertRaisesRegex(RuntimeError, 'idle'): self.run_smoke()
+        self.assertEqual(self.begin_count, 0)
+        self.fixture.b.request = None
+
+    def test_missing_method_refuses_before_begin(self):
+        with patch.object(self.bridge, 'Introspect', return_value='<node/>'):
+            with self.assertRaisesRegex(RuntimeError, 'missing'): self.run_smoke()
+        self.assertEqual(self.begin_count, 0)
+
+    def test_wrong_signature_refuses_before_begin(self):
+        xml = self.bridge.Introspect().replace('type="i"', 'type="s"')
+        with patch.object(self.bridge, 'Introspect', return_value=xml):
+            with self.assertRaisesRegex(RuntimeError, 'signature'): self.run_smoke()
+        self.assertEqual(self.begin_count, 0)
+
+    def test_missing_processfd_is_failure_without_armed_intent(self):
+        self.fixture.bus.process_fd = False
+        with self.assertRaises(Exception): self.run_smoke()
+        self.assertIsNone(self.fixture.b._rdp_registration)
+
+    def test_cancel_reply_loss_stays_failure_and_best_effort_cleans(self):
+        original = self.bridge.CancelSdlRegistration
+        calls = []
+        def lost_reply(rid, **kwargs):
+            result = original(rid, **kwargs)
+            calls.append(rid)
+            if len(calls) == 1: raise RuntimeError('simulated lost cancel reply')
+            return result
+        with patch.object(self.bridge, 'CancelSdlRegistration', lost_reply):
+            with self.assertRaisesRegex(RuntimeError, 'lost cancel reply'): self.run_smoke()
+        self.assertIsNone(self.fixture.b.registry._active_request_id)
+        self.assertEqual(len(calls), 2)
+
+    def test_owner_replacement_aborts_and_connection_close_cleans_old_owner(self):
+        def owner_after_begin(*args, **kwargs):
+            return ':1.replacement' if self.begin_count else self.owner
+        with patch.object(self.daemon, 'GetNameOwner', owner_after_begin):
+            with self.assertRaisesRegex(RuntimeError, 'owner changed'): self.run_smoke()
+        self.bus.close()  # main() closes the persistent connection on every exit.
+        self.assertEqual(self.fixture.b._rdp_registration['result']['state'], 'failed')
+        self.assertIsNone(self.fixture.b.registry._active_request_id)
+
+
+if __name__ == "__main__":
+    unittest.main()

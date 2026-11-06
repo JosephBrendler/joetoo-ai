@@ -48,8 +48,10 @@ existing local Unix session bus, non-root broker UID, and bus-authenticated
 `GetConnectionCredentials` UID equal to broker UID. Pin unique sender name,
 caller PID and bus-provided `ProcessFD`; require this credential for race-safe
 caller identity, with **no numeric-PID-only fallback**. Missing process credentials,
-Unix-FD transport or Linux pidfd support means unsupported/fail closed. Availability
-on q552u01 is a prerequisite to verify, not a demonstrated fact.
+Unix-FD transport or Linux pidfd support means unsupported/fail closed. The
+maintainer subsequently verified ProcessFD/ProcessID/UnixUserID/UnixGroupIDs with
+matching UID/PID on q552u01; this prerequisite is satisfied on that tested bus.
+No alternative self-pidfd interface is needed or implemented.
 
 One persistent launcher connection must Begin, spawn the direct child, Bind and
 Poll/Cancel; separate `qdbus6` invocations cannot own this protocol. Only that
@@ -257,3 +259,168 @@ redacted failure before native approval. If absent, decide the separate lifetime
 provenance alternative; current code remains fail-closed. Live FD marshalling,
 production security settings and native registration-only acceptance need their
 own maintainer-operated validation; no X11, placement or later increment begins.
+
+## 6. Installer integration and non-networked smoke preparation — 2026-11-06
+
+**Baseline:** `2938ec977f6a556ca27f432550369387d41a944a` on the existing
+`task/joetoo-kwin-step1.5c5d-managed-rdp-implementation` branch. The maintainer's
+uncommitted short HANDOFF updates were present before this work and are preserved.
+No historical iteration table was restored. The maintainer independently reports
+575 Python / 99 JavaScript PASS on gmki91, four live SDL signatures exposed there,
+and successful q552u01 credential preflight including ProcessFD. These are
+maintainer observations, distinct from the headless checks below. Earlier sandbox
+preflight limitations in §5 remain historical, not an unresolved host prerequisite.
+
+### Installer change and bounded review corrections
+
+The existing installer now includes `rdp_launch` in the same source/destination,
+mode, check, immutable content-addressed archive and install/update inventories.
+It installs `~/.local/libexec/joetoo_kwin_rdp_launch.py` at 0644 and reports ten
+managed files plus the SDL adapter path. Missing, altered, wrong-mode, non-regular
+or symlink adapter destinations cannot pass check. Check now validates the current
+UID for every managed component, complementing the archive's existing ownership
+checks. No separate install mechanism or restart-wrapper responsibility was added.
+The maintainer's restart wrapper and all broker/registry/resident/adapter/VNC/CLI
+runtime sources remain byte-unchanged in this iteration.
+
+Seven focused installer cases cover missing/outdated/wrong-mode, nine-to-ten
+upgrade and repeat-update stability, preserved bytes/mode/provenance, symlink
+refusal, archive failure before replacement, running-service refusal and simulated
+foreign ownership without privileged chown. Existing all-component mode/archive
+and preview-count tests now cover ten files; six-file upgrades add both VNC and
+SDL dependencies through the ordinary installer.
+
+The disconnected-caller tests now examine internal stable terminal reporting
+instead of issuing an external Poll through a lost connection. The fixture
+rejects Begin/Bind/Poll from a disconnected sender/transport; a regression checks
+that prohibition. Owner-name loss is not mislabeled as an actual owner-process
+exit. Both RDP test modules now put `unittest.main()` after all classes, including
+the public declarations and smoke tests, so direct execution discovers them.
+
+**Logging source review (no SDL run):** installed pkg-config metadata identifies
+FreeRDP client 3.32.1. The cached matching release tarball SHA-256 is
+`3021cf8848efbd0064664e187cb61e6101e4e74a4d8ffb495d9f7715e22d67de`.
+`client/SDL/SDL3/sdl_freerdp.cpp:695–696` uses `WLOG_DEBUG` for the driver message.
+`winpr/libwinpr/utils/wlog/wlog.c:127` defaults to the CONSOLE appender;
+`ConsoleAppender.c:118–127` routes TRACE/DEBUG/INFO to stdout and higher levels
+to stderr; `:260` selects default stream policy. The SDL source contains no
+appender override. Thus stdout is the source-supported default expected by the
+adapter, rather than stderr-only capture. `WLOG_APPENDER` or explicit appender
+settings can change routing. The console writer uses `fprintf` without an
+explicit flush; prompt visibility in a regular redirected file is not proved.
+The previous proof merged stdout/stderr, so it cannot independently distinguish
+streams. No logging policy/runtime change is needed for this no-child smoke;
+later SDL acceptance must verify effective logging settings and timely visibility.
+Do not weaken the backend check or silently substitute another evidence stream.
+
+### Maintainer procedure — prepare now, execute only after review/approval
+
+Run from a local non-root Plasma Konsole on q552u01 in its existing session.
+Do not use separate qdbus invocations for Begin/Cancel. The new verification client
+uses one persistent connection and imports the **installed** adapter without
+writing bytecode. It never launches SDL, invokes Bind, selects an endpoint,
+reads credentials or performs a remote network operation.
+
+First use the existing approved maintainer update/start procedure; these commands
+have **not been executed by Codex**:
+
+```bash
+cd /home/joe/joetoo-ai/workspace/projects/joetoo-kwin
+./tools/restart_joetoo-kwind notest
+./tools/joetoo-kwind-install-poc --check
+cmp -- libexec/joetoo_kwin_rdp_launch.py "$HOME/.local/libexec/joetoo_kwin_rdp_launch.py"
+stat -c '%U %a %n' "$HOME/.local/libexec/joetoo_kwin_rdp_launch.py"
+rc-service -U joetoo-kwind status
+qdbus6 org.joetoo.KWinBridge /org/joetoo/KWinBridge
+# End of commands
+
+```
+
+Expected: ten managed components report Current, the adapter matches the checkout,
+its UID is the current user and mode is 644, and the service reports started.
+Introspection must expose Begin `s→s`, Bind `sih→s`, Poll `s→s`, Cancel `s→s`.
+The four signatures were maintainer-observed on gmki91; this corrected installed
+path and live Begin/Cancel behavior have **not yet been observed on q552u01**.
+Begin currently checks installed `/usr/bin/sdl-freerdp` executable metadata even
+though this smoke does not execute it; that binary must remain available.
+
+Before arming anything, the client requires synchronized inventory, an empty
+managed registry, no pending/running registration, no active initial layout or
+uncertain viewer cleanup, and IDLE placement with no request ID. Existing unmanaged
+windows are allowed. If synchronization is still pending after startup, inspect
+RegistryStatus until it is synchronized; do not bypass the guard. Avoid concurrent
+launchers, moves, restarts or source reloads during the short smoke test.
+
+```bash
+python3 tools/joetoo-sdl-registration-smoke.py --call-timeout-ms 3000
+qdbus6 org.joetoo.KWinBridge /org/joetoo/KWinBridge org.joetoo.KWinBridge.RegistryStatus | jq '{observation, placement_transaction, managed_count, request_count, request_counts}'
+qdbus6 org.joetoo.KWinBridge /org/joetoo/KWinBridge org.joetoo.KWinBridge.ListManaged | jq .
+# End of commands
+
+```
+
+The adjustable call timeout is for this verification client, not an identity quiet
+period. The client passes installed adapter defaults explicitly as registration
+bounds. It pins the broker's unique owner and verifies all four XML signatures.
+It performs Begin → Cancel → terminal Poll → repeated Cancel, then a second
+Begin/Cancel cycle as a reservation-release probe. All calls use the same bus
+connection. Any exception fails the smoke; best-effort owner cancellation runs
+when the request ID is known, and main always closes the connection so owner-loss
+cleanup can finish if a reply is lost. Do not treat a timeout as successful cleanup.
+
+Expected passing client JSON:
+
+```json
+{"active_requests":0,"broker_owner_unchanged":true,"cancelled_transactions":2,"managed_count":0,"ok":true,"placement":"IDLE","source_unchanged":true}
+```
+
+From a fresh restart, RegistryStatus should show request_count=2, failed=2,
+pending=running=0; ListManaged should show count=0 and windows=[]. Placement must
+remain `{id:null,state:"IDLE"}` and observation source/synchronization remain valid.
+The two failed records/last cached terminal response are intentional history,
+not active transactions. The second Begin proves the previous active reservation
+was released. Subsequent read-only RegistryStatus/ListManaged calls demonstrate
+that ordinary broker queries remain available; this is not a new native test of
+Konsole/Dolphin/VNC launch behavior. Internal timer/FD release is headless-tested,
+not directly observable through those read-only methods. Any source/owner change,
+nonempty registry, active work, unexpected counts or terminal result is a failed
+or inconclusive smoke. The count guard may conservatively reject a heavily used
+bounded history; use the reviewed fresh-start procedure rather than bypassing it.
+
+This gate does not test Bind's input Unix-FD marshalling, an SDL backend, a viewer
+UUID, TLS/NLA, credentials, placement or remote usability. No native PASS is claimed.
+
+### Validation and next decision
+
+Actual checks executed this iteration:
+
+- `PYTHONPATH=tests python3 -m unittest test_openrc_user_setup test_rdp_broker test_rdp_launch -q`:
+  **156 PASS**, no failures/errors/skips (11.758s).
+- `python3 -m unittest discover -s tests -p 'test_*.py' -q`:
+  **591 PASS**, no failures/errors/skips (90.278s).
+- `node --test --test-isolation=none --test-reporter=spec tests/test_*.js`:
+  **99 PASS**, no failures/skips.
+- Direct `python3 tests/test_rdp_broker.py -q`: **80 PASS**;
+  direct `python3 tests/test_rdp_launch.py -q`: **26 PASS**, confirming all classes
+  are discovered, including the declarations and smoke tests.
+- `sh -n tools/joetoo-kwind-install-poc`,
+  `shellcheck tools/joetoo-kwind-install-poc`, in-memory Python compilation of the
+  new client/changed tests, tracked/new-file whitespace checks: PASS.
+- Byte comparisons against HEAD confirm the maintainer's restart wrapper, broker,
+  adapter, resident, registry, VNC modules and CLI were preserved.
+
+Complete current-working-tree diff (including the new smoke client):
+`/tmp/step1.5c5d-installer-smoke-review.patch`. It includes the maintainer's
+pre-existing HANDOFF changes as well as the small, explicitly labeled Codex
+follow-up; the original maintainer dispatcher is preserved. Source/tests/client
+and this focused evidence record are retained in the checkout, with no source
+or meaningful findings existing only in `/tmp`. The patch is a redundant review
+export; test-owned temporary files are disposable and cleaned by fixtures. No
+existing native evidence was moved/deleted and no historical cleanup was done.
+No staging, commit, push, installation, deployment or live smoke execution.
+
+The eight smoke-client tests reuse the actual broker/registry fixture, including
+no-child/no-placement success, quiescence/introspection guards, missing ProcessFD,
+lost cancel reply, owner replacement and cleanup. Native service execution was
+not attempted. The next maintainer decision is approval of this installer/client
+candidate and the above bounded Begin/Cancel procedure before operational execution.

@@ -507,6 +507,7 @@ class SdlInterfaceTests(unittest.TestCase):
             self.uid = test.os.geteuid()
             self.process_fd = True
             self.connected = True
+            self.lost_senders = set()
         def get_is_connected(self): return self.connected
         def get_object(self, *args, **kwargs): return self
         def add_signal_receiver(self, callback, **kwargs):
@@ -525,6 +526,7 @@ class SdlInterfaceTests(unittest.TestCase):
             reply, error = self.pending.pop(0)
             reply(self.credentials())
         def lost(self):
+            self.lost_senders.add(self.test.sender)
             for match in list(self.matches):
                 if not match.removed: match.callback(self.test.sender, self.test.sender, '')
 
@@ -546,7 +548,12 @@ class SdlInterfaceTests(unittest.TestCase):
         for record in self.b.registry.managed_windows.values():
             self.assertEqual(record.placement, 'not_requested')
 
+    def assert_client_connected(self, sender=None):
+        self.assertTrue(self.bus.connected, 'Disconnected transport cannot issue a call')
+        self.assertNotIn(sender or self.sender, self.bus.lost_senders, 'Disconnected sender cannot issue a call')
+
     def begin(self, sender=None, payload=None):
+        self.assert_client_connected(sender)
         self.replies.clear(); self.errors.clear()
         payload = payload if payload is not None else json.dumps(dict(protocol=1, desktop=3, slot=1, bounds={}))
         self.b.BeginSdlRegistration(payload, sender=sender or self.sender,
@@ -568,6 +575,7 @@ class SdlInterfaceTests(unittest.TestCase):
         return self.child.pid
 
     def bind(self, pid=None, file=None, sender=None):
+        self.assert_client_connected(sender)
         fd = self.os.dup((file or self.log).fileno())
         wrapped = self.FD(fd)
         try:
@@ -583,6 +591,7 @@ class SdlInterfaceTests(unittest.TestCase):
         self.b.ObserveWindow(json.dumps(dict(source='source', revision=self.revision, event='added', window=window)))
 
     def poll(self, sender=None, request=None):
+        self.assert_client_connected(sender)
         return json.loads(self.b.PollSdlRegistration(request or self.rid, sender=sender or self.sender))
 
     def test_public_positive_real_pidfd_log_and_registry_without_placement(self):
@@ -593,8 +602,8 @@ class SdlInterfaceTests(unittest.TestCase):
         self.assertEqual(result['reason'], 'registered')
         self.assertEqual(self.b.registry.managed_windows[WINDOW_ID].observation['pid'], self.child.pid)
         self.assertEqual(self.poll(), result)
-        self.bus.lost()  # Terminal success survives owner disconnect.
-        self.assertEqual(self.poll(), result)
+        self.bus.lost()  # Terminal success survives owner disconnect internally.
+        self.assertEqual(self.b._sdl_response(self.rid), result)
 
     def test_optional_processfd_absent_fails_closed_without_intent(self):
         self.bus.process_fd = False
@@ -667,12 +676,12 @@ class SdlInterfaceTests(unittest.TestCase):
             self.assertEqual(self.poll()['state'], 'failed')
         self.assertFalse(self.b.registry.managed_windows)
 
-    def test_owner_process_exit_and_name_loss_cleanup(self):
+    def test_owner_name_loss_cleanup(self):
         self.begin(); self.spawn(); self.bind()
         c = self.b._rdp_registration
         caller, child, reader = c['owner_identity'], c['process'], c['reader']
         self.bus.lost()
-        self.assertEqual(self.poll()['reason'], 'caller_lost')
+        self.assertEqual(self.b._sdl_response(self.rid)['reason'], 'caller_lost')
         self.assertIsNone(caller.fd); self.assertIsNone(child.fd); self.assertTrue(reader.closed)
         self.assertIsNone(self.child.poll())  # Broker never kills the viewer.
 
@@ -833,7 +842,8 @@ class SdlInterfaceTests(unittest.TestCase):
     def test_bus_disconnect_before_commit_fails_closed(self):
         self.begin(); self.spawn(); self.bind(); self.event()
         self.bus.connected = False
-        self.assertEqual(self.poll()['reason'], 'caller_lost')
+        self.loop.tick()  # No external call can arrive on the disconnected bus.
+        self.assertEqual(self.b._sdl_response(self.rid)['reason'], 'caller_lost')
         self.assertFalse(self.b.registry.managed_windows)
 
     def test_bus_disconnect_during_authentication(self):
@@ -842,3 +852,14 @@ class SdlInterfaceTests(unittest.TestCase):
         self.assertEqual(self.errors[-1].name, 'org.freedesktop.DBus.Error.AccessDenied')
         self.bus.deliver()
         self.assertIsNone(self.b._rdp_registration)
+
+    def test_fixture_refuses_external_calls_after_owner_loss(self):
+        self.begin(); self.bus.lost()
+        for operation in (self.poll, self.bind, self.begin):
+            with self.assertRaisesRegex(AssertionError, 'Disconnected sender'):
+                operation()
+        self.assertEqual(self.b._sdl_response(self.rid)['reason'], 'caller_lost')
+
+
+if __name__ == "__main__":
+    unittest.main()

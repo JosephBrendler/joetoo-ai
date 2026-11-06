@@ -27,12 +27,15 @@ registry_source=$root/libexec/joetoo_kwin_registry.py
 vnc_identity_source=$root/libexec/joetoo_kwin_vnc_identity.py
 vnc_target_source=$root/libexec/joetoo_kwin_vnc_target.py
 vnc_launch_source=$root/libexec/joetoo_kwin_vnc_launch.py
+# SDL registration is a broker runtime dependency, installed by this tool too.
+rdp_launch_source=$root/libexec/joetoo_kwin_rdp_launch.py
 service_dest=$config_home/rc/init.d/joetoo-kwind
 daemon_dest=$HOME/.local/libexec/joetoo-kwind
 registry_dest=$HOME/.local/libexec/joetoo_kwin_registry.py
 vnc_identity_dest=$HOME/.local/libexec/joetoo_kwin_vnc_identity.py
 vnc_target_dest=$HOME/.local/libexec/joetoo_kwin_vnc_target.py
 vnc_launch_dest=$HOME/.local/libexec/joetoo_kwin_vnc_launch.py
+rdp_launch_dest=$HOME/.local/libexec/joetoo_kwin_rdp_launch.py
 override_source=$root/poc-user-conf.d/joetoo-kwind
 override_dest=$config_home/rc/conf.d/joetoo-kwind
 resident_source=$root/joetoo-kwin-resident.js
@@ -51,7 +54,7 @@ archive_files() {
         "$registry_source" "$registry_dest" "$override_source" "$override_dest" \
         "$resident_source" "$resident_dest" "$cli_source" "$cli_dest" \
         "$vnc_identity_source" "$vnc_identity_dest" "$vnc_target_source" "$vnc_target_dest" \
-        "$vnc_launch_source" "$vnc_launch_dest" <<'PY'
+        "$vnc_launch_source" "$vnc_launch_dest" "$rdp_launch_source" "$rdp_launch_dest" <<'PY'
 import datetime
 import filecmp
 import hashlib
@@ -168,9 +171,9 @@ def main():
     if not archive.is_absolute() or '..' in archive.parts:
         raise ValueError('XDG_STATE_HOME must be an absolute path without .. components')
     components = ('service', 'daemon', 'registry', 'override', 'resident', 'cli',
-                  'vnc_identity', 'vnc_target', 'vnc_launch')
+                  'vnc_identity', 'vnc_target', 'vnc_launch', 'rdp_launch')
     # Match the explicit install -m contract, not the checkout's source modes.
-    required_modes = (0o755, 0o755, 0o644, 0o644, 0o644, 0o755, 0o644, 0o644, 0o644)
+    required_modes = (0o755, 0o755, 0o644, 0o644, 0o644, 0o755, 0o644, 0o644, 0o644, 0o644)
     for component, required_mode, src, dest in zip(components, required_modes, sys.argv[3::2], sys.argv[4::2]):
         src, dest = Path(src), Path(dest)
         safe_path(dest)
@@ -283,13 +286,14 @@ printf 'Registry module:     %s\n' "$registry_dest"
 printf 'VNC identity module: %s\n' "$vnc_identity_dest"
 printf 'VNC target module:   %s\n' "$vnc_target_dest"
 printf 'VNC launch module:   %s\n' "$vnc_launch_dest"
+printf 'SDL RDP module:      %s\n' "$rdp_launch_dest"
 printf 'Resident JavaScript: %s\n' "$resident_dest"
 printf 'Bash CLI:           %s\n' "$cli_dest"
 printf 'OpenRC user override: %s\n' "$override_dest"
 printf 'OpenRC user config:  %s\n' "$config_home/rc/rc.conf"
 
 for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest" \
-    "$vnc_identity_dest" "$vnc_target_dest" "$vnc_launch_dest"; do
+    "$vnc_identity_dest" "$vnc_target_dest" "$vnc_launch_dest" "$rdp_launch_dest"; do
     if [ -L "$dest" ] || { [ -e "$dest" ] && [ ! -f "$dest" ]; }; then
         printf 'Refusing unexpected installation destination: %s\n' "$dest" >&2
         exit 1
@@ -298,7 +302,7 @@ done
 
 if [ "$action" = --check ]; then
     status=0
-    for mapping in service daemon registry override resident cli vnc_identity vnc_target vnc_launch; do
+    for mapping in service daemon registry override resident cli vnc_identity vnc_target vnc_launch rdp_launch; do
         case $mapping in
             service) src=$service_source; dest=$service_dest ;;
             daemon) src=$daemon_source; dest=$daemon_dest ;;
@@ -309,9 +313,11 @@ if [ "$action" = --check ]; then
             vnc_identity) src=$vnc_identity_source; dest=$vnc_identity_dest ;;
             vnc_target) src=$vnc_target_source; dest=$vnc_target_dest ;;
             vnc_launch) src=$vnc_launch_source; dest=$vnc_launch_dest ;;
+            rdp_launch) src=$rdp_launch_source; dest=$rdp_launch_dest ;;
         esac
         case $mapping in service|daemon|cli) mode=755 ;; *) mode=644 ;; esac
-        if [ -f "$dest" ] && cmp -s -- "$src" "$dest" && [ "$(stat -c '%a' -- "$dest")" = "$mode" ]; then
+        if [ -f "$dest" ] && cmp -s -- "$src" "$dest" && [ "$(stat -c '%a' -- "$dest")" = "$mode" ] \
+                && [ "$(stat -c '%u' -- "$dest")" = "$(id -u)" ]; then
             printf 'Current: %s\n' "$dest"
         else
             printf 'Missing or outdated: %s\n' "$dest"
@@ -324,7 +330,7 @@ fi
 
 if [ "$action" = --install ]; then
     for dest in "$service_dest" "$daemon_dest" "$registry_dest" "$override_dest" "$resident_dest" "$cli_dest" \
-        "$vnc_identity_dest" "$vnc_target_dest" "$vnc_launch_dest"; do
+        "$vnc_identity_dest" "$vnc_target_dest" "$vnc_launch_dest" "$rdp_launch_dest"; do
         if [ -e "$dest" ]; then
             printf 'Already installed: %s (use --check or --update)\n' "$dest" >&2
             exit 1
@@ -352,10 +358,11 @@ install -D -m 0644 -- "$registry_source" "$registry_dest"
 install -D -m 0644 -- "$vnc_identity_source" "$vnc_identity_dest"
 install -D -m 0644 -- "$vnc_target_source" "$vnc_target_dest"
 install -D -m 0644 -- "$vnc_launch_source" "$vnc_launch_dest"
+install -D -m 0644 -- "$rdp_launch_source" "$rdp_launch_dest"
 install -D -m 0644 -- "$override_source" "$override_dest"
 install -D -m 0644 -- "$resident_source" "$resident_dest"
 install -D -m 0755 -- "$cli_source" "$cli_dest"
-printf 'Installed nine user-owned joetoo-kwind files. No service was started.\n'
+printf 'Installed ten user-owned joetoo-kwind files. No service was started.\n'
 printf 'From a local Plasma Konsole, run:\n'
 printf '  rc-service -U joetoo-kwind start\n'
 printf '  rc-service -U joetoo-kwind status\n'
