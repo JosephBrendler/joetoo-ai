@@ -74,6 +74,8 @@ condensation is a separate editorial decision.
 
 ## Current authority and boundaries
 
+**Deferred decision:** Maintainer has identified a potential need to register and place network authentication dialog (NLA/vnc passwd) windows in order to facilitate automated completion of long -o -f CONFIG operations. This is deferred to future phase invoving RDP viewer placement. See [increment2-deferred-authentication-workflow-section.md](./increment2-deferred-authentication-workflow-section.md)
+
 **Previously accepted:** Maintainer accepted the q552u01 native Begin/Cancel smoke gate on 2026-11-06. Its two terminal `failed` records were deliberate cancellations, not failures of the smoke test.
 
 **Previously authorized and implemented:** Bounded Codex headless implementation of a persistent development-only SDL launcher, using Begin → direct child → Bind → Poll/Cancel on one local D-Bus connection. Codex reported 178 focused, 613 full Python and 99 JavaScript passes. Maintainer subsequently reproduced the 178/613/99 passes on both gmki91 and q552u01.
