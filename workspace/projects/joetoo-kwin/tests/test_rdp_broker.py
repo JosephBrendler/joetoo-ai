@@ -401,6 +401,89 @@ class RdpBrokerTests(unittest.TestCase):
         self.assertEqual(set(self.b.registry.managed_windows), {WINDOW_ID})
         self.assertEqual(self.b.registry.managed_windows[WINDOW_ID].presence, 'missing')
 
+    def test_missing_managed_record_is_preserved_across_second_registration(self):
+        # One broker/source lifetime: A succeeds, closes, and remains historical
+        # while B gets its own launch identity, UUID and slot through the core.
+        source = self.b.observation_source
+        first_id, first_marker = self.rid, self.marker
+        first_process, first_reader = self.process, self.reader
+        self.bind()
+        self.event()
+        first_result = self.poll()
+        self.assertEqual(first_result['state'], 'registered')
+        first_request = deepcopy(self.b.registry.requests[first_id])
+        self.event('removed')
+        first_process.poll.return_value = 0
+        first_record = self.b.registry.get_window(WINDOW_ID)
+        first_detail = json.loads(self.b.GetManaged(first_result['managed_id']))
+        self.assertEqual(first_record.presence, 'missing')
+        self.assertEqual(first_record.recipe['slot'], 1)
+        self.assertNotIn(WINDOW_ID, self.b.observed_windows)
+        self.assertEqual(self.poll(), first_result)
+        self.assertEqual(self.b._cancel_rdp_registration(first_id), first_result)
+
+        self.spec = self.b._begin_rdp_registration(3, 2, {})
+        self.rid, self.marker = self.spec['request_id'], self.spec['title_marker']
+        self.process = SimpleNamespace(pid=43, poll=Mock(return_value=None))
+        self.reader = SimpleNamespace(pid=43, read_backend=Mock(return_value='wayland'), close=Mock())
+        self.assertNotEqual(self.rid, first_id)
+        self.assertNotEqual(self.marker, first_marker)
+        self.assertNotEqual(self.process.pid, first_process.pid)
+        self.bind()
+        # The bounded response cache has moved to B; A's completed registry
+        # request must survive, and a stale cancellation must not affect B.
+        self.assertEqual(self.b._cancel_rdp_registration(first_id)['state'], 'unknown')
+        self.assertEqual(self.poll()['state'], 'pending')
+        self.event(identifier=AUTH, pid=43, caption='Credentials required')
+        self.event(identifier=OTHER, pid=43)
+        second_result = self.poll()
+        self.assertEqual(second_result['state'], 'registered')
+        self.assertEqual(second_result['window_uuid'], OTHER)
+        self.assertNotEqual(second_result['managed_id'], first_result['managed_id'])
+        self.assertNotEqual(second_result['window_uuid'], first_result['window_uuid'])
+        second_record = self.b.registry.get_window(OTHER)
+        self.assertEqual(second_record.request_id, self.rid)
+        self.assertEqual(second_record.observation['pid'], 43)
+        self.assertEqual(second_record.observation['caption'], self.marker)
+        self.assertEqual(second_record.recipe['desktop'], 3)
+        self.assertEqual(second_record.recipe['slot'], 2)
+        self.assertEqual(second_record.presence, 'present')
+        self.assertEqual(self.b.registry.requests[self.rid].launch_pid, 43)
+        self.assertEqual(first_request.launch_pid, 42)
+        self.assertEqual(self.b.registry.requests[self.rid].state, 'succeeded')
+
+        # Full equality catches silent mutation of A's recipe, snapshot or IDs,
+        # not merely replacement of the top-level registry dictionary key.
+        self.assertEqual(self.b.registry.get_window(WINDOW_ID), first_record)
+        self.assertEqual(self.b.registry.requests[first_id], first_request)
+        self.assertEqual(json.loads(self.b.GetManaged(first_result['managed_id'])), first_detail)
+        self.assertEqual(json.loads(self.b.GetManaged(WINDOW_ID)), first_detail)
+        second_detail = json.loads(self.b.GetManaged(second_result['managed_id']))
+        self.assertEqual(second_detail['window']['window_uuid'], OTHER)
+        self.assertEqual(json.loads(self.b.GetManaged(OTHER)), second_detail)
+        listed = json.loads(self.b.ListManaged())
+        self.assertEqual(listed['count'], 2)
+        self.assertEqual([w['managed_id'] for w in listed['windows']],
+                         [first_result['managed_id'], second_result['managed_id']])
+        self.assertEqual([w['window_uuid'] for w in listed['windows']], [WINDOW_ID, OTHER])
+        self.assertEqual([w['presence'] for w in listed['windows']], ['missing', 'present'])
+        self.assertTrue(all(w['placement'] == 'not_requested' for w in listed['windows']))
+        self.assertEqual(set(self.b.registry.managed_windows), {WINDOW_ID, OTHER})
+        self.assertEqual(self.poll(), second_result)
+        self.assertEqual(self.b._cancel_rdp_registration(self.rid), second_result)
+        status = json.loads(self.b.RegistryStatus())
+        self.assertEqual(status['request_count'], 2)
+        self.assertEqual(status['request_counts']['succeeded'], 2)
+        self.assertEqual(status['request_counts']['pending'], 0)
+        self.assertEqual(status['request_counts']['running'], 0)
+        self.assertEqual(status['observation']['source'], source)
+        self.assertTrue(status['observation']['synchronized'])
+        self.assertEqual(status['placement_transaction'], {'id': None, 'state': 'IDLE'})
+        self.assertIsNone(self.b.registry._active_request_id)
+        first_reader.close.assert_called_once()
+        self.reader.close.assert_called_once()
+        self.assertEqual(self.loop.callbacks, {})
+
     def test_cleanup_failure_cannot_register(self):
         self.bind()
         self.event()
