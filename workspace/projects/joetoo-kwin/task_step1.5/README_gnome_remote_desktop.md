@@ -435,14 +435,6 @@ journalctl --user -b -u gnome-remote-desktop.service \
 
 ## 8. Implications for `joetoo-kwin` Step 1.5c.5c
 
-**Subsequent milestone decision (2026-11-05):** the maintainer closed 1.5c.5c
-with affirmative feasibility after the SDL identity investigations recorded in
-[HANDOFF.md](HANDOFF.md), including native-Wayland negative/coexistence tests.
-The study below retains its original evidence boundaries. Step 1.5c.5d is the
-next managed RDP milestone, with SDL first by implementation sequence; accepted
-TigerVNC and future separately approved RDP clients are user-selectable peers.
-No executable increment is authorized by this documentation update.
-
 This study establishes a **working RDP server/client interoperability baseline on both joetoo native test platforms**, but it does **not** itself implement a managed RDP launch recipe in `joetoo-kwin`.
 
 1. **Viewer lifecycle ≠ GNOME login-session lifecycle.** Closing the local viewer might preserve a Remote Login GNOME session; never equate closing a window, disconnecting TCP and logging out remotely.
@@ -462,7 +454,7 @@ These GNOME/GDM observations should **not** be assumed to describe a Gentoo `krd
 - **Server reboot:** Remote Login was successfully re-established after reboot (**now verified**). The exact first-login sequence before any local console login, post-boot listener inventory, and Desktop Sharing after that same reboot were **not separately documented**.
 - **Certificate policy:** Replace the two self-signed certificates with SAN-correct certificates from the maintainer's existing PKI, then verify trust chains, hostname matching and any pinning behavior in KRDC, Remmina and FreeRDP (system and user listeners separately). **Not yet done**.
 - **Negotiated RDP security:** Determine actual TLS cipher/protocol and NLA or downgrade behavior, particularly KRDC's 192-bit setting. Do not infer cryptographic strength from a UI label.
-- **SDL frontend:** Subsequent native evidence confirmed SDL's `wayland` backend on `q552u01` and the marker/PID/UUID viewer distinction, including cancellation, failed NLA, connection failure and unrelated-viewer coexistence; see HANDOFF iterations 40–44. Production certificate behavior remains unverified; optional SDL Desktop Sharing (3390) remains a separate, untested capability.
+- **SDL frontend:** Identify the actual SDL video driver on `q552u01` (native Wayland or XWayland), establish its certificate-dialog/credential behavior, and optionally test SDL Desktop Sharing (3390). SDL Remote Login on both platforms **is already demonstrated**.
 - **Managed client pilot:** Verify exact KWin PID/UUID identity, authentication pre-window, desktop/slot/geometry/stack, window reuse, cancellation and exit for selected RDP clients. **No such `joetoo-kwin` RDP integration tests were performed.**
 - **Lock behavior:** Correlate an actual GNOME inactivity lock with journal timestamps. Earlier `Session creation inhibited` evidence is strong; a later spontaneous Remmina close remained inferred.
 - **Performance and peripheral features:** No controlled latency, CPU/network, codec or audio redirection benchmarks. Plain-text clipboard was originally tested in both directions; file transfers and arbitrary MIME types were not established.
