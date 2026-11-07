@@ -1,236 +1,73 @@
 # Step 1.5c.5d — Increment 2 X11 SDL viewer-role identity: scope supplement (DRAFT)
 
-**Prepared:** 2026-11-07 for maintainer/Codex design review.  
-**Authority:** This is a requirements/planning draft subordinate to
-`Step1.5c5_implementation_scope.md` §5A. It authorizes **no implementation,
-no native/network tests, no service changes, no new input observer and no
-contract/public-interface change**. Increment 1 is separately maintainer
-ACCEPTED; see `step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md`.
+**Revision:** 2026-11-07, after Codex's read-only X11 source/archival review.  
+**Reference checkpoint:** `a66d15377f0ebd01981d771f0bcbc5cb99c99d70` on `task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`; verify current HEAD before use.  
+**Authority:** Planning only, subordinate to `Step1.5c5_implementation_scope.md` §5A. No implementation, native/network tests, installation, new observer, service operation, API change, or Git publication is authorized by this draft. The maintainer has **accepted Increment 1**; see `step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md`.
 
-## Objective and scope boundary
+## Objective and operational criterion
 
-Extend the accepted exact launch-owned, no-placement SDL registration behavior
-to **X11 on gmki91**, discriminating a persistent desktop viewer from a
-preceding temporary normal window when both share the **same PID, application
-class and exact generated title marker**, but have **different KWin UUIDs**.
-No fixed-delay, last-created, last-survivor, largest-window, activation-only,
-PID-only or class-only adoption. Preserve complete lifecycle and provenance.
+Extend the accepted broker-owned, launch-proven, exact-KWin-UUID, **registration-without-placement** behavior to X11 on `gmki91`. In recorded successful X11 SDL runs, a temporary and a persistent *normal* window shared the launched PID, application class and exact generated title marker but had **distinct KWin UUIDs**. The selector must identify the actual persistent desktop viewer without enrolling a predecessor or guessing from window order, disappearance, dimensions, focus or an elapsed delay.
 
-Increment 2 is **registration only**. No GDM/remote readiness assertion,
-desktop/geometry/stack/focus mutation, configured `-o`, client preference or
-production security policy. No regression of accepted native-Wayland behavior,
-generic launch, or TigerVNC behavior. Do not silently replace a registered
-UUID with a successor.
+**Preferred outcome: registration without any additional human interaction after viewer creation.** This matters for the planned *sequential* `joetoo-kwin -o -f CONFIG`: a compulsory click to distinguish a viewer would introduce an additional human gate into a long launch plan. Network authentication (NLA, VNC password) may already require interaction *before* the persistent viewer exists; removing that stage is not part of this increment. Future decisions about staging, identifying, placing and reporting pending-authentication windows, and continuing a sequential plan with outstanding prompts, are explicitly deferred to `increment2-deferred-authentication-workflow-section.md` (Increments 3–5). Do **not** infer that background launchers are required or approved.
 
-## Historical evidence that must not be discarded
+This increment does not place/move/focus/stack windows, assert transport/login/GDM readiness, implement configured `-o`, change authentication policy or broaden the supported client set. Preserve accepted Wayland, generic and TigerVNC behavior, owner/source/PID/FD safeguards, bounded failure handling and no silent registered-UUID reassignment.
 
-The maintainer's early-November X11 investigations found successive exact-marker
-normal SDL windows with one child PID but two distinct UUIDs; the first
-appeared then disappeared, and the second remained through GDM and the GNOME
-desktop. Source: `README_remote_desktop_research.md` §3 and Appendix B,
-and the original historical HANDOFF / private proof captures. In an
-additional content-free `_NET_WM_USER_TIME` analysis, the **unmarked**
-authentication window had activity, the **marked temporary** window did not,
-and the **marked persistent** window showed activity. This is positive
-candidate evidence for a *composite* predicate, NOT proof that a standalone
-user timestamp denotes the application role on every run.
+## Evidence baseline and provenance
 
-Two corrections to prior design discussion:
+- `README_remote_desktop_research.md` §3 and Appendix B record two consecutive exact-marker X11 windows under one PID with different UUIDs; the first was temporary, the second persisted through GDM and the GNOME desktop.
+- The exact X11 activity pair reviewed by Codex is `joetoo-rdp-stage-a.Fm6EBB11.tbz2` and `joetoo-rdp-diagnostic.7DZi9Tfj.tbz2`. Its supplemental ledger links: unmarked credentials XID `146800710` (changed nonzero user time), marked temporary XID `146800721` (no activity latch), and marked persistent XID `146800729` (activity latch). Thus the composite **Candidate B** was demonstrated in this run; authentication-window activity does not satisfy the marker predicate. The companion had **three discovery gaps and two unlinked windows**, so this is not yet proof of a universally correct automatic selector.
+- Codex inventoried 22 locally retained private archives, reporting 12 X11 Stage A, seven Wayland Stage A, and three diagnostic archives. It examined the above pair in detail; archive inventory **is not exhaustive event-by-event review**. Other X11 outcomes (`bPd7yxLi`, `UlffFIYm`, `MiECZCsg`, `NLq2gMGj` and earlier positive runs) may inform the mechanism and its counterexamples. Do not make private raw archives public or infer a missing field.
+- `tools/joetoo-rdp-window-diagnostic.js` records KWin UUID/lifecycle/activation, **not** `_NET_WM_USER_TIME`; activation is labeled `intent:unknown`. The separate X11 activity companion obtained the user-time evidence and links native client XIDs to KWin UUIDs. Its presence is diagnostic evidence, not permission to add another production observer.
+- Codex's source inspection found a **credible but not proven** explanation of same-title native-X11-window replacement: FreeRDP 3.32.1 creates an SDL window before renderer construction; SDL 3.4.18's renderer configuration can cause native X11 destruction/recreation while the SDL window object persists. An OpenGL renderer log appears near the archived transition, but is **not a trace identifying the actual replaced XIDs**.
 
-1. Activity in the credentials window cannot by itself defeat the proposed
-   selector: that window lacks the exact broker-generated marker and is
-   excluded before role evidence is assessed.
-2. The prior X11 result gives a real alternative to FreeRDP source-instrumented
-   XID/role export. **Evaluate the existing interaction-and-lifecycle candidate
-   first**, rather than declaring native application-role attestation mandatory.
+## Candidate A — preferred, noninteractive exact-window role/completion evidence
 
-The *standalone KWin diagnostic* already records the specific UUIDs, lifecycle
-and `windowActivated` events, but `tools/joetoo-rdp-window-diagnostic.js`
-does **not currently capture** `_NET_WM_USER_TIME`. KWin activation alone
-is explicitly recorded with `intent:unknown`; it cannot be relabelled as
-physical user interaction. Establish where the historical activity evidence
-came from and whether it can be obtained reliably, read-only, precisely per
-window/UUID, without sensitive input data or a new input-event hook.
+**Research and design priority; feasibility not yet established.** Determine the least invasive source-grounded way to prove that a *particular native X11 client XID* is the persistent desktop viewer after successful renderer/window setup, and relate it independently to the live KWin UUID. The signal must identify the actual current native window, not merely an SDL window ID, a generic renderer-ready message, a desktop-size guess, a most-recent/last-surviving KWin UUID, or an operator-supplied UUID.
 
-The EWMH `_NET_WM_USER_TIME` / `_NET_WM_USER_TIME_WINDOW` interface is intended
-for client-reported last-user-activity time; it can initially contain the
-action timestamp that launched the window. Therefore **nonzero alone is not
-qualifying post-creation interaction**. X11 server timestamp ordering/wrap,
-initial value, per-window association, later updates, and KWin's exact XID→UUID
-mapping require source-grounded review.
+Examine in this order, without prejudging the outcome:
 
-## Candidate A — content-free, exact-window interaction gate (evaluate first)
+1. **Stock-client signal:** Does the installed/unmodified FreeRDP/SDL/KWin combination already expose an unambiguous exact-XID role/completion property, structured event, or message? Record negative findings and the precise source/version inspected. The presently reviewed ordinary WM properties and generic renderer log **do not** establish the target XID.
+2. **Supported restricted renderer profile:** Could an approved unmodified-client renderer selection avoid the replacement path and permit a reliable role distinction? Assess reproducible behavior, supported options, graphical correctness, performance and security; do **not** infer that merely avoiding recreation proves viewer role. Changes to invocation/profile require separate authorization, and no native trial is approved now.
+3. **Minimal creation-path instrumentation (only if needed):** Propose a narrowly scoped FreeRDP/SDL signal emitted **after successful renderer setup**, containing native client XID, window-generation/replacement lineage and a role-specific assertion. Specify handling of failed setup, repeated replacement and later recreation. Show how it travels through approved evidence channels and is independently validated by KWin. This is **a proposal for approval, not permission to patch FreeRDP**, alter Gentoo ebuilds or add a new daemon.
 
-This is a **proposal**, not yet an accepted/implemented contract. A candidate
-may qualify only if all of these are established:
+At commit time the broker must independently verify the exact native **client XID → current KWin UUID** link, the same launched PID/class/marker, live normal-window state, synchronized source and complete added/removal history. Source evidence about renderer setup is not a substitute for those checks. A superseded or reused XID cannot be silently adopted or substituted; a later native-window replacement must not retarget an already registered UUID. Unresolved histories, multiple role-qualified viewers, inconsistent generations, stale/missing evidence, source/owner/process loss, or failed cleanup terminate or refuse enrollment safely.
 
-- Existing `Begin`/`Bind` safeguards: unique authenticated owner, direct
-  launched SDL child, pidfd/start identity, verified actual `x11` backend,
-  application class, exact unpredictable marker, synchronized observation
-  source/revision, complete `added` lifecycle, and a prelaunch UUID baseline.
-- The complete history retains every marked candidate, including the temporary
-  predecessor; disappearance does not erase evidence of competing windows.
-- The earlier marked temporary UUID is conclusively removed, and only one
-  *live* eligible marked UUID remains. This is a prerequisite, **not the
-  sole basis of selection**.
-- Fresh positive, content-free **per-window user activity** on that surviving
-  UUID is established **after** the window was created and after the temporary
-  marked UUID disappeared. A baseline/nonzero startup timestamp,
-  programmatic activation/focus, or a timestamp from another window must not
-  qualify. Exactly how this is proved is the first design question.
-- The broker revalidates the still-live UUID, PID, title, class, backend,
-  source and complete candidate history **at commitment**. Ambiguous,
-  missing, malformed, stale, reused or contradictory activity evidence fails
-  closed, as do extra marked candidates, disappearance and source/owner loss.
-- User input contents (keys, mouse coordinates, clipboard, screenshots,
-  credentials) are **not captured**. The evidence is at most that qualifying
-  activity occurred, attributable to the exact candidate window and its
-  bounded observation time/sequence.
-- Interaction is a **positive user-selection gate**, not a cryptographic
-  assertion of application internals or proof of remote-desktop readiness.
-  This policy may intentionally delay registration until the operator interacts;
-  no-interaction or unsupported property then yields no enrollment, not a
-  timeout-based guess.
+No stock-client Candidate A selector is presently established. **That does not establish Candidate A infeasibility.** Its restricted-renderer and narrow-instrumentation routes remain design choices pending further source-grounded evaluation and maintainer approval.
 
-Review whether `_NET_WM_USER_TIME` actually supplies this stronger
-per-window/post-birth signal in the installed SDL3/KWin versions, or whether
-it can be set/inherited/updated without the requisite user action. Review
-any read-only KWin/X11 property observation path as part of the design;
-**do not assume the current resident already emits this field**. Avoid
-reimplementing an event-capture daemon or adding raw keyboard/mouse observers
-without explicit new maintainer authorization.
+## Candidate B — demonstrated composite interaction/lifecycle fallback
 
-## Candidate B — source-supported application desktop-role evidence (fallback)
+Retain and respect the November 5 positive demonstration: a launch-owned marked temporary X11 window disappeared without a changed user-time latch, whereas a distinct marked persistent window acquired user activity; the concurrently observed credential window had activity but **lacked the exact marker**. This is meaningful *combined* evidence, not a standalone `_NET_WM_USER_TIME` test and not a reason to discard prior investigation.
 
-If candidate A cannot meet the acceptance criterion, propose the *smallest*
-alternative: a FreeRDP/SDL source-supported desktop-viewer role assertion
-associated with the **native X11 XID** and read-only, exact KWin XID→UUID
-resolution. Distinguish SDL window IDs from native XIDs; establish whether an
-unmodified client already exposes the evidence. No caller-supplied UUID,
-boolean `is_viewer`, guessed role property, or source modification is
-accepted by this draft. Present client instrumentation as an **explicit
-alternative requiring separate approval**, not a prerequisite by fiat.
+A possible operator-selection contract would require all shared identity/lifecycle checks, explicit resolution of the temporary predecessor, a uniquely eligible live marked UUID, and **fresh positive content-free activity attributable to that specific surviving window after a valid post-predecessor baseline**. It must distinguish initial/startup timestamp, focus/activation, queued stale updates, timestamp wrap, XID reuse and a delegated `_NET_WM_USER_TIME_WINDOW`; the archived latch does not yet prove all these stronger production conditions. Do not capture keys, coordinates, clipboard or credentials. No activity means no registration; no timeout or last-survivor guess may replace it.
 
-A hybrid predicate may be proposed if neither candidate alone is sufficient.
-Document evidence provenance, correctness/failure cases, complexity and
-configuration impact of each candidate before recommending one.
+Candidate B may intentionally require the user to interact **after** viewer creation and so introduces an extra blocking gate in an otherwise sequential configured plan. It is **fallback-only**, potentially suitable as an explicitly user-mediated mode, and requires separate maintainer acceptance. It does not solve pre-viewer NLA/VNC authentication, which is handled in the deferred workflow design.
 
-## Deferred decision — interactive authentication, placement and multiwindow scheduling
+## Shared contract and evidence transport
 
-**Decision status:** OPEN. This is a forward-looking dependency for §5A
-**Increment 3 (controlled placement)** and **Increment 4 (configured `-o` workflow)**,
-with security/time-limit verification in **Increment 5**. It does not broaden
-Increment 2 or authorize new implementation/native tests. Consider a plan with,
-for example, four RDP and two VNC connections spread among many desktops.
+Keep `step1.5c5d-sdl-interface-contract.md` **v1** as the accepted Wayland-only reference, including the four development operations (`BeginSdlRegistration`, `BindSdlRegistration`, `PollSdlRegistration`, `CancelSdlRegistration`), authenticated unique D-Bus owner, same-UID direct child, pidfd/start/executable checks, private stdout FD, synchronized KWin source, nonce/marker, bounded retries, terminal results and no placement.
 
-**Distinct stages and window identities:** An SDL FreeRDP client-side NLA/credential
-dialog may precede creation of the persistent viewer; it must not be adopted as
-a managed desktop viewer merely to allow placement. A GDM login greeter is
-remote content *inside* the viewer after RDP transport/session negotiation, not
-the same local window as the SDL credentials dialog. VNC and SSH authentication
-must be analyzed under their actual, separate client process/window contracts.
-A noninteractive X11 viewer-role selector (Increment 2 Candidate A) eliminates
-only a *post-viewer-creation interaction requirement*; it does not eliminate
-human authentication that occurs before that viewer exists.
+Codex should propose a **separate Increment 2 X11 addendum**, not edit v1. It must explicitly address X11 profile selection (the current adapter, environment, backend reader and broker reject X11), whether wire signatures and `protocol:1` remain compatible, role evidence provenance and transport, exact client XID↔KWin UUID binding, role generation/expiry, terminal outcomes, event/FD budgets and cleanup. An unchanged method signature does **not** by itself authorize changed schema/semantics. Do not accept a caller-selected UUID or trust a raw log line without the existing process/FD/lifecycle corroboration. Preserve accepted Wayland semantics unchanged.
 
-**Future workflow choice requiring maintainer approval:**
+## Acceptance gates to propose, not execute
 
-- **Staged prompts at launch desktop:** Keep pending NLA/VNC authentication
-  dialogs accessible near the launch console. Provide an explicit per-target,
-  per-request status/identity mapping and discoverable prompt labeling without
-  exposing passwords or conflating a temporary dialog with a registered viewer.
-- **Temporary prompt placement:** Consider placing an independently identified
-  *unregistered* authentication dialog at its intended desktop, with an explicit
-  temporary lifecycle/ownership/cleanup contract. This is **not** placement of
-  a registered SDL viewer and cannot rely on a fake managed UUID or class/title
-  guess. A dialog need not exist before its launch request reaches authentication.
-- **Mixed strategy:** Stage prompts near the operator during authentication,
-  then release exact registered persistent viewer windows for later placement,
-  subject to separately approved placement/readiness rules. No automatic
-  movement or operator-focus stealing is implied.
+**Headless:** faithful broker/registry path for positive A completion, temporary-only/renderer failure, multiple recreations and role-qualified windows, lost/contradictory/stale role generation or XID reuse, source/owner/process loss, unrelated/preexisting viewers, duplicate ownership, cancellation/expiry and inert late callbacks, cross-request retention, and no placement. Preserve all existing 179/614/99 accepted-suite coverage (counts are the previous checkpoint, not a promised future count). For optional B, also test unmarked credential activity, temporary-window activity, initial/stale user-time, post-predecessor baseline, missing activity and wrap/delegation.
 
-**Uninterrupted plan execution:** Decide whether a pending interactive RDP/VNC
-connection may coexist with continued launching of unrelated plan entries,
-including later desktops. A sequential `-o` that waits for credentials or for
-post-viewer user activity could suspend a 40-window plan. An asynchronous
-or staged plan must still respect the current broker's single active
-registration/correlation transaction, per-slot reservation, launcher lock
-lifetime and bounded cleanup; concurrency cannot be assumed from the word
-“asynchronous.” Define explicit pending, failed, expired and registered
-outcomes and how a pending entry is resumed, skipped or cancelled without
-blocking unrelated launches or falsely declaring success. This is an Increment
-4 design concern, dependent on any necessary Increment 3 window-handling rules.
+**Maintainer-native on `gmki91`, later and separately authorized:** prove real `x11` backend and real child/XID/KWin UUID evidence; verify absence of premature temporary-window registration, correct persistent registration without a new click for A, unrelated-viewer isolation, bounded failures and no placement. Any native procedure must begin with explicit no-restart/no-`mw` conditions and protect private logs. No native acceptance follows from archive/source review alone.
 
-**Timeout/idle questions — must be measured or sourced; no timeout presumed:**
+## Current read-only Codex design-review deliverable
 
-1. Local FreeRDP/SDL NLA credential-dialog idle behavior and any RDP server
-   pre-authentication timeout (including failures/cancellation while unattended).
-2. System GNOME Remote Desktop handover/authentication timeouts, *distinct* from
-   any GDM greeter idle lifetime after the viewer reaches GDM.
-3. Whether GDM/GRD closes, locks or retains the pre-login or logged-in session
-   when left unattended across many virtual desktops; behavior on reconnect,
-   disconnect and network failure, with server/version specificity.
-4. TigerVNC/SSH or other selected VNC client's authentication prompt and
-   connection idle behavior, independently of RDP.
-5. How these limits interact with configurable per-registration, per-launch and
-   whole-plan budgets without hiding stalled, vanished or expired prompts.
+Produce a concise, source-grounded **decision memo** addressing A-stock vs A-restricted-renderer vs A-minimal-instrumentation vs B-operator-selection; note what is observed, inferred, unavailable or untested. Compare exact-XID proof, false positives, complexity, performance/packaging impact and ability to avoid an *additional* human interaction gate. Give the narrowest viable X11 contract-addendum proposal and its minimum headless/native acceptance matrix. Focus detailed additional archive review on runs that can corroborate or contradict the renderer-recreation hypothesis; inventory alone is not proof. Stop at the maintainer's decision boundary: no repository edits, live tests, client changes, contract edits or publication.
 
-Any future native timeout characterization requires its own maintainer-approved
-non-destructive procedure. Do not infer unlimited GDM idle life or a specific
-NLA/GDM cutoff from earlier successful sessions, and do not use automatic
-credential entry, password persistence or certificate exceptions as a workaround.
+## Deferred downstream workflow — do not expand this increment
 
-## Interface-contract compatibility review
-
-The accepted v1 `step1.5c5d-sdl-interface-contract.md` is **Wayland-only**;
-`development_environment()`, backend reader and broker currently enforce
-`wayland`. Preserve the v1 document. Propose a **focused Increment 2 X11
-addendum** explaining whether the existing four methods and JSON `protocol:1`
-can safely be extended, with explicit backend/profile selection and unambiguous
-owner-scoped evidence transport. Do not change signatures/schema or add an
-observer as an automatic assumption. Shared safeguards (Begin owner/baseline,
-Bind process/FD, Poll stable terminal results, Cancel cleanup) remain.
-
-## Design-review deliverables (Codex read-only)
-
-1. Trace the historical activity evidence to the exact proof output and
-   differentiate it from KWin `windowActivated` / focus and the standalone
-   observer's current fields. Identify gaps without inventing capture results.
-2. Trace source (versions used on gmki91) for `_NET_WM_USER_TIME`, the optional
-   `_NET_WM_USER_TIME_WINDOW`, activity update semantics, XID→UUID linkage,
-   startup timestamp and X server timestamp wrap/reuse.
-3. Assess candidate A **first**, including potential false positives/negatives
-   and an explicit no-user-interaction timeout outcome. Compare candidate B
-   as a bounded alternative, not the default.
-4. Draft a narrow **X11 contract addendum proposal**, not an edit to v1, with
-   needed evidence, transport, invariants, stop conditions, test matrix and
-   any proposed interface-change decision points.
-5. Propose headless test cases: temporary-only window, marked predecessor
-   removed with no user activity, genuine fresh activity on surviving UUID,
-   baseline/startup timestamps, unmarked credentials with activity, competing
-   live marked UUIDs, stale/reused XIDs or timestamps, source/owner loss,
-   early activity on temporary, wrong backend and no placement.
-6. Propose a separately maintainer-authorized `gmki91` native gate that
-   verifies the persistent exact UUID and absence of premature enrollment;
-   never perform it as part of the read-only review.
-
-## Stop conditions / undecided questions
-
-Stop for maintainer review if no source-grounded way to distinguish post-birth
-user activity from startup/activation, or if the only available path requires
-new input-event capture, client patching, new D-Bus methods, weaker trust,
-new daemon, or native actions. Do not declare X11 accepted from historical
-feasibility evidence alone. The maintainer and ChatGPT will review Codex's
-comparison and **then decide** the predicate and approve or reject a contract
-addendum before any implementation.
+The authoritative open decision is [`increment2-deferred-authentication-workflow-section.md`](increment2-deferred-authentication-workflow-section.md): staging/labeling or separately identifying and placing temporary NLA/VNC prompts, managing pre-viewer authentication, pending-status console alerts, sequential `-o -f CONFIG` progression, bounded per-entry state and later GDM/NLA/VNC idle behavior. This is primarily Increments **3–4**, with transport/timeout verification in **5**. The planned workflow must be designed to move beyond a *pending-human-action stage* under an approved contract, rather than claiming every launched RDP connection is already registered; this is not background-launcher authorization. No approach to pending-prompt placement, continued scheduling or timeout semantics is selected yet.
 
 ## References
 
-- `Step1.5c5_implementation_scope.md` §5A, Increment 2.
-- `step1.5c5d-sdl-interface-contract.md` v1 (Wayland-only).
-- `README_remote_desktop_research.md` §3, Appendix B, and its linked
-  original HANDOFF / private X11 proof captures.
-- `tools/joetoo-rdp-window-diagnostic.js` (read-only window lifecycle and
-  activation; NOT user-time capture).
-- Official EWMH: https://specifications.freedesktop.org/wm/latest-single/
-- SDL X11 implementation: https://github.com/libsdl-org/SDL/blob/main/src/video/x11/SDL_x11events.c
+- `Step1.5c5_implementation_scope.md` §5A; current `HANDOFF.md` dispatcher.
+- `step1.5c5d-sdl-interface-contract.md` v1 (accepted Wayland implementation).
+- `step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md` (maintainer acceptance).
+- `README_remote_desktop_research.md` §3/Appendix B and original historical HANDOFF.
+- `increment2-deferred-authentication-workflow-section.md` (future authentication/placement/workflow choice).
+- `tools/joetoo-rdp-window-diagnostic.js`, `tools/joetoo-rdp-x11-use.py`, `tools/joetoo-rdp-x11-use.js` (confirm exact current paths/availability); private X11 archives remain local.
+- Relevant installed FreeRDP 3.32.1 / SDL 3.4.18 / KWin 6.7.5 source and official SDL/EWMH specs; verify exact versions and line references in Codex's review.

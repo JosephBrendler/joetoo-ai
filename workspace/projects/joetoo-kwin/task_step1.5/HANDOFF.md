@@ -11,9 +11,9 @@ security/`-o` policy or merge into `main`. Acceptance details are in
 **Verification:** Codex added exactly one integrated two-successful-registration
 headless test in `tests/test_rdp_broker.py`; the maintainer independently
 reproduced 179 focused Python, 614 full Python, 99 JavaScript, 81 standalone
-broker PASS on `gmki91`, and `git diff --check` passed. Last maintainer status
-had **only** `M task_step1.5/HANDOFF.md` and `M tests/test_rdp_broker.py`;
-these are **not claimed committed or pushed**. Historical managed-record
+broker PASS on `gmki91`, and `git diff --check` passed. The test,
+acceptance report and HANDOFF were subsequently published on the task branch;
+latest verified pushed HEAD is `a66d153` (2026-11-07). Historical managed-record
 isolation is satisfied headlessly; no additional native test is required
 solely for that property. Native q552u01 Gates A/B1/B2/C1 remain accepted.
 The PKI excursion was documented separately; production SDL TLS/NLA
@@ -22,22 +22,26 @@ policy remains deferred.
 **Current phase:** Step **1.5c.5d Increment 2 — X11 SDL viewer-role identity
 SCOPE/DESIGN REVIEW**, **not implementation**. See
 [`step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md`](step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md).
-The maintainer authorizes **Codex read-only review** of X11 evidence,
-`_NET_WM_USER_TIME` / activity+complete lifecycle, exact UUID association,
-source alternatives and minimal contract-addendum proposal. **No source/test
-edits, native runs, new observer, service operations, Git publication or
+The maintainer authorizes **Codex read-only review** of noninteractive
+exact-client-XID role/completion evidence first, with the demonstrated
+`_NET_WM_USER_TIME` + lifecycle interaction predicate as fallback. Codex may
+propose a narrow contract addendum, not implement it. **No source/test edits,
+native runs, new observer, service operations, Git publication or
 interface/security changes** are authorized by this instruction.
 
-**Design priority:** Re-examine the Nov 5 positive *composite* X11 activity
-evidence. Unmarked credentials activity does not satisfy the exact marker;
-the marked temporary window lacked observed interaction and disappeared;
-the marked persistent viewer did show interaction. Distinguish a genuinely
-fresh per-window post-creation activity signal from initial creation
-`_NET_WM_USER_TIME`, KWin activation or focus. The prior KWin diagnostic
-tracks UUID/lifecycle/activation but **does not collect** `_NET_WM_USER_TIME`.
-An XID-linked FreeRDP application-role assertion is an **alternative for
-comparison**, not a preapproved requirement. No deterministic selector is
-yet accepted for X11; registration must fail closed until approved.
+**Design priority:** **A = noninteractive exact-XID viewer identity**, if
+source-grounded and independently cross-checked against KWin UUID/lifecycle.
+SDL renderer initialization may recreate its X11 native window; the archived
+transition correlates but does not prove that mechanism, and no stock-client
+role signal is yet established. Compare stock-client, supported renderer-profile
+and minimal creation-path instrumentation proposals. **B = demonstrated
+interaction/lifecycle fallback**: unmarked credential activity is excluded by
+the marker; the marked temporary window disappeared without an activity latch;
+the marked persistent viewer showed activity. B may require an additional
+human gate, so it is not the preferred configured-workflow policy. The
+related NLA/VNC pending-window/placement/scheduling decision remains deferred
+in `increment2-deferred-authentication-workflow-section.md`. No deterministic
+X11 selector is accepted yet; registration must fail closed until approved.
 
 **Document precedence:** The existing paragraphs below constitute the
 retained **historical Increment 1 handoff and authorization record**, not
