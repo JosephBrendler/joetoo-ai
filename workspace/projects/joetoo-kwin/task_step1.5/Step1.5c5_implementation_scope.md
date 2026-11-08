@@ -306,13 +306,18 @@ downstream FreeRDP patch for the retiring native Plasma X11 session. Its accepte
 Stage 0 synthetic tests remain historical research evidence, not Increment 2
 acceptance. Preserve the accepted native-Wayland Increment 1 unchanged.
 
-Evaluate **A1** first as a short experiment in *documented, supported settings
-of unmodified stock FreeRDP/SDL* that might suppress transient native-window
-replacement. Do not infer a proven role from a renderer option or absence of a
-replacement in a small sample. If A1 is unsupported or inconclusive, consider
-**Candidate C**: an explicitly opted-in, best-effort X11-only persistence selector,
-subject to the [A1/C draft](step1.5c5d-sdl-x11-a1c-contract-addendum-DRAFT.md).
-No FreeRDP/SDL patch is allowed by this revised scope.
+**A1 renderer policy and C identity heuristic are independent.** Proposed
+centrally user-configurable `rdp_x11_renderer` accepts `auto` or `software`, only
+for the explicit legacy native-KWin-X11 profile. `auto` uses stock SDL selection:
+remove inherited `SDL_RENDER_DRIVER` and `SDL_FRAMEBUFFER_ACCELERATION` keys from
+the managed child's environment, not empty values. `software` sets both
+`SDL_RENDER_DRIVER=software` and `SDL_FRAMEBUFFER_ACCELERATION=0` for that child.
+Never mutate the parent/system environment or silently fall back between modes.
+`auto` does not guarantee GPU acceleration; `software` does not disable the remote
+host GPU or all FreeRDP protocol acceleration. Performance costs, especially for
+demanding video, remain unmeasured. Renderer choice is not identity proof and
+neither mode is infallible. **C applies in both modes**, subject to the
+[A1/C draft](step1.5c5d-sdl-x11-a1c-contract-addendum-DRAFT.md); no client patch.
 
 **Explicit, narrow exception to the Increment 1 fixed-delay prohibition:** For
 this **legacy native-KWin-X11 SDL profile only**, the maintainer permits a
@@ -336,15 +341,24 @@ not discard ambiguity, changed identity, source gaps or an unresolved live
 competitor. No adoption of preexisting windows, silent UUID replacement,
 placement, focus or stack changes; existing caller/FD and resource safeguards
 remain in force. **Persistence is not positive proof of FreeRDP renderer
-completion.** A temporary viewer lasting longer than the threshold may still
-be misregistered. Evaluate real archived lifetimes, A1 effects and this residual
-risk before authorizing an X11 broker implementation or native acceptance.
+completion.** Preserve the required counterexample: a fully qualifying marked
+temporary viewer surviving **600 ms** can be wrongly registered at **500 ms**;
+its later replacement must never be silently re-enrolled. Keep this residual
+risk explicit in both modes before implementation or native acceptance.
 
 This permission is **Increment 2 only**: it does **not** weaken the accepted
-native-Wayland Increment 1 or generic/VNC contracts. The next A1/C read-only
-feasibility gate does not authorize source edits, builds, native sessions or
-publication. A later broker implementation and `gmki91` native test each require
-a separate, narrowly scoped maintainer approval. Increment 2 remains OPEN.
+native-Wayland Increment 1 or generic/VNC contracts. **Gate F is ACCEPTED**;
+the Nov 5 marked 20 ms predecessor / 72.9 s successor remain timing baseline
+evidence, not a universal guarantee. The [Nov 8 software trial](step1.5c5d-a1-software-renderer-native-evidence-2026-11-08.md)
+is **ACCEPTED only as provisional feasibility evidence**: confirmed `x11` and
+`software`, one observed marked normal persistent UUID, two earlier unmarked
+generations, one X11 discovery gap, and client exit 131 after titlebar closure
+(parent proof result 0). Neither universal selector correctness nor renderer
+causation was established. **Gate N2**, one default-renderer comparison with both
+hints unset, is authorized **for the maintainer only**; Codex must not run it.
+Gate I broker/launcher implementation and Gate A native managed-registration
+acceptance remain **NOT YET AUTHORIZED**, requiring separate bounded grants.
+Increment 2 remains OPEN; no placement or later-increment authority is implied.
 
 ### Increment 3 — Controlled placement release
 

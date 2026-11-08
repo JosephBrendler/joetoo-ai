@@ -13,19 +13,24 @@ Identify the **persistent normal SDL FreeRDP desktop viewer** among marked X11 w
 - Retain existing launcher ownership, ProcessFD where available, parent/child/start/executable evidence, trusted evidence log, observation source/revision, baseline/event floor, bounded histories and deadline/cleanup rules. No PID-only, title-only, class-only or last-window selector.
 - Use existing resident window events. No new continuously running observer, patched-client property, synthetic READY record, transaction-local A2 resolver, or user-input capture.
 
-## 2. Candidate A1 — rapid stock-renderer experiment
+## 2. Candidate A1 — stock-renderer policy and comparison
 
 **Hypothesis, not finding:** FreeRDP/SDL renderer configuration may influence creation and native-X11 replacement of the initial marked normal window. Prior source review made renderer-induced recreation plausible, but did **not** establish its cause or show a supported stock option that eliminates it.
 
-**Read-only feasibility gate first:** Check the *actual installed binary* and locally retained FreeRDP/SDL sources or `--help` for documented, supported settings that could affect the renderer/acceleration/window-creation path. Record exact options and versions. Do **not** invent a renderer option, alter negotiated RDP security, rebuild the client, or suggest a downstream patch.
+Proposed centrally user-configurable `rdp_x11_renderer` accepts exactly `auto` or `software`, only for the explicit legacy native-KWin-X11 profile. Renderer policy is independent of Candidate C and **is not identity proof**:
 
-**Optional maintainer-native gate, separately approved:** Compare the stock baseline with at most the justified stock configuration(s), using existing bounded lifecycle diagnostics on `gmki91`. Record per-UUID `added`/`removed` events, order, monotonic time where available, PID/class/marker, whether an initial native-X11 generation is replaced, graphical correctness and whether the eventual viewer remains usable. **Absence of replacement in a few runs is supporting empirical evidence, not a guarantee of future role identity.**
+| Mode | Managed child's environment only |
+| --- | --- |
+| `auto` | Use stock SDL renderer selection: remove inherited `SDL_RENDER_DRIVER` and `SDL_FRAMEBUFFER_ACCELERATION` keys from the spawned environment. Do not pass empty values. |
+| `software` | Set both `SDL_RENDER_DRIVER=software` and `SDL_FRAMEBUFFER_ACCELERATION=0`. |
 
-If the installed client has no supported applicable option, or a quick comparison does not materially improve identity stability, **close A1 as unhelpful and evaluate C**. Do not turn A1 into new upstream-instrumentation work.
+Construct a separate child environment; never mutate the parent/system environment or accepted Wayland/generic/VNC settings. `auto` does not guarantee GPU acceleration. `software` does not disable the remote host GPU or all FreeRDP protocol acceleration. Performance costs remain **unmeasured**, especially for demanding video. Neither mode is infallible, and no silent renderer fallback is permitted.
+
+The Nov 8 software trial is qualified feasibility evidence (§6); the next single stock/default-renderer comparison is maintainer-only Gate N2. Record actual renderer/backend, per-UUID lifecycle/marker evidence, diagnostic gaps and graphical usability. Absence of replacement in one run proves neither renderer causation nor universal viewer-role correctness. **C applies in both modes**, not only if A1 fails. No upstream instrumentation, client rebuild or security-policy change is implied.
 
 ## 3. Candidate C — one bounded X11-only persistence selector
 
-Candidate C is a **maintainer-acknowledged best-effort heuristic**, not an exact FreeRDP initialization proof. A short-lived temporary window may share all normal positive identity fields with the persistent viewer. The retained original observations show such a pair; its actual lifetimes must be measured before selecting a default.
+Candidate C is a **maintainer-acknowledged best-effort heuristic in both `auto` and `software` modes**, not an exact FreeRDP initialization proof. A short-lived temporary window may share all normal positive identity fields with the persistent viewer. The Nov 5 baseline recorded a marked 20 ms predecessor and 72.9 s successor; these observed lifetimes support evaluation, not a universally safe default.
 
 A prospective X11-only selector may:
 
@@ -35,15 +40,15 @@ A prospective X11-only selector may:
 4. At or after the configured threshold, recheck *the same live UUID* against the newest complete state, event history, exact marker, class/PID, source, child and owner. Reject simultaneously eligible live competitors, missing/evicted history, changed identity and unresolved replacement; a subsequent UUID must never silently inherit another UUID's timer or registration.
 5. Register **only without placement**, within the original transaction deadline. Once registered, do not automatically retarget on a later replacement/removal. Preserve stable failure/terminal states and inert late callbacks.
 
-**Known failure mode:** If a temporary marked window survives the threshold and its replacement appears later, a dwell-only implementation can register the wrong UUID. A longer configurable interval and trials reduce observed risk; they do **not** eliminate that possibility. If the measured evidence cannot support a reasonable threshold, or the observed wrong-UUID risk is unacceptable, **NO-GO for C** and reconsider the documented interaction-gated B fallback rather than claiming exact proof.
+**Known failure mode:** A fully qualifying marked temporary window lasting **600 ms** may be wrongly registered at **500 ms** before its replacement appears. Retain this counterexample as a required test and residual risk in both modes; later replacement must never be silently re-enrolled. A longer configurable interval and trials do **not** eliminate the possibility. If the evidence or residual risk is unacceptable, stop for maintainer review rather than claiming exact proof or automatically switching renderer or adopting the separately gated B fallback.
 
 ## 4. One timer, configuration and event ordering
 
-Proposed **single centrally configured X11 selector parameter** (illustrative until explicitly approved):
+Two independent centrally user-configurable settings are proposed for future integration in the existing configuration template's private SDL/RDP section (`key=value` syntax): `rdp_x11_renderer` (§2) and the **single X11 eligibility interval**:
 
-`rdp_x11_identity_settle_ms = 500`
+`rdp_x11_identity_settle_ms=500`
 
-- This is the **only dwell/eligibility interval for X11 SDL registration**. It runs **concurrently** with lifecycle observation, backend/child evidence checks and the existing polling/watchdog, **not** as a blocking sleep and **not** before an additional `PollCorrelation()` 500 ms gate.
+- This is the **only dwell/eligibility interval for X11 SDL registration in either renderer mode**, starting at first full qualification of a particular new exact-marked normal UUID (§3), not automatically at birth. It runs **concurrently** with lifecycle observation, backend/child evidence checks and the existing polling/watchdog, **not** as a blocking sleep and **not** before an additional `PollCorrelation()` 500 ms gate.
 - `PollCorrelation()` currently measures its own *diagnostic* uniqueness interval from the first qualifying **poll** and does not enroll/authorize SDL registration. Candidate C should use one broker-owned candidate timestamp in the registration path; do **not** call diagnostic `PollCorrelation()` as a second decision or chain equal deadlines. If future shared state is considered, it must consume the **same timestamp**, not start a new timer.
 - Validate one user-configurable integer value from the established configuration template, with a documented bounded range and effective deadline compatibility. **500 ms is an initial experimental value, not yet an evidence-validated default.** A future maintainer may tune it without source edits. Prefer the existing scheduled event loop; no busy-wait, repeated full-window scan outside existing bounds, renewed registration lease or new always-running timer.
 - Eligibility is a **`now >= first_qualified_at + settle_interval`** condition followed by fresh identity/history validation, not a race between two 500 ms expirations. Completion may occur on the next existing poll/event-loop dispatch; that scheduling jitter is not a second intentional delay. Synchronous processing/ordering assumptions and queued removals must be tested explicitly.
@@ -51,7 +56,7 @@ Proposed **single centrally configured X11 selector parameter** (illustrative un
 
 ## 5. Explicit narrow exception to governing §5A
 
-This section specifies the *only proposed exception* to §5A's earlier blanket rejection of fixed-delay selectors. It is valid only when the governing scope's matching Increment 2 exception is reviewed and adopted; this DRAFT **cannot supersede §5A on its own**.
+This section records the **only narrow X11 exception** adopted in governing §5A's Increment 2 subsection. It applies in **both renderer modes**; this subordinate DRAFT grants no implementation authority and cannot broaden that exception.
 
 > For the explicitly selected **legacy SDL FreeRDP / native KWin X11 profile only**, permit a **bounded, centrally configurable, monotonic candidate-persistence interval**, used **concurrently** with the existing broker observation and ownership checks, as one component of an *empirically supported, best-effort* viewer-role selector. It must **not** be followed by an additional diagnostic correlation wait. Retain complete birth/removal history, unique live UUID requirements, exact PID/application/marker/source/owner/child evidence and fresh final validation; fail closed on source/history loss, contradictions and unresolved live competitors. A window's survival does **not** prove renderer completion. Do not change native-Wayland v1, silently substitute a UUID, or authorize placement, client patches or security-policy changes.
 
@@ -59,12 +64,14 @@ This exception explicitly replaces the prior stricter X11 expectation of indepen
 
 ## 6. Minimal evidence and implementation gates
 
-**Gate F — read-only feasibility (next Codex task):** Inspect the existing `PollCorrelation()` and registration paths, previously retained X11 archives (begin with the November 5 successful activity/diagnostic pair), and the stock client's actual supported rendering options. Compute window lifetimes *only if the records contain defensible comparable timestamps*; distinguish broker receipt time from native creation time. Evaluate thresholds of 250 and 500 ms and identify any longer-lived predecessor, missing timing, or contradictory trace. Provide a concise A1 GO/NO-GO and C GO/NO-GO, plus at most a small separately gated native A1 test recipe. **No source or document edits and no native execution.**
+**Gate F — ACCEPTED read-only feasibility:** The Nov 5 pair (`Fm6EBB11` / `7DZi9Tfj`) recorded a 20 ms marked temporary predecessor and 72.9 s persistent successor. These are observed KWin wall-clock capture intervals, corroborated by X11 monotonic discovery/removal timing, not broker full-qualification timestamps. No sequential diagnostic `PollCorrelation()` wait is required by the SDL registration path. Supported stock SDL renderer hints justify a bounded comparison, not an identity guarantee.
 
-**Gate N — optional maintainer-operated A1 native comparison:** Only after separate authority and a recorded baseline; no broker/resident restart or `mw` operations between the recorded baseline and result. Keep test credentials/logs private; no TLS/NLA weakening or FreeRDP patch.
+**Gate N — software trial ACCEPTED only as provisional feasibility evidence:** See [the exact Nov 8 evidence record and original console output](step1.5c5d-a1-software-renderer-native-evidence-2026-11-08.md). The stock client confirmed `x11` and `software`, one observed marked normal persistent UUID and two earlier **unmarked** window generations. Main KWin transport was intact; the X11 companion reported **one discovery gap**. Client exit **131** followed operator titlebar closure; the parent proof result was 0, not a clean-zero client exit. Neither exhaustive coverage, universal selector correctness nor renderer causation was proven; demanding-video performance was not measured.
 
-**Gate I — separately approved X11-only broker implementation:** Only after the feasibility decision. Smallest justified broker/launcher/config/test changes; exact path permissions in a new prompt. Test temporary window disappearance, predecessor longer than threshold, late marker, candidate overlap, replacement after threshold, competing viewers, evicted/reordered history, wrong PID/class/backend/source/owner, expiry/cancel and intact Wayland/VNC/generic tests. Mocked tests are not native proof.
+**Gate N2 — next, single default-renderer comparison, authorized for the maintainer only:** Unset both SDL renderer hints with `env -u SDL_RENDER_DRIVER -u SDL_FRAMEBUFFER_ACCELERATION`, use `RDP_DIAG_SECONDS=900` and the existing diagnostic runner. Codex must not execute it. Record actual renderer/backend from `client.log`, exact marker/PID and UUID/XID lifetimes, diagnostic completeness/gaps, graphical usability, client exit and private archive names/checksums. No broker/resident restart or `mw` operations between baseline and result; keep NLA/TLS policy unchanged. This is feasibility, not managed-registration acceptance.
 
-**Gate A — separately approved `gmki91` acceptance:** Demonstrate stock-client selection of the actual persistent UUID without premature registration or placement, with measured threshold, sufficient repeated runs and explicit residual heuristic risk. Do not claim a universal no-false-positive guarantee or that one observed success establishes robustness. Increment 2 remains OPEN until maintainer review.
+**Gate I — NOT YET AUTHORIZED, X11-only broker/launcher implementation:** Review N2 and aligned scope before a separately bounded source/config/test grant. Test both renderer policies, child-only environment isolation, temporary window disappearance, the 600 ms predecessor counterexample, late marker, candidate overlap, replacement after threshold, competing viewers, evicted/reordered history, wrong PID/class/backend/source/owner, expiry/cancel and intact Wayland/VNC/generic tests. Mocked tests are not native proof.
+
+**Gate A — NOT YET AUTHORIZED, separate `gmki91` managed acceptance:** Demonstrate stock-client selection of the actual persistent UUID in both renderer modes without premature registration or placement, with measured threshold, sufficient repeated runs and explicit residual heuristic risk. Do not claim a universal no-false-positive guarantee or that one observed success establishes robustness. Increment 2 remains OPEN until maintainer review.
 
 **Out of scope:** A2 client patch, A1 reinterpretation as an upstream source change, A2 READY/nonce/XCB workers, automatic B user-interaction gate, placement, configured `-o -f CONFIG`, TLS/NLA/certificate changes, installation/packaging and production deployment.
