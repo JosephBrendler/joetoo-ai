@@ -16,11 +16,11 @@ source /usr/sbin/script_header_joetoo
 set -o pipefail
 
 PN=${0##*/}
-BUILD=20261105
+BUILD=20261108
 verbosity=${verbosity:-$notice}
 project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P) || exit 1
 receiver="$project_dir/tools/joetoo-rdp-diagnostic-receiver.py"
-proof="$project_dir/tools/rdp_identity-security_proof.sh"
+proof="$project_dir/tools/rdp_identity-security_proof"
 x11_observer="$project_dir/tools/joetoo-rdp-x11-use.py"
 rdp_diag_capture=""
 receiver_pid=""

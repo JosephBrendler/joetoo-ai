@@ -47,9 +47,28 @@ if [ -z "$1" ] || [ -z "$2" ]; then
 fi
 rdp_cmd="$1"
 rdp_target="$2"
-rdp_user=${3:-$USER}
+rdp_user="${3:-$USER}"
 
 project_dir="/home/${maintainer}/joetoo-ai/workspace/projects/joetoo-kwin"
+
+RDP_PROOF_PHASES_FILE="${RDP_PROOF_PHASES_FILE:-"$project_dir/tools/${PN}.conf"}"
+[ -f "$RDP_PROOF_PHASES_FILE" ] && [ -r "$RDP_PROOF_PHASES_FILE" ] ||
+    die "Cannot read reportable phase configuration file [$RDP_PROOF_PHASES_FILE]" 1
+
+#  use external .conf file for per-run phase selection; preserve the default list above.
+phases=()
+
+while IFS= read -r phase || [ -n "$phase" ]; do
+    [[ -z $phase || $phase == \#* ]] && continue
+    [[ ${#phase} -le 256 ]] ||
+        die "RDP phase description exceeds 256 characters" 1
+    phases+=( "$phase" )
+    (( ${#phases[@]} <= 32 )) ||
+        die "Too many configured RDP phases" 1
+done < "$RDP_PROOF_PHASES_FILE"
+
+(( ${#phases[@]} > 0 )) ||
+    die "RDP phase list is empty" 1
 
 rdp_bus=org.joetoo.KWinBridge
 rdp_path=/org/joetoo/KWinBridge
@@ -199,33 +218,13 @@ j_msg "-${notice}" -m "backgrounding filtered ListObserved collection"
 rdp_observer_pid=$!
 
 j_msg "-${notice}" -m "rdp_observer_pid: [$rdp_observer_pid]"
-
-# This captures retained lifecycle events, including short-lived windows that disappear between samples.
+# This process captures retained lifecycle events, including short-lived windows that disappear between samples.
 # Keep these inventories private: unrelated window titles can appear in them.
-j_msg "-${notice}" -p "${BMon}Note: ${BYon}three debug console evidence collection steps follow"
-j_msg "-${notice}" -p "${BYon}Do this for each --${Boff}"
-j_msg "-${notice}" -p " - ${Con}find target section in the debug console and take screenshots"
+
+j_msg "-${notice}" -p "${BMon}Note: ${BYon}Tests may require debug console evidence collection"
+j_msg "-${notice}" -p "${BYon}If not, you may dismiss the launched debug console; otherwise do this for each --${Boff}"
+j_msg "-${notice}" -p " - ${Con}find target section in the debug console and take screenshot(s)"
 j_msg "-${notice}" -p " - ${Con}move the new screenshots to the associated subdir in rdp_proof_dir"
-phases=(
-    '1. RDP connection failed before authentication'
-    '2. RDP viewer reconnection attempted'
-    '3. NLA Credential dialog visible'
-    '4. NLA Credential - debug console evidence collected'
-    '5. NLA Credential dialog still visible after 20+ seconds'
-    '6. NLA Credential dialog cancelled by user'
-    '7. NLA Credentials submitted; NLA Credential dialog dismissed'
-    '8. NLA Credentials rejected; retry offered'
-    '9. NLA Credentials RE-submitted'
-    '10. NLA Credentials accepted'
-    '11. Viewer window visible'
-    '12. Viewer - debug console evidence collected'
-    '13. GDM greeter visible'
-    '14. GDM login submitted'
-    '15. Authenticated GNOME desktop usable'
-    '16. GNOME desktop -  debug console evidence collected'
-    '17. User logged out of GNOME desktop'
-    '18. Viewer closed normally'
-)
 
 for phase in "${phases[@]}"; do
     # -n because yns_prompt prefixes with \n
@@ -252,7 +251,7 @@ for phase in "${phases[@]}"; do
 done
 
 # now collect from the user a text statement describing the outcome
-msg="$(read -rE -p "Describe outcome in one line: "; printf '%s\n' "$REPLY")" 
+msg="$(read -rE -p "Describe outcome in one line: "; printf '%s\n' "$REPLY")"
 record_phase "$msg"
 
 # Wait for the SDL FreeRDP process to exit.

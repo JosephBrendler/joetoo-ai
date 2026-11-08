@@ -16,7 +16,13 @@ findings, [remote-desktop research](README_remote_desktop_research.md).
 | 1.5c.5a | Dolphin SFTP and non-enforcing name-resolution/TCP advisories accepted; remote use and placement independently assessed | [SFTP acceptance](step1.5c5a-native-acceptance.md), [URI/security contract](step1.5c5a-dolphin-sftp-contract.md) |
 | 1.5c.5b | TigerVNC-over-authenticated-SSH accepted; positive X11/Wayland/XWayland viewer UUID placement and owned-tunnel teardown | [Project README](../README.md), historical HANDOFF |
 | 1.5c.5c | Affirmative RDP feasibility accepted; SDL3 FreeRDP chosen **first by implementation order**, not as default; TigerVNC remains an independently supported peer | [PR #28](https://github.com/JosephBrendler/joetoo-ai/pull/28), [research](README_remote_desktop_research.md) |
-| 1.5c.5d | Managed RDP implementation active. Private native-Wayland registration-only core and tests *reported by Codex*, not yet independently reviewed/accepted; public interface under review | [Current HANDOFF](HANDOFF.md) and active Codex diff/test report |
+| 1.5c.5d | **Increment 1 native-Wayland registration accepted**. Increment 2 native X11 remains open; A2 patched-client path aborted. Gate F feasibility and Nov 8 software-renderer A1 native feasibility evidence accepted with qualifications; dual-renderer/C design and default-renderer comparison next | [Current HANDOFF](HANDOFF.md), [Nov 8 A1 evidence](step1.5c5d-a1-software-renderer-native-evidence-2026-11-08.md) |
+
+## Recent Step 1.5c.5d / Increment 2 decisions (2026-11-08)
+
+The maintainer accepted the native-Wayland registration-only Increment 1; native X11 Increment 2 remains **OPEN**. The FreeRDP-patched A2 implementation was **ABORTED**, retaining synthetic Stage 0 research only. Gate F read-only feasibility is accepted. The maintainer's `gmki91` software-rendering A1 experiment is accepted **as qualified native feasibility evidence**: stock SDL FreeRDP used `x11` and `software`; three same-PID X11 windows were seen but only the persistent normal desktop viewer bore the exact marker. The X11 companion reported one discovery gap; client exit 131 occurred after operator closure. See the [full A1 native evidence and original terminal output](step1.5c5d-a1-software-renderer-native-evidence-2026-11-08.md).
+
+The authorized next work is **bounded Codex documentation alignment** for separate `rdp_x11_renderer = auto|software` and `rdp_x11_identity_settle_ms = 500` settings, plus a **maintainer-run** default-renderer comparison. Candidate C's single X11-specific monotonic dwell remains best effort in **both** modes; neither renderer mode is infallible. Broker Gate I implementation and native managed registration Gate A each require later explicit permission. The [live HANDOFF](HANDOFF.md) is the sole current dispatch; this README is only the decision index.
 
 ## Historical authorization chronology
 
@@ -40,6 +46,11 @@ prior execution instructions.
 - **2026-11-05–06:** RDP feasibility closed affirmatively and merged via PR #28;
   Step 1.5c.5d planned and a native-Wayland registration-only Increment 1
   separately authorized. See the current dispatcher for its approval boundaries.
+- **2026-11-07–08:** Increment 1 native-Wayland registration-only accepted;
+  X11 A2 source modification abandoned; A1/C scope adopted. Gate F feasibility
+  accepted and one software-renderer native A1 comparison recorded with
+  retained private archives. Dual-renderer design and default-renderer
+  native comparison queued under separate permissions.
 
 ## Historical iteration index
 
@@ -64,6 +75,8 @@ Codex iterations must be reconciled before migration is accepted.
 
 ## Detailed evidence index
 
+- [2026-11-08 A1 software-renderer native feasibility — complete transcript, stage timestamps, archive hashes, UUID/XID correlation](step1.5c5d-a1-software-renderer-native-evidence-2026-11-08.md)
+- [Active A1/C X11 draft design and stage gates](step1.5c5d-sdl-x11-a1c-contract-addendum-DRAFT.md)
 - [Remote Desktop research, comparison and SDL identity](README_remote_desktop_research.md)
 - [GNOME Remote Desktop original study](README_gnome_remote_desktop.md)
 - [Step 1.5c.4 native acceptance](step1.5c4-native-acceptance.md)
