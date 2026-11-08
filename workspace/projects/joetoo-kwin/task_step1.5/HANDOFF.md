@@ -1,85 +1,44 @@
 # Step 1.5 — Active task dispatcher
 
-**Purpose:** State the current task, maintainer authorization, stop conditions,
-and next decision. Detailed history and evidence live in the linked documents,
-not here. Prior HANDOFF revisions are not current authorization.
+**Purpose:** Identify the current task, operative authority, stop conditions and next decision. This is **not** a chronological history. Historical research and results belong in the linked documents and Git history. Older HANDOFF revisions are not authorization.
 
-## Current dispatch — Step 1.5c.5d / Increment 2 / A2 Stage 1 (2026-11-08)
+## Current dispatch — Step 1.5c.5d / Increment 2 / stock SDL X11 A1/C feasibility (2026-11-08)
 
 **Branch:** `task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`  
-**Verified published checkpoint:** `d0a7e4d7514660132fc74135714951712a04bdf9`
-(corrected Stage 0 test, maintainer-pushed). Verify actual HEAD, checkout status,
-and governing `AGENTS.md` before acting; do not reset newer work to this SHA.
+**Prior verified checkpoint:** `170ab3a0e23bf71fdf333864e8781849a2b8647c` (last verified **before** the A2-to-A1/C document transition). The authoritative checkpoint is the **actual HEAD after the maintainer's transition commit**. Verify branch, current HEAD, status and applicable `AGENTS.md` at the start. Never reset or overwrite newer work.
 
-**Milestone status and maintainer decisions:**
+**Maintainer decisions and current state:**
 
-- **Increment 1 — native-Wayland SDL registration without placement:**
-  formally **ACCEPTED and COMPLETE**.
-- **Increment 2 — X11 SDL viewer-role identity:** **OPEN**, not implemented
-  or accepted. Candidate **A2** is the approved *provisional design baseline*.
-- **A2 Stage 0 — isolated resolver-protocol tests:** formally **ACCEPTED and
-  COMPLETE** (2026-11-08). The corrected test is published. Independent
-  `gmki91` runs: **46 focused / 99 existing JS / 145 combined PASS**;
-  whitespace checks PASS. Results validate existing resident behavior under
-  mocks and synthetic contract traces, **not** native KWin/D-Bus/XCB/FreeRDP.
-- **A2 Stage 1 — FreeRDP proof producer:** **approved as the next stage**,
-  contingent on a **separate maintainer Codex prompt specifying exact
-  source-write, build and test permissions**. No Stage 1 work is yet accepted.
+- **Increment 1 — native-Wayland SDL registration without placement:** formally **ACCEPTED / COMPLETE**. Preserve existing contract and behavior.
+- **Increment 2 — native Plasma X11 SDL viewer identity:** **OPEN**, not implemented or accepted. Legacy compatibility remains useful on `gmki91`, but is not the project's longer-term Wayland path.
+- **Candidate A2 Stage 1 — FreeRDP C++ proof producer:** **ABORTED / authorization withdrawn** due to unacceptable downstream FreeRDP patch maintenance for legacy X11. No FreeRDP/SDL source patch, experimental upstream build, A2 READY/nonce, or automatic A2 resolver work is authorized. The renamed [A2 contract — ABORTED](step1.5c5d-sdl-x11-a2-contract-addendum-ABORTED.md) is historical.
+- **A2 Stage 0 synthetic protocol research:** remains **ACCEPTED / COMPLETE**, 2026-11-08; published corrected test `../tests/test_sdl_x11_resolver_protocol.js`, 46 focused + 99 existing = 145 combined JS PASS on independent `gmki91` verification. It is **not** native X11 evidence and does not validate A1/C.
+- **Active replacement direction:** **A1** = brief experiment with *supported stock* FreeRDP/SDL renderer settings; **C** = broker-only, X11-specific, configurable bounded candidate-persistence heuristic. Consider A1 + C together if evidence supports it. **B** remains a separately gated operator-interaction fallback. Do not restart an A2 design process.
 
-## Stage 1 objective and authority
+## Current Codex assignment — Gate F, read-only feasibility
 
-Stage 1 concerns **only** the opt-in FreeRDP 3.32.1 / SDL 3.4.18 native-X11
-proof producer described in [the A2 addendum](step1.5c5d-sdl-x11-a2-contract-addendum-DRAFT.md)
-§§1–4 and §7 Stage 1: checked *hidden* desktop-viewer initialization;
-initial/completed native client XIDs; fresh nonce published on the completed
-XID as `_JOETOO_SDL_X11_A2`; checked one-time show and post-show XID;
-one bounded, explicitly flushed `JOETOO_SDL_X11_A2` READY record;
-conservative boundary lineage and fail-closed errors. Preserve stock/Wayland
-behavior. Producer evidence does **not** independently authorize registration
-or establish remote login/session readiness.
+The maintainer's accompanying **A1/C feasibility prompt is the active authorization**. Proceed within that prompt; do not wait for another task prompt. HANDOFF alone authorizes no implementation, build, native experiment or modification.
 
-**Authorization boundary:** The maintainer has approved *proceeding to Stage 1*,
-**not** an unrestricted FreeRDP patch/build or installation. The next Codex
-prompt will specify the actual development source tree, file-level edit
-permissions, compilation/test limits, artifacts and stop gates. **Until that
-prompt is issued, HANDOFF authorizes read-only orientation only.** Neither
-the addendum nor this dispatcher authorizes writes to FreeRDP, SDL, Gentoo
-ebuilds, broker/resident/registry/launcher, or installed clients.
+Review existing archived X11 lifecycle evidence, beginning with the known November 5 diagnostic pair; compare actual temporary/persistent UUID lifetimes where timestamp provenance permits; evaluate provisional **250/500 ms** thresholds; identify stock renderer options from the installed binary/local source **without assuming they exist**; inspect existing broker registration and `PollCorrelation()` timing. Return a short **A1 GO/NO-GO, C GO/NO-GO**, confidence, failure cases, and smallest justified next action. Do not inventory every archive or produce another extensive design report.
 
-## Required references — details are maintained elsewhere
+**Timer rule:** For prospective C, **one** broker-local monotonic candidate eligibility interval, proposed `rdp_x11_identity_settle_ms = 500` for evaluation, centrally configurable after review. It starts at **first full qualification of a specific new UUID**, not necessarily its `added` event. It runs concurrently with normal observation; **no second 0.5-second `PollCorrelation()` wait**. Current `PollCorrelation()` is diagnostic and starts on its first matching poll; it is **not** a registration gate. Any implemented X11-only exception must remain confined to the governing scope §5A / A1-C addendum §5; accepted Wayland v1 remains strict.
 
-| Purpose | Reference |
+## Governing references, not reproduced history
+
+| Purpose | Document |
 | --- | --- |
-| Policies and architecture | Repository-root, `workspace/`, project `AGENTS.md`; `workspace/README.md`; [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
-| Governing incremental scope | [`Step1.5c5_implementation_scope.md`](Step1.5c5_implementation_scope.md) §5A |
-| **A2 contract and Stage 1 source envelope** | [`step1.5c5d-sdl-x11-a2-contract-addendum-DRAFT.md`](step1.5c5d-sdl-x11-a2-contract-addendum-DRAFT.md) §§1–4, 7 |
-| **Accepted Stage 0 code** | [`../tests/test_sdl_x11_resolver_protocol.js`](../tests/test_sdl_x11_resolver_protocol.js), checkpoint `d0a7e4d` |
-| Earlier X11 problem/evidence | [`step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md`](step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md); [`README_remote_desktop_research.md`](README_remote_desktop_research.md) |
-| Accepted Increment 1 and Wayland v1 | [`step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md`](step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md); [`step1.5c5d-sdl-interface-contract.md`](step1.5c5d-sdl-interface-contract.md) |
-| Deferred auth, placement and `-o -f CONFIG` | [`increment2-deferred-authentication-workflow-section.md`](increment2-deferred-authentication-workflow-section.md) |
-| Earlier decisions/results | [`README.md`](README.md), focused evidence reports, Git history |
+| Policy and architecture | Root, `workspace/`, project `AGENTS.md`; `workspace/README.md`; [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
+| **Governing scope + narrow fixed-delay exception** | [`Step1.5c5_implementation_scope.md`](Step1.5c5_implementation_scope.md) §5A, Increment 2 |
+| **Active draft and gates** | [`step1.5c5d-sdl-x11-a1c-contract-addendum-DRAFT.md`](step1.5c5d-sdl-x11-a1c-contract-addendum-DRAFT.md) §§1–6, especially §§2, 4–6 |
+| Legacy X11 evidence / candidate B | [`step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md`](step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md); [`README_remote_desktop_research.md`](README_remote_desktop_research.md) |
+| Aborted A2 design / accepted synthetic research | [`step1.5c5d-sdl-x11-a2-contract-addendum-ABORTED.md`](step1.5c5d-sdl-x11-a2-contract-addendum-ABORTED.md); [`../tests/test_sdl_x11_resolver_protocol.js`](../tests/test_sdl_x11_resolver_protocol.js) |
+| Accepted native-Wayland registration | [`step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md`](step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md); [`step1.5c5d-sdl-interface-contract.md`](step1.5c5d-sdl-interface-contract.md) |
+| Later authentication, placement and configured `-o` | [`increment2-deferred-authentication-workflow-section.md`](increment2-deferred-authentication-workflow-section.md) |
 
-The addendum retains `DRAFT` and some earlier pre-authorization wording;
-its design has been provisionally approved and Stage 0 accepted, but later
-implementation, native gates and final Increment 2 acceptance remain separate.
+## Stop conditions / next decision
 
-## Exclusions, stop conditions and next actor
+**Read-only Gate F:** No source/docs/tests edits, no FreeRDP/SDL build or patch, no native X11/Wayland GUI or RDP connection, no real bus/KWin calls, no configuration/service/packaging/installation changes, no commit/push/merge. Previously retained archives and installed-source evidence may be inspected **read-only**. No speculative security downgrades. If timestamps, supported renderer options or exact source state are absent, report **unknown/NO-GO for that subtest**, not invented evidence or extended research.
 
-**No implied authorization** for production/other-source edits, new SDL
-lineage hooks, A1/B fallback, placement/focus/stack changes, authentication
-or TLS/NLA policy, configured `-o`, protected packaging repositories, native
-RDP/X11/KWin runs, service operations, installation/deployment, commit/push
-or merge. Keep accepted Wayland v1, generic/TigerVNC and no-placement
-invariants. Later native testing requires its own no-restart/no-`mw` gate.
+**Stop and report** an observed temporary window surviving the proposed threshold before replacement, contradictory provenance, insufficient comparable timestamps, source/ownership/history ambiguity, or the need for an excluded action. A window surviving 500 ms is **not** positive completion proof, and a few successful trials are **not** a universal guarantee.
 
-**Stop/escalate** for unexpected source/build differences, inability to prove
-checked initialization/property/show/XID semantics, unexpected mapped
-predecessors or native recreation, uncertain cleanup, a contract conflict,
-or any need to exceed the expressly authorized Stage 1 envelope. Never
-weaken the positive identity predicate or silently broaden the task.
-
-**Next actor:** Codex works only within the grant of permissions expressed in maintainer's prompt and
-returns exact baseline/diff, validation and limitations for review.
-**Next decision:** Maintainer reviews the Stage 1 proof-producer candidate
-before authorizing packaging, broker integration, KWin resolver work or
-native acceptance. **Increment 2 remains OPEN.**
+**Next actor:** Codex completes the already-issued narrow Gate F assessment and stops. **Next decision:** Maintainer chooses whether to authorize a small, explicitly described `gmki91` native A1 comparison, a small X11-only broker C prototype, or no further Increment 2 work. Native runs and implementation are **separate gates**; Increment 2 remains **OPEN**.

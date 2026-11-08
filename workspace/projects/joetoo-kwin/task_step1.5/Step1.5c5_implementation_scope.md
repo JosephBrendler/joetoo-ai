@@ -298,13 +298,53 @@ bounded failure/coexistence checks. Record actual security/certificate
 conditions. Feasibility archives do not establish production acceptance.
 Codex must not run native/network sessions without that authority.
 
-### Increment 2 — SDL X11 viewer-role identity
+### Increment 2 — SDL X11 viewer-role identity (stock-client legacy profile)
 
-Add independently demonstrated role discrimination between temporary and
-persistent SDL windows bearing the same PID/title marker; reject ambiguous
-or premature enrollment. Headless and maintainer `gmki91` native evidence
-must establish the persistent UUID without premature placement. Preserve the
-shared positive registration contract.
+**Maintainer direction, 2026-11-08:** Candidate A2 client-side XID/nonce/READY
+instrumentation is **ABORTED** as an implementation path because it requires a
+downstream FreeRDP patch for the retiring native Plasma X11 session. Its accepted
+Stage 0 synthetic tests remain historical research evidence, not Increment 2
+acceptance. Preserve the accepted native-Wayland Increment 1 unchanged.
+
+Evaluate **A1** first as a short experiment in *documented, supported settings
+of unmodified stock FreeRDP/SDL* that might suppress transient native-window
+replacement. Do not infer a proven role from a renderer option or absence of a
+replacement in a small sample. If A1 is unsupported or inconclusive, consider
+**Candidate C**: an explicitly opted-in, best-effort X11-only persistence selector,
+subject to the [A1/C draft](step1.5c5d-sdl-x11-a1c-contract-addendum-DRAFT.md).
+No FreeRDP/SDL patch is allowed by this revised scope.
+
+**Explicit, narrow exception to the Increment 1 fixed-delay prohibition:** For
+this **legacy native-KWin-X11 SDL profile only**, the maintainer permits a
+**bounded, centrally configurable, monotonic persistence interval** as *one
+component* of a pragmatic viewer-role heuristic. The proposed parameter is
+`rdp_x11_identity_settle_ms` (initial **500 ms for evaluation**, adjustable from
+the established configuration template after validation). Start the one timer
+when a particular newly observed UUID **first fully qualifies** by launched
+PID, application, exact marker, normal-window and source/lifecycle checks; a
+late marker cannot backdate qualification. Evaluate concurrently with normal
+broker observation and provenance checks; **never** chain it to a second 500 ms
+`PollCorrelation()` diagnostic wait. Do not use a blocking sleep or extend the
+registration deadline. The existing diagnostic `PollCorrelation()` wait is **not**
+a registration prerequisite and need not be modified by this exception.
+
+At the eligibility decision, require the **same unique live UUID** and fresh
+child/PID/class/marker/source/owner checks with complete, non-evicted birth and
+removal history. On X11 only, retain an observed temporary marked predecessor as
+a removed tombstone, instead of rejecting *solely* because it disappeared; do
+not discard ambiguity, changed identity, source gaps or an unresolved live
+competitor. No adoption of preexisting windows, silent UUID replacement,
+placement, focus or stack changes; existing caller/FD and resource safeguards
+remain in force. **Persistence is not positive proof of FreeRDP renderer
+completion.** A temporary viewer lasting longer than the threshold may still
+be misregistered. Evaluate real archived lifetimes, A1 effects and this residual
+risk before authorizing an X11 broker implementation or native acceptance.
+
+This permission is **Increment 2 only**: it does **not** weaken the accepted
+native-Wayland Increment 1 or generic/VNC contracts. The next A1/C read-only
+feasibility gate does not authorize source edits, builds, native sessions or
+publication. A later broker implementation and `gmki91` native test each require
+a separate, narrowly scoped maintainer approval. Increment 2 remains OPEN.
 
 ### Increment 3 — Controlled placement release
 
