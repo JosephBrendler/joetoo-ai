@@ -1,175 +1,47 @@
-# Step 1.5 — Active task dispatch
+# Step 1.5 — Active task dispatcher
 
-## Current dispatch — accepted Increment 1 / planning Increment 2 (2026-11-07)
+**Purpose:** This file identifies the *current* task, its authority, stop conditions and next decision. It is **not** a development history or evidence report. For earlier work, follow the references below and Git history; do not treat an old HANDOFF revision as current authorization.
 
-**Maintainer decision:** Step **1.5c.5d Increment 1 — native-Wayland SDL
-registration without placement — FORMALLY ACCEPTED and COMPLETE**. This is
-not acceptance of Increment 2, the remaining 1.5c.5d work, any production
-security/`-o` policy or merge into `main`. Acceptance details are in
-[`step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md`](step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md).
+## Current dispatch — Step 1.5c.5d, Increment 2 / A2 Stage 0 (2026-11-07)
 
-**Verification:** Codex added exactly one integrated two-successful-registration
-headless test in `tests/test_rdp_broker.py`; the maintainer independently
-reproduced 179 focused Python, 614 full Python, 99 JavaScript, 81 standalone
-broker PASS on `gmki91`, and `git diff --check` passed. The test,
-acceptance report and HANDOFF were subsequently published on the task branch;
-latest verified pushed HEAD is `a66d153` (2026-11-07). Historical managed-record
-isolation is satisfied headlessly; no additional native test is required
-solely for that property. Native q552u01 Gates A/B1/B2/C1 remain accepted.
-The PKI excursion was documented separately; production SDL TLS/NLA
-policy remains deferred.
+**Branch:** `task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`  
+**Published pre-dispatch checkpoint:** `b8d9d943e87d56912081284e3a73e6f8c9239d25` (published A2 contract addendum). Verify the actual branch, HEAD, working-tree status, and governing instructions before acting; this SHA is a reference checkpoint, **not** a requirement to reset or overwrite newer work.
 
-**Current phase:** Step **1.5c.5d Increment 2 — X11 SDL viewer-role identity
-SCOPE/DESIGN REVIEW**, **not implementation**. See
-[`step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md`](step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md).
-The maintainer authorizes **Codex read-only review** of noninteractive
-exact-client-XID role/completion evidence first, with the demonstrated
-`_NET_WM_USER_TIME` + lifecycle interaction predicate as fallback. Codex may
-propose a narrow contract addendum, not implement it. **No source/test edits,
-native runs, new observer, service operations, Git publication or
-interface/security changes** are authorized by this instruction.
+**Milestone state:** Increment **1 — native-Wayland SDL registration without placement — is formally ACCEPTED and COMPLETE**. Increment **2 — X11 SDL viewer-role identity — is NOT implemented or accepted**. The maintainer has selected **A2**, noninteractive hidden desktop-viewer initialization with positive native-client-XID/nonce evidence and independent KWin UUID correlation, as the **provisional implementation contract**. The addendum specifies proposed mechanisms and future gates; approval is **not** a general implementation grant.
 
-**Design priority:** **A = noninteractive exact-XID viewer identity**, if
-source-grounded and independently cross-checked against KWin UUID/lifecycle.
-SDL renderer initialization may recreate its X11 native window; the archived
-transition correlates but does not prove that mechanism, and no stock-client
-role signal is yet established. Compare stock-client, supported renderer-profile
-and minimal creation-path instrumentation proposals. **B = demonstrated
-interaction/lifecycle fallback**: unmarked credential activity is excluded by
-the marker; the marked temporary window disappeared without an activity latch;
-the marked persistent viewer showed activity. B may require an additional
-human gate, so it is not the preferred configured-workflow policy. The
-related NLA/VNC pending-window/placement/scheduling decision remains deferred
-in `increment2-deferred-authentication-workflow-section.md`. No deterministic
-X11 selector is accepted yet; registration must fail closed until approved.
+**Current actor and authority:** Codex is authorized for **Stage 0 only: one isolated, headless JavaScript resolver-protocol test** as bounded in [A2 addendum §7.1](step1.5c5d-sdl-x11-a2-contract-addendum-DRAFT.md#71-proposed-stage-0--test-only-authorization-envelope-not-granted). This dated maintainer dispatch is the explicit Stage 0 grant; the addendum's older “not granted” wording describes its status before this dispatch. **No Stage 0 result is yet claimed.**
 
-**Document precedence:** The existing paragraphs below constitute the
-retained **historical Increment 1 handoff and authorization record**, not
-current Codex instructions where they conflict with this dated dispatch.
-Preserve that continuity through the initial Increment 2 review; any later
-condensation is a separate editorial decision.
+## Required reading — references, not reproduced history
 
----
-
-**Active task:** Step **1.5c.5d, Increment 1** — native-Wayland SDL FreeRDP registration of the exact KWin viewer UUID, **without placement**.
-
-**Phase:** Step **1.5c.5d Increment 1 — native-Wayland SDL registration *without placement***. Four-operation development interface and persistent direct-child launcher implemented/headlessly tested. Maintainer-native Begin/Cancel smoke **ACCEPTED**; first positive registration, NLA-dialog cancellation, Gate A identity/backend/FD verification, Gate B1 refused connection, Gate B2 Ctrl+C cancellation and **Gate C1 unrelated-viewer coexistence all PASS** on `q552u01` (Nov 6–7). System GRD Remote Login **3389 private-PKI certificate deployment and client verification** separately recorded. **Prior-managed-record isolation** remains a narrow unverified integrated scenario; **full Increment 1 acceptance remains pending**.
-
-**Branch:** `task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`
-
-**Current published checkpoint:** [`d38aa238`](https://github.com/JosephBrendler/joetoo-ai/commit/d38aa238aa65ae5240d73eba9c2ede51cbefd088) (2026-11-07 maintainer-pushed documentation/evidence commit). The preceding published evidence checkpoint was [`bd6f410`](https://github.com/JosephBrendler/joetoo-ai/commit/bd6f41031ac56750bf1e63fed25e99bc8e0fe7ba); the tested Increment 1 implementation originated at `5244949`. **Gate C1, screenshot 26, focused B2 and PKI reports are now published on this task branch.** Verify actual HEAD, working tree and origin before acting; no implementation merge into `main`. The authorization below is a new maintainer decision, **not** a claim that any newly authorized regression is already implemented or tested.
-
-## Authoritative references
-
-| Purpose | Document |
+| Purpose | Authoritative reference |
 | --- | --- |
-| Governing instructions | Repository-root, workspace and project `AGENTS.md`; `workspace/README.md` |
-| Product architecture | [ARCHITECTURE.md](../ARCHITECTURE.md) |
-| Requirements and incremental gates | [Step 1.5c.5 scope](Step1.5c5_implementation_scope.md), §5A |
-| Historical task record | [Task README](README.md) |
-| Remote-desktop feasibility research | [Remote-desktop research](README_remote_desktop_research.md) |
-| SDL interface, development launcher and proposed native procedure | [SDL interface contract](step1.5c5d-sdl-interface-contract.md), §§1–7 |
-| **Actual native positive registration and post-exit findings** | [2026-11-06 native-Wayland SDL evidence](step1.5c5d-native-wayland-sdl-registration-evidence-2026-11-06.md) |
-| **Independent live Gate A UUID/backend and close-log evidence** | [2026-11-06 Gate A identity evidence](step1.5c5d-native-wayland-sdl-gateA-identity-evidence-2026-11-06.md) |
-| **Native Gate B1 refused-endpoint evidence** | [2026-11-06 Gate B1 negative test](step1.5c5d-native-wayland-sdl-gateB1-refused-connection-evidence-2026-11-06.md) |
-| **Native Gate B2 launcher Ctrl+C evidence** | [2026-11-06 Gate B2 operator cancellation](step1.5c5d-native-wayland-sdl-gateB2-ctrl-c-cancellation-evidence-2026-11-06.md) |
-| **Native Gate C1 unrelated-viewer evidence** | [2026-11-07 Gate C1 two-viewer isolation](step1.5c5d-native-wayland-sdl-gateC1-unrelated-viewer-coexistence-evidence-2026-11-07.md) |
-| **Supporting GRD system PKI excursion** | [2026-11-07 CA-signed Remote Login 3389 report](step1.5c5d-gnome-remote-login-pki-evidence-2026-11-07.md) |
+| Repository policies and project workflow | Repository-root, `workspace/`, and project `AGENTS.md`; `workspace/README.md` |
+| Product architecture and milestones before this stage | [`../ARCHITECTURE.md`](../ARCHITECTURE.md), [`README.md`](README.md), [`Step1.5c5_implementation_scope.md`](Step1.5c5_implementation_scope.md) §5A |
+| **Current Increment 2 A2 contract and Stage 0 bounds** | [`step1.5c5d-sdl-x11-a2-contract-addendum-DRAFT.md`](step1.5c5d-sdl-x11-a2-contract-addendum-DRAFT.md) §§1–8, especially §§5.4–5.6 and **§7.1** |
+| Increment 2 problem, historical X11 evidence, A2 priority and B fallback | [`step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md`](step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md), [`README_remote_desktop_research.md`](README_remote_desktop_research.md) |
+| Prior **accepted** increment and original Wayland interface | [`step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md`](step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md), [`step1.5c5d-sdl-interface-contract.md`](step1.5c5d-sdl-interface-contract.md) |
+| Pending NLA/VNC staging, placement, sequential `-o -f CONFIG` and timeouts — **not this stage** | [`increment2-deferred-authentication-workflow-section.md`](increment2-deferred-authentication-workflow-section.md) |
 
-## Current authority and boundaries
+The linked acceptance/evidence reports, task READMEs and Git history contain past commands, outcomes, native gates, PKI details, and prior authorizations. Consult the appropriate source when relevant; do not reconstruct that narrative in HANDOFF. The current authorization here controls the actor's write/test scope; documents labeled DRAFT do not independently grant implementation authority.
 
-**Deferred decision:** Maintainer has identified a potential need to register and place network authentication dialog (NLA/vnc passwd) windows in order to facilitate automated completion of long -o -f CONFIG operations. This is deferred to future phase invoving RDP viewer placement. See [increment2-deferred-authentication-workflow-section.md](./increment2-deferred-authentication-workflow-section.md)
+## Stage 0 — exact authorization
 
-**Previously accepted:** Maintainer accepted the q552u01 native Begin/Cancel smoke gate on 2026-11-06. Its two terminal `failed` records were deliberate cancellations, not failures of the smoke test.
+**Only new repository file authorized:** `tests/test_sdl_x11_resolver_protocol.js`. Keep synthetic vectors/fixtures inside this file. Follow existing `node:test`, `vm` and fake-KWin patterns in `tests/test_step1_3a.js` and `tests/test_rdp_x11_use.js` **without modifying either file**.
 
-**Previously authorized and implemented:** Bounded Codex headless implementation of a persistent development-only SDL launcher, using Begin → direct child → Bind → Poll/Cancel on one local D-Bus connection. Codex reported 178 focused, 613 full Python and 99 JavaScript passes. Maintainer subsequently reproduced the 178/613/99 passes on both gmki91 and q552u01.
+- Execute **existing** `joetoo-kwin-resident.js` observation code inside a restricted Node VM with fake workspace, windows, Qt-style signals, timers and `callDBus`. Reject any placement, focus, stack, credential or other GUI mutation.
+- Model **future** A2 helper/broker handshake as **explicitly test-only protocol fixtures**, not working production code. Distinguish observations of the existing resident from assumptions injected by the fixture.
+- Cover automatic pre-spawn readiness and post-READY mapping without a shortcut or human input; positive ordered traces; actual-versus-modeled sender connection, well-known-to-unique destination resolution and owner changes; missing/delayed/reordered lifecycle evidence and receipt-fence rejection; replay, stale/wrong-source/expired challenges, cross-job isolation and duplicates; lost callbacks, late load/unload/reap acknowledgements and cleanup-uncertain blocking; no unauthorized window operations.
+- Include bounded native-property **schema vectors** (including `WM_CLASS` instance/class ordering and `_NET_WM_NAME` exact marker) if feasible in the one file. Do **not** claim a native XCB parser was tested.
+- Run the focused new test and applicable **existing headless JavaScript** regression suite only. Report exact commands, test counts, failures and `git diff --check`. No claim of a prior suite count as the new result.
 
-**Maintainer-operated native tests:** First positive SDL registration — PASS; NLA-dialog Cancel — PASS; independent Gate A native-Wayland KWin UUID/PID/FD/backend — PASS; Gate B1 refused local endpoint — PASS; Gate B2 launcher Ctrl+C while NLA dialog showed — PASS; **Gate C1 simultaneous unrelated/manual and launch-owned SDL viewers — PASS** with correct UUID, unaffected unrelated viewer, and retained missing record after close. Detailed sources are linked above. These **record actions already performed**, not blanket authorization for Codex native execution.
+**What Stage 0 cannot prove:** Real Qt signal ordering, D-Bus transport sender/destination/receipt ordering, future broker/helper behavior, XCB ABI/authorization, FreeRDP hidden initialization, native XID→UUID identity, OS reaping or actual Increment 2 registration. These require later, separately authorized stages/gates.
 
-**Earlier next-actor instruction (historical, superseded ONLY for the single focused headless-test implementation authorized below):** If tasked, Codex may perform **read-only review** of the newly published/proposed native reports, existing SDL-focused headless tests, source and installation contract; its immediate task is to assess coverage for *two successive managed registrations with an earlier missing record preserved*. It may **propose** the smallest focused headless regression and final Increment 1 acceptance criteria, but must **not implement, execute native RDP, restart/install services, modify the repo, commit or push** without separate maintainer direction. A proposed HANDOFF is not an authorization.
+## Hard exclusions and stop conditions
 
-**NEW explicit maintainer authorization — 2026-11-07: ONE headless historical-managed-record isolation regression.** The maintainer has **now authorized Codex to inspect the current published task branch, add at most one narrowly focused headless test** in `tests/test_rdp_broker.py` (with only directly necessary test-fixture adjustments there), and execute appropriate **headless** focused/full existing regression suites. This is the separate direction contemplated above, limited to **test-only work in `joetoo-ai`**. It does **not** authorize source/daemon/adapter/launcher/registry/JS changes, new public signatures, policy/configuration changes, test-driven workarounds, installation, service restart, KWin interaction, live RDP/SSH/network operations, any native graphical run, repository publication, or progression to later increments.
+**No changes** to production code, resident, broker, FreeRDP/SDL, ebuilds, launcher, registry, existing tests, scope, contract, HANDOFF, scripts, configuration, installation, or other repository files. No native GUI/KWin/RDP sessions, real bus or X server test, network operation, service restart/reload, `mw`, deployment, commit, push, PR or merge. Stage 0 does **not** authorize Increment 2 implementation, placement, authentication staging, configured `-o` or production security changes.
 
-**Exact authorized scenario:** in one unchanged broker/observation-source lifecycle, register first launch-owned SDL Wayland UUID at logical `(desktop,slot)=(1,1)` (or fixture-equivalent distinct slot), observe its removal so the first managed record is retained with `presence=missing`, then start a second fresh authorized registration at `(1,2)` using a **new request ID, title marker, child identity and KWin UUID**. Assert the second succeeds as a **separate** managed record; the first retains its original managed ID/UUID/request/slot and remains missing; `ListManaged`/`GetManaged`, terminal statuses, no-placement invariants and unrelated-window exclusion are unchanged. A duplicate `(desktop,slot)` must remain prohibited under existing tests. Reuse actual broker/registry mock paths; do not fabricate a passing result by bypassing the registry. If the scenario is already directly covered, or a real product defect is exposed, **stop and report** instead of duplicating coverage or changing production code.
+**Stop and report** if the checkout differs unexpectedly from the authorized baseline; a relevant governing document is unavailable; the one-file test cannot exercise the existing resident safely; the proposed model permits success with incomplete observation, stale sender/source/challenge or unresolved cleanup; source evidence contradicts mandatory ordering; regression testing finds a product defect; or completing the test would require any excluded action. Do not weaken the positive identity/receipt predicate or modify production code to obtain a passing test.
 
-**Gate for Codex return:** report exact branch/SHA/working-tree baseline, test-only diff, focused and full test commands/counts, any observed defect/coverage qualification, and a recommended Increment 1 disposition. **Do not commit, push, open PR, merge or declare Increment 1 accepted** without explicit additional maintainer approval. Retain all Nov 6–7 Gate A/B1/B2/C1 and PKI evidence; the recent continuity is deliberately preserved while Codex resumes.
+## Required Codex return / next maintainer decision
 
-**Reserved decisions:** Unapproved new process-provenance mechanism or public signature; production TLS/NLA/certificate policy; further native SDL/RDP runs; X11 role identity; placement/desktop/geometry/stack/focus changes; configured `-o` recipes; later increments; production deployment and publication into `main`.
-
-**Invariants:** Exact positively verified launch-owned native-Wayland UUID only; fail closed on ambiguity/lost evidence; no registration-driven placement; preserve generic and TigerVNC behavior. Do not equate successful local window registration with remotely authenticated/secure transport.
-
-**Stop/escalate:** Missing or contradictory process/log/UUID proof, unexpected source/owner changes, regressions, unexpected placement, leaked children, unsafe certificate/security exceptions, or actions outside the stated gate. Exit 131 is documented separately and not automatically a registration failure.
-
-## Latest results — maintainer native verification and PKI, 2026-11-06–07
-
-**Sync/install/regressions (Nov 6):** q552u01 fast-forwarded `2bb9c74 → 5244949`. Both gmki91 and q552u01 independently passed **178 focused Python, 613 full Python and 99 JavaScript** tests. q552u01 installer checked ten managed files; OpenRC started; four SDL D-Bus method signatures appeared. Later Gate C preparation (Nov 7) observed **a transient immediate introspection failure** in `restart_joetoo-kwind` *despite subsequent working D-Bus queries*; do not generalize the earlier successful wrapper result into an absence of races. No post-C1 regression rerun is claimed.
-
-**First native SDL registration — positive PASS:**
-
-- Local non-root Wayland launcher targeted `raspiubuntu401`, user `joe`, default RDP port 3389, intended desktop 1/slot 1 and registration timeout 300000 ms.
-- Direct SDL child PID `863250`; request `099e8607f5b6481a8701d87288c70318`; returned `state="registered"`, `reason="registered"`, managed ID `win-001`, exact UUID `3d8dd95f-2fbb-4aef-870d-c6dba31dd16f`, `placement="not_requested"`, `remote_session="unverified"`.
-- Maintainer screenshot shows a usable GNOME/Ubuntu desktop inside the SDL FreeRDP viewer, including a working remote terminal; visible title marker agrees with the broker's later stored caption.
-- Launcher ultimately printed `child_exit=2`; this is **not** reclassified as an established remote-security or exit-cause result without log/exit-path verification.
-
-**Post-exit broker verification — PASS:** `RegistryStatus` synchronized, `request_count=1`, `succeeded=1`, `pending=running=0`, `placement_transaction=IDLE`, `managed_count=1`. `ListManaged` and `GetManaged win-001` retain the exact UUID/request/child identity while explicitly reporting `presence="missing"`. This is historical managed registration, **not** a live viewer. The registry field `connection="not_attempted"` is not a measurement of the visually working remote session.
-
-**Native NLA cancellation — PASS:** Under a fresh broker baseline, `raspiubuntu401` displayed its NLA dialog; the maintainer clicked Cancel without submitting credentials. Launcher PID `884517` exited; its terminal result was `failed` / `child_identity_rejected` and launcher exit 1, with no registered viewer or lingering child, `pending=running=0`, synchronized source and placement IDLE. That run did **not** exercise preservation of the earlier `win-001` record, because the service had been restarted before the baseline.
-
-**Independent Gate A identity verification — PASS:** On q552u01, a second positive SDL launch targeted `raspiubuntu401.brendler`, desktop 1/slot 2, child PID `914978`, request `5976103a7320411d902286375414ab96`; broker registered `win-001` / UUID `0ce195e1-f284-40d9-8e25-cef7b1a4d1a1`. Live process executable `/usr/bin/sdl-freerdp`, private stdout FD, PID/application/title marker, `BackendEvidence` returning `wayland`, and KWin Debug Console `{0ce195e1-f284-40d9-8e25-cef7b1a4d1a1}` all agreed. KWin and broker geometry agreed at `448,119 1024×796`. Registration was `not_requested` for placement; broker placement remained IDLE. After exit, child absent, observation synchronized, `succeeded=1`, `pending=running=0`, retained managed entry marked `presence=missing`.
-
-**Native Gate B1 connection refused — PASS:** On local q552u01 Wayland, preflight verified that `127.0.0.1:65001` refused TCP connections. Launcher spawned child `927671`, request `5db38e1e418d42d2acd095f4c4f25017` (desktop 1/slot 1, timeout 15000 ms), then returned terminal `failed` / `child_identity_rejected`, launcher exit 1. Post-test: managed count zero, one failed request, no pending/running requests, child absent, observation synchronized with unchanged source/revision, placement IDLE, no cleanup uncertainty. See [Gate B1 evidence](step1.5c5d-native-wayland-sdl-gateB1-refused-connection-evidence-2026-11-06.md). B1 does **not** require repetition merely because the broker was subsequently restarted.
-
-**Native Gate B2 Ctrl+C — PASS:** q552u01 launcher against `raspiubuntu401.brendler:3389`, intended desktop 1/slot 2, child PID `928382`, request `281720675dc34bc7a6c3046880b4c515`. Operator interrupted launcher with Ctrl+C while NLA dialog was visible; it disappeared approximately **1.5–2 seconds** later. Launcher returned `failed` / `cancelled`, exit 1; after-test `failed=1`, `pending=running=0`, managed=0, unchanged synchronized source `1794025502561-e37c3mhdkzoo` (revision 12→16), placement IDLE, no SDL process. Broker restart occurred **before** B2 baseline, not during. **No repeat needed.** [Detailed B2 evidence](step1.5c5d-native-wayland-sdl-gateB2-ctrl-c-cancellation-evidence-2026-11-06.md).
-
-**FreeRDP exit 131 — investigated:** Private log shows `SDL_EVENT_WINDOW_CLOSE_REQUESTED` and “Window closed, terminating RDP session...” immediately before `ERRCONNECT_CONNECT_CANCELLED` and network-disconnect reporting at 22:42. Source-level exit enum labels 131 `CONN_FAILED`, but the observed local close request strongly suggests closure-triggered cancellation. Do not call 131 a successful transport exit, nor misclassify the earlier positive UUID registration as failed. Raw private log remains outside Git.
-
-**Gate C1 — unrelated-viewer coexistence PASS (Nov 7):** Local q552u01 KWin Wayland, broker IDLE/synchronized and empty managed registry at actual baseline; unrelated SDL Viewer A manually launched PID `945458`, KWin UUID `87a676e9-5061-4f12-a839-e8041fa429f3` remained **unmanaged**. Launcher-owned Viewer B PID `947240`, request `77b9da00b5ae4468aded64885c380827` registered **`win-001` UUID `f5ee581a-4b4b-4948-9721-526e24f3afcd`**, same SDL app class but distinct exact marker. Both were live; visual screenshot and `ListObserved` matched PID/UUIDs. After B closed, A stayed alive with original UUID; B became a retained `presence=missing` managed record; after A closed, no SDL children. Source `1794030392638-uhwrbnhy27vazpm5rqx9r7` unchanged, zero pending/running, placement IDLE, no cleanup uncertainty. B FreeRDP `child_exit=131` and launcher exit **0** describe different results; registration remained PASS. [Gate C1 evidence](step1.5c5d-native-wayland-sdl-gateC1-unrelated-viewer-coexistence-evidence-2026-11-07.md); [screenshot](screenshots/26-sdl-native-wayland-gateC1-unrelated-and-managed-2026-11-07.png).
-
-**Operational preflight nuance (Nov 7):** An earlier *aborted* Gate C preflight observed `placement_transaction=OK` after unrelated `mw l/r` Konsole moves; broker intentionally retains terminal move status, but the **development launcher** currently requires exactly `IDLE`. No SDL viewer was launched in that aborted attempt. A single preparatory restart then yielded IDLE; no restarts or `mw` moves occurred during actual Gate C1. The restart wrapper's immediate D-Bus introspection transiently failed, but subsequent `RegistryStatus` succeeded. Document as separate dev-launcher preflight/service-readiness follow-ups, **not** failed C1 proof.
-
-**PKI excursion — CA-signed system GRD Remote Login 3389 (Nov 7):** Maintainer created a SAN-correct RSA-4096 leaf for `raspiubuntu401.brendler` and `raspiubuntu401` (key created on `katahdin`, CA-signed via intermediate on `tahawus`), deployed cert/key with `gnome-remote-desktop` ownership and private key mode 0600, configured `sudo grdctl --system rdp set-tls-cert` / `set-tls-key`, restarted system GRD, and observed server fingerprint `83:4c:0f:5f:...:29:79:d8`. OpenSSL hostname/sslserver chain verification OK on **gmki91 and q552u01**; `xfreerdp /cert:deny` on gmki91 and unrelated manual SDL `/cert:deny` on q552u01 reached GDM without cert rejection. This is **system listener 3389 only**; no equivalent upgrade demonstrated for user listener 3390, and no final production SDL-launcher security policy is authorized. See [detailed system GRD PKI report](step1.5c5d-gnome-remote-login-pki-evidence-2026-11-07.md). Earlier GRD feasibility README is historical; an unrelated maintainer-local restore of its Nov 5 wording was not part of the `bd6f410` published commit.
-
-**Detailed evidence index:** [First positive native registration](step1.5c5d-native-wayland-sdl-registration-evidence-2026-11-06.md); [Gate A identity/backend/close log](step1.5c5d-native-wayland-sdl-gateA-identity-evidence-2026-11-06.md); [Gate B1 refused endpoint](step1.5c5d-native-wayland-sdl-gateB1-refused-connection-evidence-2026-11-06.md); [Gate B2 Ctrl+C](step1.5c5d-native-wayland-sdl-gateB2-ctrl-c-cancellation-evidence-2026-11-06.md); [Gate C1 unrelated-viewer coexistence](step1.5c5d-native-wayland-sdl-gateC1-unrelated-viewer-coexistence-evidence-2026-11-07.md); [system GRD PKI](step1.5c5d-gnome-remote-login-pki-evidence-2026-11-07.md). Images: Gate A `screenshots/19-sdl-native-wayland-kwin-uuid-gateA-2026-11-06.png`, initial positive `screenshots/18-sdl-native-wayland-viewer-2026-11-06.png`, Gate C1 `screenshots/26-sdl-native-wayland-gateC1-unrelated-and-managed-2026-11-07.png`. Earlier Nov 4 feasibility screenshots also live under `screenshots/` with their distinct filenames. Raw private RDP logs remain outside Git.
-
-**Still outstanding:** *Historical managed-record isolation* means retaining a **previous, already-closed managed record** (its `managed_id`, UUID, request, desktop/slot) while a **new successful registration at another slot** receives a different identity without overwriting the old one. Gate C1 started with an empty managed registry and Viewer A was deliberately unmanaged, so **that exact two-success scenario remains NOT TESTED natively**. Inspected headless SDL tests already cover unrelated preexisting viewer (`test_unrelated_preexisting_viewer_excluded`), slot collision (`test_slot_conflict_after_positive_registration`), duplicate UUID ownership (`test_duplicate_uuid_ownership_rejected`) and post-exit retained UUID (`test_registered_uuid_not_replaced_or_reregistered`), but **no integrated two-successful-registrations/different-slots preservation test was found in the reviewed SDL-focused files**. Recommend Codex first *review/propose one focused headless regression*; add it only with maintainer authorization, then decide whether any further native test is necessary. Full Increment 1 acceptance is pending; X11 role identity, placement, configured `-o` recipe and production SDL TLS/NLA/security are later gates. Wrong-password/lockout testing is not automatically authorized.
-
-**Authorization update (2026-11-07):** The maintainer has now explicitly approved the **single headless regression described above**, so the prior recommendation to seek test-only authorization is fulfilled. The integrated scenario remains **NOT TESTED** until Codex produces actual headless evidence; it is **not** being reclassified as a native test or a finished gate. The need for an additional native isolation run is reserved for decision **after** review of that test.
-
-## Next actor and decision
-
-**Earlier Codex dispatch (historical; now expanded ONLY by the explicit test authorization above):** Orient from `bd6f410` plus the new proposed B2, C1 and PKI records, inspect current source/tests, compare the headless test coverage cited above, and recommend a **small two-successful-registration historical-isolation regression** and an exact Increment 1 completion checklist. Do **not** infer permission for implementation, native runs, source changes, deployment or publication. This HANDOFF intentionally bridges Codex's absence during the Nov 6–7 maintainer-operated tests.
-
-**Next actor — Codex, CURRENT authorized task:** Verify `d38aa238` (or a newer maintainer-published HEAD) and clean/understood local checkout; read this HANDOFF, the linked native evidence and PKI record, source/fixtures and scope §5A. Implement **one test-only headless regression** for two successive successful, distinct-slot SDL managed registrations retaining the first historical `missing` record. Run source-grounded focused and full **headless** tests and report actual counts, test-only patch/diff, and whether this narrows the need for another native test. **Stop/escalate** if the fixture cannot exercise the real broker/registry path, a genuine implementation defect appears, branch differs unexpectedly, or testing would require altering source. No live RDP, broker restart, install, GUI operation, commit/push/PR or Increment 1 acceptance.
-
-**Earlier next maintainer decision (publication and test-only authorization now completed):** Publish/reconcile the B2/C1/PKI reports and current HANDOFF when ready. Decide whether to authorize **one headless historical-record preservation test** after Codex read-only coverage review, then separately determine if a native repeat is worth its risk. Do **not** rerun Gate A/B1/B2/C1 solely due to restarts in earlier baselines. **Before any future native procedure, state no-restart/no-`mw` conditions at the very top, preceding all commands.** Increment 1 stays open until expressly accepted; no automatic progression to X11, placement, `-o` or production security.
-
-**Next maintainer decision — after Codex reports:** Review the single test-only diff and its headless regression results. If it passes, decide whether existing headless plus Gate A/B1/B2/C1 native evidence is sufficient for **Increment 1 acceptance** or whether a separately authorized narrow native historical-record check is still warranted. If the test fails, decide separately whether any product fix is authorized; Codex must not make one under this grant. Authorize commit/push/PR separately. The future HANDOFF can then be condensed **after Codex has re-established continuity**, not in this bridging update.
-
----
-
-**Maintenance convention:** Keep HANDOFF to the current task, current authority, latest result and next actor. Preserve detailed technical evidence in focused reports and durable accepted milestones in the task README; do not recreate the historical iteration table.
-
-
-
-## Maintainer transition record — 2026-11-07 (supersedes older pending statements)
-
-- **Increment 1 accepted/complete** after integrated two-success headless
-  regression and maintainer's independent 179/614/99/81 PASS; see the new
-  focused acceptance report. Codex's test-only candidate and this HANDOFF
-  were locally modified and not yet asserted published; verify HEAD/working
-  tree before any subsequent actions.
-- The old text above saying 'Increment 1 pending', 'historical isolation untested',
-  or 'Codex next to implement the one test' remains solely **historical**;
-  the current status and grants are at the top of this file.
-- **Increment 2 planning only:** Existing Nov 5 X11 evidence suggests a
-  content-free user-activity / marker / exact-UUID / complete-lifecycle
-  combination; source support and trustworthy post-birth timestamp attribution
-  remain to be reviewed. `step1.5c5d-increment2-x11-role-identity-scope-DRAFT-2026-11-07.md`
-  and the maintainer's separate Codex prompt set the review questions.
-- The existing `step1.5c5d-sdl-interface-contract.md` v1 remains the accepted
-  Wayland implementation contract. Codex is to **propose**, not implement or
-  unilaterally edit, a focused X11 addendum after source/evidence review.
-- No new native `gmki91` RDP test, code change, interface change, new input
-  observation, restart/deployment or publication is authorized in this
-  read-only review. Maintainer reserves the contract/predicate decision and
-  later implementation and native execution gates.
+Report branch, actual HEAD and working-tree baseline; the single-file diff; focused and applicable headless-JS test commands/counts/results; tested positive and negative traces; **what existing code was actually executed versus what was modeled**; outstanding Qt/D-Bus/native proof gates and any exact contract contradiction. Leave changes **uncommitted/unpushed**, then stop. The maintainer will review Stage 0 before separately authorizing any subsequent source, build, or native-testing envelope.
