@@ -528,6 +528,179 @@ class RdpBrokerTests(unittest.TestCase):
         self.assertEqual(self.b._rdp_registration['deadline'], self.clock + 300)
 
 
+class X11RdpBrokerTests(unittest.TestCase):
+    """Actual broker/registry with a fake monotonic clock, never a desktop."""
+    patch = RdpBrokerTests.patch
+    tearDown = RdpBrokerTests.tearDown
+    arm = RdpBrokerTests.arm
+    bind = RdpBrokerTests.bind
+    event = RdpBrokerTests.event
+    poll = RdpBrokerTests.poll
+    assertFailed = RdpBrokerTests.assertFailed
+
+    def setUp(self):
+        RdpBrokerTests.setUp(self)
+        env = patch.dict(self.module.os.environ, XDG_SESSION_TYPE='x11')
+        env.start(); self.addCleanup(env.stop)
+        self.b._cancel_rdp_registration(self.rid)
+        self.xarm()
+        self.reader.read_backend.return_value = 'x11'
+        self.patch(self.b, '_poll_correlation', Mock(side_effect=AssertionError('second diagnostic timer')))
+
+    def xarm(self, **bounds):
+        self.spec = self.b._begin_rdp_registration(3, 1, bounds, profile='sdl-x11-a1c-v1')
+        self.rid, self.marker = self.spec['request_id'], self.spec['title_marker']
+
+    def test_both_renderers_one_dwell_no_diagnostic_timer(self):
+        for renderer in ('auto', 'software'):
+            with self.subTest(renderer=renderer):
+                if self.b._rdp_registration['state'] == 'PENDING':
+                    self.b._cancel_rdp_registration(self.rid)
+                # Fresh registry for the second positive, preserving source.
+                self.b.registry = self.module.WindowRegistry()
+                self.xarm(rdp_x11_renderer=renderer)
+                self.bind(); self.event()
+                c = self.b._rdp_registration
+                start = c['windows'][WINDOW_ID]['first_qualified_at']
+                self.assertEqual(start, self.clock)
+                self.assertEqual(self.poll()['state'], 'pending')
+                self.clock = start + .499; self.loop.tick()
+                self.assertEqual(self.poll()['state'], 'pending')
+                self.clock = start + .5; self.loop.tick()
+                self.assertEqual(self.poll()['window_uuid'], WINDOW_ID)
+                self.assertEqual(self.b.registry.managed_windows[WINDOW_ID].placement, 'not_requested')
+                self.assertIsNone(self.b.correlation)
+                self.assertEqual(self.loop.callbacks, {})
+                # Retire the prior live UUID before arming another launch.
+                self.event('removed')
+
+    def test_22_ms_predecessor_tombstone_with_late_backend_proof(self):
+        self.reader.read_backend.return_value = None
+        self.bind(); self.event(identifier=OTHER)
+        self.clock += .022; self.event('removed', OTHER)
+        self.assertEqual(self.poll()['state'], 'pending')
+        self.event()
+        c = self.b._rdp_registration
+        self.assertTrue(c['windows'][OTHER]['removed'])
+        self.assertIsNone(c['windows'][OTHER]['first_qualified_at'])
+        self.reader.read_backend.return_value = 'x11'
+        self.poll(); start = c['windows'][WINDOW_ID]['first_qualified_at']
+        self.assertEqual(start, self.clock)
+        self.clock = start + .5
+        self.assertEqual(self.poll()['window_uuid'], WINDOW_ID)
+        self.assertNotIn(OTHER, self.b.registry.managed_windows)
+
+    def test_single_marked_viewer_and_late_marker_clock(self):
+        self.bind(); self.event(caption='')
+        self.clock += .4; self.event('changed')
+        start = self.b._rdp_registration['windows'][WINDOW_ID]['first_qualified_at']
+        self.assertEqual(start, self.clock)
+        self.clock = start + .1; self.assertEqual(self.poll()['state'], 'pending')
+        self.clock = start + .5; self.assertEqual(self.poll()['state'], 'registered')
+
+    def test_600_ms_counterexample_is_fallible_and_never_retargets(self):
+        self.bind(); self.event(identifier=OTHER)
+        self.clock += .5; first = self.poll()
+        self.assertEqual(first['window_uuid'], OTHER)  # Known heuristic false positive.
+        self.clock += .1; self.event('removed', OTHER); self.event()
+        self.assertEqual(self.poll(), first)
+        self.assertEqual(set(self.b.registry.managed_windows), {OTHER})
+        self.assertEqual(self.b.registry.managed_windows[OTHER].presence, 'missing')
+
+    def test_observed_removed_tombstone_survives_inventory_refresh(self):
+        self.bind(); self.event(identifier=OTHER)
+        self.clock += .022; self.event('removed', OTHER)
+        w = self.event()
+        self.revision += 1
+        self.b.SyncInventory(json.dumps(dict(source='source', revision=self.revision, windows=[w])))
+        self.clock += .5
+        self.assertEqual(self.poll()['window_uuid'], WINDOW_ID)
+
+    def test_live_overlap_even_if_competitor_removed_before_later_poll(self):
+        self.bind(); self.event(); self.event(identifier=OTHER)
+        self.event('removed', OTHER)
+        self.assertFailed('ambiguous')
+
+    def test_removed_marked_window_with_wrong_pid_is_not_forgiven(self):
+        self.reader.read_backend.return_value = None
+        self.bind(); self.event(pid=99); self.event('removed', pid=99)
+        self.assertFailed()
+
+    def test_mutation_duplicate_and_missing_history(self):
+        for fault in ('marker', 'pid', 'class', 'duplicate', 'missing', 'evicted'):
+            with self.subTest(fault=fault):
+                if self.b._rdp_registration['state'] == 'PENDING':
+                    self.b._cancel_rdp_registration(self.rid)
+                # Remove previous live observations before a new transaction.
+                self.b.observed_windows.clear()
+                self.xarm(); self.bind(); self.event()
+                if fault == 'marker': self.event('changed', caption='lost')
+                if fault == 'pid': self.event('changed', pid=99)
+                if fault == 'class': self.event('changed', app='other')
+                if fault == 'duplicate': self.event()
+                if fault == 'missing': self.b.observation_events.clear()
+                if fault == 'evicted':
+                    self.b.observation_evicted_through = self.b._rdp_registration['event_floor'] + 1
+                self.assertFailed()
+                self.b.observation_evicted_through = 0
+
+    def test_reordered_and_skipped_revision_fail(self):
+        for kind in ('reordered_event', 'reordered_inventory', 'gap'):
+            with self.subTest(kind=kind):
+                if self.b._rdp_registration['state'] == 'PENDING':
+                    self.b._cancel_rdp_registration(self.rid)
+                self.b.observed_windows.clear(); self.xarm(); self.bind(); w = self.event()
+                if kind == 'reordered_inventory':
+                    self.b.SyncInventory(json.dumps(dict(source='source', revision=self.revision, windows=[w])))
+                else:
+                    revision = self.revision + 2 if kind == 'gap' else self.revision
+                    self.b.ObserveWindow(json.dumps(dict(source='source', revision=revision,
+                                                        event='removed', window=w)))
+                    if kind == 'gap': self.revision = revision
+                self.assertFailed()
+
+    def test_inventory_absence_without_removed_event_fails(self):
+        self.bind(); self.event(); self.revision += 1
+        self.b.SyncInventory(json.dumps(dict(source='source', revision=self.revision, windows=[])))
+        self.assertFailed()
+
+    def test_original_deadline_dominates_late_qualification(self):
+        self.b._cancel_rdp_registration(self.rid)
+        self.xarm(rdp_registration_timeout_ms=1000, rdp_x11_identity_settle_ms=900)
+        self.bind(); self.clock += .2; self.event(); self.clock += .8
+        self.assertFailed('timeout')
+
+    def test_child_exit_cancel_source_and_backend_failures(self):
+        self.bind(); self.event(); self.process.poll.return_value = 2
+        self.assertFailed()
+
+    def test_cancelled_late_events_do_not_revive(self):
+        self.bind(); self.event(); first = self.b._cancel_rdp_registration(self.rid)
+        self.clock += 1; self.event(identifier=OTHER); self.loop.tick()
+        self.assertEqual(self.poll(), first)
+
+    def test_wrong_backend_and_source_replacement_fail(self):
+        self.bind(); self.reader.read_backend.return_value = 'wayland'; self.assertFailed()
+        self.reader.read_backend.return_value = 'x11'
+        self.xarm(); self.bind(); self.event()
+        self.b.SyncInventory(json.dumps(dict(source='replacement', revision=1, windows=[])))
+        self.assertFailed()
+
+    def test_tty_or_absent_inherited_session_label_does_not_reject_x11(self):
+        for label in ('tty', None):
+            with self.subTest(label=label), patch.dict(self.module.os.environ):
+                if label is None:
+                    self.module.os.environ.pop('XDG_SESSION_TYPE', None)
+                else:
+                    self.module.os.environ['XDG_SESSION_TYPE'] = label
+                self.b._cancel_rdp_registration(self.rid)
+                self.b.registry = self.module.WindowRegistry()
+                self.b.observed_windows.clear()
+                self.xarm(); self.bind(); self.event()
+                self.clock += .5
+                self.assertEqual(self.poll()['state'], 'registered')
+
+
 class SdlInterfaceTests(unittest.TestCase):
     """Public wrappers, real Linux identity/FD checks, no session-bus traffic."""
     def setUp(self):
@@ -942,6 +1115,75 @@ class SdlInterfaceTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, 'Disconnected sender'):
                 operation()
         self.assertEqual(self.b._sdl_response(self.rid)['reason'], 'caller_lost')
+
+
+    def test_x11_public_profile_real_child_identity_and_dwell(self):
+        with patch.dict(self.os.environ, XDG_SESSION_TYPE='x11', clear=False):
+            self.begin(payload=json.dumps(dict(protocol=1, profile=self.adapter.X11_PROFILE,
+                                               desktop=3, slot=1, bounds={})))
+            self.assertFalse(self.errors)
+            self.spawn(backend='x11', driver='x11')
+            self.assertEqual(self.bind()['state'], 'pending')
+            self.event()
+            self.assertEqual(self.poll()['state'], 'pending')
+            self.clock += .5
+            result = self.poll()
+            self.assertEqual(result['state'], 'registered')
+            self.assertEqual(result['profile'], self.adapter.X11_PROFILE)
+            self.assertEqual(result['bounds']['rdp_x11_renderer'], 'auto')
+            self.assertEqual(result['placement'], 'not_requested')
+
+    def test_x11_child_environment_keeps_fail_closed(self):
+        with patch.dict(self.os.environ, XDG_SESSION_TYPE='x11', clear=False):
+            self.begin(payload=json.dumps(dict(protocol=1, profile=self.adapter.X11_PROFILE,
+                                               desktop=3, slot=1, bounds={})))
+            self.spawn(backend='x11', driver='wayland')
+            # Authentic FD and PID still cannot bypass the expected driver policy.
+            result = self.bind()
+            self.assertEqual(result['state'], 'failed')
+            self.assertFalse(self.b.registry.managed_windows)
+
+
+
+    def start_x11(self):
+        env = patch.dict(self.os.environ, XDG_SESSION_TYPE='x11')
+        env.start(); self.addCleanup(env.stop)
+        self.begin(payload=json.dumps(dict(protocol=1, profile=self.adapter.X11_PROFILE,
+                                           desktop=3, slot=1, bounds={})))
+        self.assertFalse(self.errors)
+
+    def test_x11_public_wrong_log_backend_is_rejected(self):
+        self.start_x11(); self.spawn(backend='wayland', driver='x11')
+        self.assertEqual(self.bind()['state'], 'failed')
+        self.assertFalse(self.b.registry.managed_windows)
+
+    def test_x11_public_forged_pid_is_rejected(self):
+        self.start_x11(); self.spawn(backend='x11', driver='x11')
+        self.assertEqual(self.bind(pid=self.child.pid + 1)['state'], 'failed')
+        self.assertFalse(self.b.registry.managed_windows)
+
+    def test_x11_public_substituted_private_fd_is_rejected(self):
+        import tempfile
+        self.start_x11(); self.spawn(backend='x11', driver='x11')
+        with tempfile.TemporaryFile('w+b') as other:
+            self.assertEqual(self.bind(file=other)['state'], 'failed')
+        self.assertFalse(self.b.registry.managed_windows)
+
+    def test_x11_public_foreign_owner_cannot_bind_poll_or_cancel(self):
+        self.start_x11(); self.spawn(backend='x11', driver='x11')
+        deadline = self.b._rdp_registration['deadline']
+        for operation in (self.b.PollSdlRegistration, self.b.CancelSdlRegistration):
+            with self.assertRaises(self.module.dbus.DBusException):
+                operation(self.rid, sender=':1.foreign')
+        fd = self.FD(self.os.dup(self.log.fileno()))
+        with self.assertRaises(self.module.dbus.DBusException):
+            self.b.BindSdlRegistration(self.rid, self.child.pid, fd, sender=':1.foreign')
+        self.assertIsNone(fd.fd)
+        self.assertEqual(self.b._rdp_registration['deadline'], deadline)
+        self.assertEqual(self.bind()['state'], 'pending')
+        self.event(); self.clock += .5
+        self.assertEqual(self.poll()['state'], 'registered')
+
 
 
 if __name__ == "__main__":

@@ -31,6 +31,20 @@ def require(condition, reason):
         raise RuntimeError(reason)
 
 
+def dbus_error_name(error):
+    """Expose only known error identifiers, never remote exception messages."""
+    try:
+        getter = getattr(error, 'get_dbus_name', None)
+        name = getter() if callable(getter) else getattr(error, 'name', None)
+    except Exception:
+        return None
+    allowed = {BUS + '.' + suffix for suffix in ('BadArguments', 'InvalidRequest', 'Busy', 'UnknownRequest')}
+    allowed.update('org.freedesktop.DBus.Error.' + suffix for suffix in (
+        'AccessDenied', 'NotSupported', 'Timeout', 'NoReply', 'Disconnected',
+        'ServiceUnknown', 'NameHasNoOwner', 'UnknownMethod', 'InvalidArgs'))
+    return name if isinstance(name, str) and name in allowed else None
+
+
 class Connection:
     """One authenticated connection, pinned destination; no owner substitution."""
     def __init__(self, bus, interface, timeout):
@@ -56,8 +70,14 @@ class Connection:
                 'Broker owner changed')
 
     def call(self, name, *args):
-        self.pinned()
-        return json.loads(getattr(self.api, name)(*args, timeout=self.timeout))
+        try:
+            self.pinned()
+            return json.loads(getattr(self.api, name)(*args, timeout=self.timeout))
+        except Exception as error:
+            code = dbus_error_name(error)
+            if code is not None:
+                raise RuntimeError(name + ' failed: ' + code) from None
+            raise
 
     def result(self, result, rid):
         require(result.get('protocol') == 1 and result.get('request_id') == rid
@@ -91,7 +111,7 @@ def stop_child(child, pidfd, timeout):
 
 def launch(bus, interface, unix_fd, adapter, host, port, username, desktop, slot,
            bounds, call_timeout=3., emit=print, spawn=subprocess.Popen,
-           sleep=time.sleep, clock=time.monotonic, cancelled=lambda: False):
+           sleep=time.sleep, clock=time.monotonic, cancelled=lambda: False, profile=None):
     """Injectable orchestration; real broker enforces all identity/ownership rules.
 
     Registration is reported promptly, then supervision continues until child
@@ -102,7 +122,7 @@ def launch(bus, interface, unix_fd, adapter, host, port, username, desktop, slot
     active = None
     registered = False
     try:
-        bounds = adapter.settings(bounds)
+        bounds = adapter.settings(bounds, profile) if profile is not None else adapter.settings(bounds)
         require(100 <= call_timeout * 1000 <= 30000, 'Call/cleanup timeout out of range')
         require(type(desktop) is int and type(slot) is int and 1 <= desktop <= 256 and 1 <= slot <= 256,
                 'Invalid desktop/slot')
@@ -124,19 +144,23 @@ def launch(bus, interface, unix_fd, adapter, host, port, username, desktop, slot
         inode = os.fstat(log.fileno())
         emit(json.dumps(dict(evidence_directory=str(folder), placement='not_requested')))
         deadline = clock() + bounds['rdp_registration_timeout_ms'] / 1000
-        result = api.call('BeginSdlRegistration', json.dumps(dict(protocol=1, desktop=desktop,
-                                                               slot=slot, bounds=bounds)))
+        payload = dict(protocol=1, desktop=desktop, slot=slot, bounds=bounds)
+        if profile is not None:
+            payload['profile'] = profile
+        result = api.call('BeginSdlRegistration', json.dumps(payload))
         # Retain a valid ID even if another Begin field is invalid, for cleanup.
         active = result.get('request_id')
         require(isinstance(active, str) and re.fullmatch(r'[0-9a-f]{32}', active), 'Invalid request ID')
         api.result(result, active)
         require(result['state'] == 'pending' and result.get('bounds') == bounds, 'Unexpected Begin result')
+        require(result.get('profile') == profile, 'Unexpected SDL profile')
         argv = adapter.development_argv(host, port, username, result.get('title_marker'))
         argv[0] = '/usr/bin/sdl-freerdp'  # Same fixed executable checked by broker.
         api.pinned()
         require(not cancelled() and clock() < deadline, 'Cancelled/expired before spawn')
         child = spawn(argv, stdin=None, stdout=log, stderr=subprocess.STDOUT,
-                      env=adapter.development_environment(os.environ), close_fds=True)
+                      env=(adapter.development_environment(os.environ, profile, bounds) if profile is not None
+                           else adapter.development_environment(os.environ)), close_fds=True)
         # POSIX Popen returns after exec's error pipe closes. No shell/wrapper,
         # sleep, log forwarder or intermediate process supplies the bound PID.
         pidfd = os.pidfd_open(child.pid)
@@ -157,6 +181,8 @@ def launch(bus, interface, unix_fd, adapter, host, port, username, desktop, slot
             finally:
                 os.close(fd.take())
         while True:
+            require(result.get('profile') == profile and (profile is None or result.get('bounds') == bounds),
+                    'SDL profile/settings changed')
             require(not cancelled(), 'Operator cancellation')
             current = os.fstat(log.fileno())
             require(stat.S_IMODE(current.st_mode) == 0o600 and current.st_nlink == 1
@@ -227,6 +253,9 @@ def main():
     parser.add_argument('--desktop', type=int, required=True)
     parser.add_argument('--slot', type=int, required=True)
     parser.add_argument('--call-timeout-ms', type=int, default=DEFAULT_CALL_TIMEOUT_MS)
+    # Omission preserves the accepted Wayland wire shape and defaults.
+    parser.add_argument('--profile', choices=['sdl-x11-a1c-v1'],
+                        help='Explicit legacy native-X11 profile; omission preserves native Wayland')
     # Reuse and explicitly transmit the existing configurable five budgets.
     sys.dont_write_bytecode = True
     installed = Path.home() / '.local/libexec/joetoo_kwin_rdp_launch.py'
@@ -239,7 +268,16 @@ def main():
     import joetoo_kwin_rdp_launch as adapter
     for name, default in adapter.DEFAULTS.items():
         parser.add_argument('--' + name.replace('_', '-'), type=int, default=default)
+    parser.add_argument('--rdp-x11-renderer', choices=['auto', 'software'],
+                        help='X11 child-only renderer policy (default: auto); requires --profile')
+    parser.add_argument('--rdp-x11-identity-settle-ms', type=int,
+                        help='X11 UUID dwell, 1..30000 ms below registration timeout (default: 500)')
     args = parser.parse_args()
+    limits = {name: getattr(args, name) for name in adapter.DEFAULTS}
+    for name in adapter.X11_DEFAULTS:
+        if getattr(args, name) is not None:
+            limits[name] = getattr(args, name)
+    limits = adapter.settings(limits, args.profile)
     address = os.environ.get('DBUS_SESSION_BUS_ADDRESS', '')
     require(os.geteuid() != 0 and address.startswith('unix:') and ';' not in address,
             'Existing local non-root session bus required')
@@ -254,8 +292,7 @@ def main():
     signal.signal(signal.SIGTERM, cancel)
     return launch(dbus.bus.BusConnection(address), dbus.Interface, UnixFd, adapter,
                   args.host, args.port, args.username, args.desktop, args.slot,
-                  {name: getattr(args, name) for name in adapter.DEFAULTS},
-                  args.call_timeout_ms / 1000, cancelled=lambda: interrupted[0])
+                  limits, args.call_timeout_ms / 1000, cancelled=lambda: interrupted[0], profile=args.profile)
 
 
 if __name__ == '__main__':
@@ -263,6 +300,6 @@ if __name__ == '__main__':
         sys.exit(main())
     except Exception as error:
         # No raw remote/log/credential/argv or D-Bus exception text is exported.
-        reason = str(error) if type(error) is RuntimeError else type(error).__name__
+        reason = dbus_error_name(error) or (str(error) if type(error) is RuntimeError else type(error).__name__)
         print('SDL development launcher FAILED: ' + reason, file=sys.stderr)
         sys.exit(1)

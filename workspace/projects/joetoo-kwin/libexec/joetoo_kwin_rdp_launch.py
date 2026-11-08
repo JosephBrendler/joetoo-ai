@@ -24,10 +24,24 @@ BOUNDS = dict(rdp_registration_timeout_ms=(1000, 3600000),
               rdp_registration_window_limit=(1, 512),
               rdp_backend_log_byte_limit=(1024, 1048576))
 APPLICATION = 'com.freerdp.client.sdl3'
+X11_PROFILE = 'sdl-x11-a1c-v1'
+X11_DEFAULTS = dict(rdp_x11_renderer='auto', rdp_x11_identity_settle_ms=500)
 
 
-def settings(data):
+def expected_backend(profile=None):
+    if profile is None:
+        return 'wayland'
+    if profile == X11_PROFILE:
+        return 'x11'
+    raise ValueError('Unsupported SDL registration profile')
+
+
+def settings(data, profile=None):
     """Explicit bounds passed across the future launcher/broker boundary."""
+    backend = expected_backend(profile)
+    allowed = set(DEFAULTS) | (set(X11_DEFAULTS) if backend == 'x11' else set())
+    if set(data) - allowed:
+        raise ValueError('Unknown SDL registration setting')
     result = {}
     for name, default in DEFAULTS.items():
         value = data.get(name, default)
@@ -39,6 +53,16 @@ def settings(data):
         result[name] = value
     if result['rdp_registration_poll_ms'] >= result['rdp_registration_timeout_ms']:
         raise ValueError('RDP watchdog must be shorter than registration timeout')
+    if backend == 'x11':
+        renderer = data.get('rdp_x11_renderer', X11_DEFAULTS['rdp_x11_renderer'])
+        if renderer not in ('auto', 'software'):
+            raise ValueError('Invalid X11 renderer')
+        settle = data.get('rdp_x11_identity_settle_ms', X11_DEFAULTS['rdp_x11_identity_settle_ms'])
+        if isinstance(settle, str) and re.fullmatch(r'[1-9][0-9]{0,7}', settle):
+            settle = int(settle)
+        if type(settle) is not int or not 1 <= settle <= 30000 or settle >= result['rdp_registration_timeout_ms']:
+            raise ValueError('Invalid X11 identity interval')
+        result.update(rdp_x11_renderer=renderer, rdp_x11_identity_settle_ms=settle)
     return result
 
 
@@ -68,7 +92,7 @@ def development_argv(host, port, username, marker):
             '/t:' + marker, '/log-level:INFO', '/log-filters:com.freerdp.client.SDL:DEBUG']
 
 
-def development_environment(environment):
+def development_environment(environment, profile=None, bounds=None):
     """Child-only driver/log profile; observed backend evidence is still required.
 
     FreeRDP 3.32.1 consumes these WLOG overrides before its SDL main. A
@@ -78,7 +102,13 @@ def development_environment(environment):
     """
     result = dict(environment)
     result.pop('SDL_VIDEODRIVER', None)
-    result['SDL_VIDEO_DRIVER'] = 'wayland'
+    result['SDL_VIDEO_DRIVER'] = expected_backend(profile)
+    if profile == X11_PROFILE:
+        limits = settings(bounds or {}, profile)
+        for key in ('SDL_RENDER_DRIVER', 'SDL_FRAMEBUFFER_ACCELERATION'):
+            result.pop(key, None)
+        if limits['rdp_x11_renderer'] == 'software':
+            result.update(SDL_RENDER_DRIVER='software', SDL_FRAMEBUFFER_ACCELERATION='0')
     for name in ('WLOG_APPENDER', 'WLOG_PREFIX', 'WLOG_FILTER', 'WLOG_LEVEL'):
         result.pop(name, None)
     result['WLOG_APPENDER'] = 'CONSOLE'
@@ -93,8 +123,9 @@ class BackendEvidence:
     breaks a running viewer's output pipe or signals the child. The launcher
     owns log retention and process lifetime; this reader never launches a child.
     """
-    def __init__(self, process, log, bounds):
-        self.limit = settings(bounds)['rdp_backend_log_byte_limit']
+    def __init__(self, process, log, bounds, profile=None):
+        self.expected_backend = expected_backend(profile)
+        self.limit = settings(bounds, profile)['rdp_backend_log_byte_limit']
         self.pid = process.pid
         info = os.fstat(log.fileno())
         if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or
@@ -130,9 +161,10 @@ class BackendEvidence:
             # FreeRDP's own SDL main log includes the originating process PID.
             match = re.search(rb"\[(\d+):[^\]]+\] \[(?:DEBUG|INFO)\]\[com\.freerdp\.client\.SDL\] - \[main\]: client is using backend '([^']+)'\r?$", line)
             if match:
-                if int(match[1]) != self.pid or match[2] != b'wayland':
-                    raise ValueError('SDL native-Wayland backend not established')
-                self.driver = 'wayland'
+                if int(match[1]) != self.pid or match[2] != self.expected_backend.encode('ascii'):
+                    raise ValueError('SDL native-Wayland backend not established' if self.expected_backend == 'wayland'
+                                     else 'SDL native-X11 backend not established')
+                self.driver = self.expected_backend
         return self.driver
 
     def close(self):
@@ -238,12 +270,15 @@ class CallerIdentity:
 
 class ChildIdentity:
     """Pin the actual direct child and revalidate it without PID-only lookup."""
-    def __init__(self, caller, pid, log_fd, floor, executable, byte_limit):
+    def __init__(self, caller, pid, log_fd, floor, executable, byte_limit, profile=None, bounds=None):
         self.fd = None
         self.caller = caller
         self.pid = pid
         self.executable = executable
         self.byte_limit = byte_limit
+        self.profile = profile
+        self.backend = expected_backend(profile)
+        self.bounds = settings(bounds or {}, profile)
         if type(pid) is not int or pid <= 0 or not caller.alive():
             raise ValueError('Invalid child identity')
         try:
@@ -284,8 +319,17 @@ class ChildIdentity:
         if len(data) > self.byte_limit:
             return 1
         drivers = [v for v in data.split(b'\0') if v.startswith(b'SDL_VIDEO_DRIVER=')]
-        if drivers != [b'SDL_VIDEO_DRIVER=wayland']:
+        if drivers != [b'SDL_VIDEO_DRIVER=' + self.backend.encode('ascii')]:
             return 1
+        if self.profile == X11_PROFILE:
+            fields = data.split(b'\0')
+            if any(v.startswith(b'SDL_VIDEODRIVER=') for v in fields):
+                return 1
+            for key, value in ((b'SDL_RENDER_DRIVER=', b'software'), (b'SDL_FRAMEBUFFER_ACCELERATION=', b'0')):
+                actual = [v for v in fields if v.startswith(key)]
+                expected = [key + value] if self.bounds['rdp_x11_renderer'] == 'software' else []
+                if actual != expected:
+                    return 1
         return 1 if _exited(self.fd) else None
 
     def close(self):

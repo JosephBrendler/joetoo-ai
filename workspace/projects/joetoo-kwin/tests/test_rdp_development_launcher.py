@@ -75,7 +75,8 @@ class LauncherTests(unittest.TestCase):
                 return self.f.b.PollSdlRegistration('unknown', sender=self.f.sender)
             if self.mode == 'wrong_reply':
                 return json.dumps(dict(protocol=1, request_id='other', state='registered'))
-            if self.mode in ('positive', 'competing', 'stay'):
+            if self.mode in ('positive', 'competing', 'stay') and (
+                    not self.f.b._rdp_registration.get('profile') or self.poll_count == 1):
                 self.f.child = self.child
                 self.f.event()
                 if self.mode == 'competing':
@@ -122,14 +123,15 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(argv[0], '/usr/bin/sdl-freerdp')
         self.assertIn('/t:' + self.f.marker, argv)
         self.assertTrue(kwargs['close_fds'])
-        self.assertEqual(kwargs['env']['SDL_VIDEO_DRIVER'], 'wayland')
+        self.assertEqual(kwargs['env']['SDL_VIDEO_DRIVER'],
+                         'x11' if self.f.b._rdp_registration.get('profile') else 'wayland')
         self.assertEqual(kwargs['stderr'], subprocess.STDOUT)
         if self.mode == 'spawn_failure': raise OSError('simulated exec failure')
         code = ('import os,sys; print("[0] [%d:thread] [DEBUG][com.freerdp.client.SDL] - '
                 '[main]: client is using backend \'%s\'" % (os.getpid(),sys.argv[1]),flush=sys.argv[2] == "flush"); '
                 'print("ready",file=sys.stderr,flush=True); sys.stdin.read()')
         self.child = subprocess.Popen([sys.executable, '-c', code,
-            'x11' if self.mode == 'x11' else 'wayland',
+            'x11' if self.mode == 'x11' else kwargs['env']['SDL_VIDEO_DRIVER'],
             'buffer' if self.mode == 'buffered' else 'flush'], stdin=subprocess.PIPE,
             stdout=kwargs['stdout'], stderr=subprocess.PIPE, env=kwargs['env'], close_fds=True)
         self.children.append(self.child)
@@ -154,7 +156,7 @@ class LauncherTests(unittest.TestCase):
             path = next(Path(self.folder.name).glob('*/stdout.log'))
             with path.open('ab') as stream: stream.write(b'x' * 65537)
 
-    def run_launcher(self):
+    def run_launcher(self, profile=None, bounds=None):
         # close() models disconnect; no further external calls are possible.
         original_close = self.transport.bus.close
         def close():
@@ -163,8 +165,55 @@ class LauncherTests(unittest.TestCase):
         self.transport.bus.close = close
         return self.client.launch(self.transport.bus, lambda obj, iface: obj,
             lambda fd: self.f.FD(os.dup(fd)), self.f.adapter, 'example.invalid', 3389,
-            'testuser', 3, 1, {}, emit=self.output.append, spawn=self.spawn,
-            sleep=self.wait, clock=lambda: self.f.clock, cancelled=lambda: self.cancelled)
+            'testuser', 3, 1, bounds or {}, emit=self.output.append, spawn=self.spawn,
+            sleep=self.wait, clock=lambda: self.f.clock, cancelled=lambda: self.cancelled, profile=profile)
+
+    def test_explicit_x11_auto_full_launcher_public_broker_and_real_child(self):
+        with patch.dict(os.environ, XDG_SESSION_TYPE='tty', SDL_RENDER_DRIVER='opengl',
+                        SDL_FRAMEBUFFER_ACCELERATION='1'):
+            parent = dict(os.environ)
+            self.assertEqual(self.run_launcher(profile=self.f.adapter.X11_PROFILE), 0)
+            self.assertEqual(dict(os.environ), parent)
+        result = next(json.loads(s) for s in self.output if json.loads(s).get('state') == 'registered')
+        self.assertEqual(result['profile'], self.f.adapter.X11_PROFILE)
+        self.assertEqual(result['bounds']['rdp_x11_renderer'], 'auto')
+        self.assertGreaterEqual(self.poll_count, 5)
+        self.assertEqual(result['placement'], 'not_requested')
+
+    def test_explicit_x11_software_full_launcher_public_broker_and_real_child(self):
+        with patch.dict(os.environ):
+            os.environ.pop('XDG_SESSION_TYPE', None)
+            self.assertEqual(self.run_launcher(profile=self.f.adapter.X11_PROFILE,
+                bounds={'rdp_x11_renderer': 'software', 'rdp_x11_identity_settle_ms': 250}), 0)
+        result = next(json.loads(s) for s in self.output if json.loads(s).get('state') == 'registered')
+        self.assertEqual(result['bounds']['rdp_x11_renderer'], 'software')
+        self.assertEqual(result['bounds']['rdp_x11_identity_settle_ms'], 250)
+
+    def test_x11_forged_pid_and_substituted_fd_remain_rejected(self):
+        self.mode = 'substituted_fd'
+        with patch.dict(os.environ, XDG_SESSION_TYPE='x11'):
+            self.assertEqual(self.run_launcher(profile=self.f.adapter.X11_PROFILE), 1)
+        self.assertFalse(self.f.b.registry.managed_windows)
+
+    def test_begin_dbus_error_reports_safe_name_and_operation_before_spawn(self):
+        class Rejected(Exception):
+            def get_dbus_name(self): return 'org.joetoo.KWinBridge.InvalidRequest'
+        def reject(*args, **kwargs): raise Rejected('private environment or credential text')
+        self.patch(self.bridge, 'BeginSdlRegistration', reject)
+        with self.assertRaisesRegex(RuntimeError, 'BeginSdlRegistration failed: org.joetoo.KWinBridge.InvalidRequest') as caught:
+            self.run_launcher()
+        self.assertNotIn('private', str(caught.exception))
+        self.assertEqual(self.children, [])
+
+    def test_dbus_error_identifiers_are_allowlisted(self):
+        class RemoteError(Exception):
+            def __init__(self, name): self.name = name
+            def get_dbus_name(self): return self.name
+        for name in ('org.freedesktop.DBus.Error.AccessDenied', 'org.freedesktop.DBus.Error.NotSupported'):
+            self.assertEqual(self.client.dbus_error_name(RemoteError(name)), name)
+        for name in ('private.arbitrary.contents', '', None):
+            self.assertIsNone(self.client.dbus_error_name(RemoteError(name)))
+        self.transport.bus.close(); self.f.bus.connected = False
 
     def test_positive_real_broker_child_fd_uuid_and_no_placement(self):
         self.assertEqual(self.run_launcher(), 0)

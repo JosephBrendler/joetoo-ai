@@ -189,6 +189,83 @@ class LaunchAdapterTests(unittest.TestCase):
             self.assertTrue(self.reader.closed)
 
 
+class X11AdapterTests(unittest.TestCase):
+    setUp = LaunchAdapterTests.setUp
+    write = LaunchAdapterTests.write
+    def test_x11_renderer_policy_is_child_only(self):
+        parent = dict(SDL_VIDEO_DRIVER='wayland', SDL_VIDEODRIVER='wayland',
+                      SDL_RENDER_DRIVER='opengl', SDL_FRAMEBUFFER_ACCELERATION='1')
+        before = parent.copy()
+        for renderer in ('auto', 'software'):
+            child = adapter.development_environment(parent, adapter.X11_PROFILE, {'rdp_x11_renderer': renderer})
+            self.assertEqual(parent, before)
+            self.assertEqual(child['SDL_VIDEO_DRIVER'], 'x11')
+            self.assertNotIn('SDL_VIDEODRIVER', child)
+            if renderer == 'auto':
+                self.assertNotIn('SDL_RENDER_DRIVER', child)
+                self.assertNotIn('SDL_FRAMEBUFFER_ACCELERATION', child)
+            else:
+                self.assertEqual(child['SDL_RENDER_DRIVER'], 'software')
+                self.assertEqual(child['SDL_FRAMEBUFFER_ACCELERATION'], '0')
+
+    def test_x11_settings_profile_and_timeout_validation(self):
+        result = adapter.settings({}, adapter.X11_PROFILE)
+        self.assertEqual(result['rdp_x11_renderer'], 'auto')
+        self.assertEqual(result['rdp_x11_identity_settle_ms'], 500)
+        for name, values in dict(rdp_x11_renderer=['gpu', '', True],
+                                  rdp_x11_identity_settle_ms=[0, -1, True, 1.5, '0', 30001]).items():
+            for value in values:
+                with self.subTest(name=name, value=value), self.assertRaises(ValueError):
+                    adapter.settings({name: value}, adapter.X11_PROFILE)
+        with self.assertRaises(ValueError):
+            adapter.settings({'rdp_x11_renderer': 'auto'})
+        with self.assertRaises(ValueError):
+            adapter.settings({}, 'unknown')
+        with self.assertRaises(ValueError):
+            adapter.settings({'rdp_registration_timeout_ms': 1000, 'rdp_x11_identity_settle_ms': 1000}, adapter.X11_PROFILE)
+
+    def test_x11_pid_backend_and_contradictory_log(self):
+        for pid, backend in ((99, 'x11'), (42, 'wayland')):
+            self.log.seek(0); self.log.truncate(); self.write(backend_line(pid, backend))
+            reader = adapter.BackendEvidence(self.process, self.log, {}, adapter.X11_PROFILE)
+            try:
+                with self.assertRaises(ValueError): reader.read_backend()
+            finally: reader.close()
+        self.log.seek(0); self.log.truncate(); self.write(backend_line(backend='x11'))
+        reader = adapter.BackendEvidence(self.process, self.log, {}, adapter.X11_PROFILE)
+        try:
+            self.assertEqual(reader.read_backend(), 'x11')
+            self.write(backend_line())
+            with self.assertRaises(ValueError): reader.read_backend()
+        finally: reader.close()
+
+    def test_x11_child_identity_checks_actual_driver_and_renderer(self):
+        import select
+        caller = SimpleNamespace(pid=os.getpid(), alive=lambda: True)
+        st = os.stat(sys.executable)
+        for renderer in ('auto', 'software'):
+            env = adapter.development_environment(os.environ, adapter.X11_PROFILE, {'rdp_x11_renderer': renderer})
+            child = subprocess.Popen([sys.executable, '-c',
+                'import sys; print("ready",file=sys.stderr,flush=True); sys.stdin.read()'],
+                stdin=subprocess.PIPE, stdout=self.log, stderr=subprocess.PIPE, env=env)
+            identity = None
+            try:
+                self.assertTrue(select.select([child.stderr], [], [], 3)[0])
+                self.assertEqual(child.stderr.readline(), b'ready\n')
+                with open(self.log.name, 'rb') as log:
+                    identity = adapter.ChildIdentity(caller, child.pid, log.fileno(), 0,
+                        (st.st_dev, st.st_ino), 65536, adapter.X11_PROFILE, {'rdp_x11_renderer': renderer})
+                self.assertIsNone(identity.poll())
+                identity.bounds['rdp_x11_renderer'] = 'software' if renderer == 'auto' else 'auto'
+                self.assertEqual(identity.poll(), 1)
+                identity.bounds['rdp_x11_renderer'] = renderer
+                identity.backend = 'wayland'
+                self.assertEqual(identity.poll(), 1)
+            finally:
+                if identity: identity.close()
+                child.stdin.close(); child.wait(timeout=3); child.stderr.close()
+
+
 class PublicDeclarationTests(unittest.TestCase):
     def test_real_dbus_python_declarations_without_connecting_to_a_bus(self):
         # Validate the actual decorators/signature marshalling metadata, rather

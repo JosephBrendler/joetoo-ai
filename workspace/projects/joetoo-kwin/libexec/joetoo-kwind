@@ -178,6 +178,9 @@ class Broker(dbus.service.Object):
         result = self._rdp_report(request_id)
         answer = {k: result[k] for k in ("state", "request_id", "managed_id", "window_uuid") if k in result}
         answer.update(protocol=1, placement="not_requested", remote_session="unverified")
+        c = self._rdp_registration
+        if c and c.get("profile") is not None:
+            answer.update(profile=c["profile"], bounds=deepcopy(c["bounds"]))
         if result["state"] != "pending":
             detail = result.get("detail", "")
             reasons = (("registered", "registered"), ("Competing", "competing_uuid"),
@@ -216,7 +219,7 @@ class Broker(dbus.service.Object):
                          sender_keyword="sender", async_callbacks=("reply", "error"))
     def BeginSdlRegistration(self, payload, sender=None, reply=None, error=None):
         """Authenticate one persistent launcher asynchronously, then arm intent."""
-        from joetoo_kwin_rdp_launch import settings, CallerIdentity, boot_ticks, executable_identity
+        from joetoo_kwin_rdp_launch import settings, expected_backend, CallerIdentity, boot_ticks, executable_identity
         started = time.monotonic()
         def reject(name):
             error(self._sdl_error(name))
@@ -235,12 +238,17 @@ class Broker(dbus.service.Object):
             def invalid_constant(value):
                 raise ValueError("nonfinite number")
             data = json.loads(payload, object_pairs_hook=unique, parse_constant=invalid_constant)
-            if (not isinstance(data, dict) or set(data) != {"protocol", "desktop", "slot", "bounds"}
+            if (not isinstance(data, dict) or set(data) not in ({"protocol", "desktop", "slot", "bounds"},
+                                                       {"protocol", "desktop", "slot", "bounds", "profile"})
                     or type(data["protocol"]) is not int or data["protocol"] != 1
                     or any(type(data[k]) is not int or not 1 <= data[k] <= 256 for k in ("desktop", "slot"))
                     or not isinstance(data["bounds"], dict)):
                 raise ValueError("schema")
-            limits = settings(data["bounds"])
+            profile = data.get("profile")
+            if "profile" in data and profile is None:
+                raise ValueError("null profile")
+            expected_backend(profile)
+            limits = settings(data["bounds"], profile)
             if set(data["bounds"]) - set(limits):
                 raise ValueError("unknown bounds")
             bus = self._sdl_bus_connection()
@@ -296,7 +304,7 @@ class Broker(dbus.service.Object):
                 if not bus.get_is_connected():
                     raise PermissionError("Caller bus disconnected")
                 executable = executable_identity()
-                spec = self._begin_rdp_registration(data["desktop"], data["slot"], limits)
+                spec = self._begin_rdp_registration(data["desktop"], data["slot"], limits, profile=profile)
                 c = self._rdp_registration
                 c.update(owner_name=sender, owner_identity=owner, owner_bus=bus, owner_match=job["match"],
                          boot_floor=job["floor"], executable=executable, deadline=job["deadline"])
@@ -358,10 +366,11 @@ class Broker(dbus.service.Object):
             descriptor = log_fd.take()
             if isinstance(pid, bool):
                 raise ValueError("Invalid child PID")
+            options = dict(profile=c["profile"], bounds=c["bounds"]) if c.get("profile") else {}
             child = ChildIdentity(c["owner_identity"], int(pid), descriptor, c["boot_floor"],
-                                  c["executable"], c["bounds"]["rdp_backend_log_byte_limit"])
+                                  c["executable"], c["bounds"]["rdp_backend_log_byte_limit"], **options)
             with os.fdopen(os.dup(descriptor), "rb") as stream:
-                reader = BackendEvidence(child, stream, c["bounds"])
+                reader = BackendEvidence(child, stream, c["bounds"], **(dict(profile=c["profile"]) if c.get("profile") else {}))
             self._bind_rdp_process(request_id, child, reader)
             child = reader = None  # The core now owns their descriptor cleanup.
             return json.dumps(self._sdl_response(request_id), sort_keys=True)
@@ -397,16 +406,20 @@ class Broker(dbus.service.Object):
         self._cancel_rdp_registration(request_id)
         return json.dumps(self._sdl_response(request_id), sort_keys=True)
 
-    def _begin_rdp_registration(self, desktop, slot, bounds):
-        """Arm a private native-Wayland SDL intent; NEVER arm placement.
+    def _begin_rdp_registration(self, desktop, slot, bounds, profile=None):
+        """Arm an explicit native SDL intent; NEVER arm placement.
 
         Public transport, production recipe/security policy and native invocation
         are separate approval gates. Only an in-process launch orchestrator can
         currently use these methods. Registry serialization is shared with the
         existing managed paths, but their selectors/placement stay unchanged.
         """
-        from joetoo_kwin_rdp_launch import settings, APPLICATION
-        limits = settings(bounds)
+        from joetoo_kwin_rdp_launch import settings, expected_backend, APPLICATION
+        limits = settings(bounds, profile)
+        backend = expected_backend(profile)
+        # OpenRC can inherit a login-TTY label even for the running Plasma X11
+        # session. Select only by the explicit profile; independently require
+        # the bound child's actual SDL backend, never this environment hint.
         if any(type(v) is not int or not 1 <= v <= 256 for v in (desktop, slot)):
             raise RegistryError("Invalid RDP desktop/slot")
         if not callable(getattr(GLib, "timeout_add", None)):
@@ -427,7 +440,7 @@ class Broker(dbus.service.Object):
         identifier = uuid.uuid4().hex
         marker = "joetoo-rdp-" + secrets.token_hex(32)
         c = self._new_correlation(identifier, APPLICATION, marker)
-        c.update(bounds=limits, revision=self.observation_revision, windows={},
+        c.update(bounds=limits, profile=profile, expected_backend=backend, revision=self.observation_revision, windows={},
                  events=0, process=None, reader=None, backend=None, timer=None)
         c["deadline"] = time.monotonic() + limits["rdp_registration_timeout_ms"] / 1000
         self.registry.begin_launch(identifier, source=c["source"],
@@ -466,6 +479,7 @@ class Broker(dbus.service.Object):
             raise RegistryError("RDP backend reader PID mismatch")
         self.registry.mark_running(request_id, process.pid)
         c.update(pid=process.pid, process=process, reader=reader)
+        self._rdp_recheck_x11()
 
     def _rdp_cleanup(self, c):
         """Bounded, idempotent callback/reader release, without signalling viewers."""
@@ -563,8 +577,8 @@ class Broker(dbus.service.Object):
             entry = c["windows"][identifier] = {
                 "added": event == "added", "birth": deepcopy(details),
                 "latest": deepcopy(details), "marked": False, "removed": False,
-                "identity_changed": False}
-        elif event == "added":
+                "identity_changed": False, "first_qualified_at": None}
+        elif event == "added" or (c["expected_backend"] == "x11" and entry["removed"]):
             self._rdp_finish(c, "failed", "RDP duplicate window lifecycle")
             return
         if (details["pid"] != entry["birth"]["pid"] or
@@ -572,7 +586,8 @@ class Broker(dbus.service.Object):
             entry["identity_changed"] = True
         entry["latest"] = deepcopy(details)
         marker = c["title_token"]
-        if entry["marked"] and (details["caption"] != marker or event == "removed"):
+        if entry["marked"] and (details["caption"] != marker or
+                                (event == "removed" and c["expected_backend"] != "x11")):
             self._rdp_finish(c, "failed", "RDP marked viewer lost or changed")
             return
         if marker in details["caption"]:
@@ -581,6 +596,9 @@ class Broker(dbus.service.Object):
                 return
             entry["marked"] = True
         entry["removed"] = event == "removed"
+        if c["expected_backend"] == "x11" and sum(
+                e["marked"] and not e["removed"] for e in c["windows"].values()) > 1:
+            self._rdp_finish(c, "ambiguous", "Competing RDP viewer UUIDs")
 
     def _rdp_observation(self, event=None, details=None):
         c = self._rdp_registration
@@ -602,13 +620,72 @@ class Broker(dbus.service.Object):
             # Inventory refresh is not creation evidence. Check retained births
             # against its live state, without fabricating added/removed records.
             for identifier, entry in list(c["windows"].items()):
-                if entry["marked"] and identifier not in self.observed_windows:
+                if entry["marked"] and identifier not in self.observed_windows and not (
+                        c["expected_backend"] == "x11" and entry["removed"]):
                     self._rdp_finish(c, "failed", "RDP viewer absent from inventory")
                     return
             for window in self.observed_windows.values():
                 if c["state"] != "PENDING":
                     break
                 self._rdp_capture(c, "existing", window)
+
+    def _rdp_recheck_x11(self):
+        """Event-driven qualification after cache/history updates, without a second timer."""
+        c = self._rdp_registration
+        if c and c["state"] == "PENDING" and c.get("expected_backend") == "x11":
+            self._poll_rdp_registration(c["id"])
+
+    def _poll_rdp_x11(self, c):
+        # Backend proof may arrive after a predecessor's observed removal. Keep
+        # and validate every marked tombstone; disappearance never erases birth.
+        # Survival is a legacy heuristic: a 600 ms predecessor can qualify at
+        # 500 ms. The terminal registry result must never follow its replacement.
+        live_candidates = []
+        for identifier, entry in c["windows"].items():
+            if not entry["marked"]:
+                continue
+            retained = any(e["event"] == "added" and e["window_uuid"] == identifier
+                           and e["event_id"] > c["event_floor"] for e in self.observation_events)
+            if (not entry["added"] or not retained or entry["identity_changed"] or
+                    any(w["pid"] != c["pid"] or w["resource_class"].casefold() != c["expected_class"]
+                        for w in (entry["birth"], entry["latest"]))):
+                self._rdp_finish(c, "failed", "RDP viewer ownership history mismatch")
+                return self._rdp_report(c["id"])
+            if entry["removed"]:
+                continue
+            live = self.observed_windows.get(identifier)
+            if (live is None or live["pid"] != c["pid"] or
+                    live["resource_class"].casefold() != c["expected_class"] or live["caption"] != c["title_token"]):
+                self._rdp_finish(c, "failed", "RDP live viewer ownership mismatch")
+                return self._rdp_report(c["id"])
+            live_candidates.append((identifier, entry))
+        if len(live_candidates) > 1:
+            self._rdp_finish(c, "ambiguous", "Competing RDP viewer UUIDs")
+        elif live_candidates and c["backend"] == "x11":
+            identifier, entry = live_candidates[0]
+            try:
+                alive = c["process"].poll() is None
+            except Exception:
+                alive = False
+            if not alive or not self._rdp_guard(c):
+                if c["state"] == "PENDING":
+                    self._rdp_finish(c, "failed", "RDP client exited before registration")
+                return self._rdp_report(c["id"])
+            now = time.monotonic()
+            if entry["first_qualified_at"] is None:
+                entry["first_qualified_at"] = now
+            if now >= entry["first_qualified_at"] + c["bounds"]["rdp_x11_identity_settle_ms"] / 1000:
+                # Poll is pidfd/start/parent/executable/FD/environment validation
+                # on the public path. Recheck it after evidence reads and dwell.
+                try:
+                    alive = c["process"].poll() is None
+                except Exception:
+                    alive = False
+                if alive and self._rdp_guard(c):
+                    self._rdp_finish(c, "registered", "RDP viewer registered; remote state unverified", identifier)
+                elif c["state"] == "PENDING":
+                    self._rdp_finish(c, "failed", "RDP client exited before registration")
+        return self._rdp_report(c["id"])
 
     def _poll_rdp_registration(self, request_id):
         c = self._rdp_registration
@@ -628,9 +705,12 @@ class Broker(dbus.service.Object):
         except Exception:
             self._rdp_finish(c, "failed", "RDP backend evidence unavailable")
             return self._rdp_report(request_id)
-        if c["backend"] not in (None, "wayland"):
-            self._rdp_finish(c, "failed", "RDP native-Wayland backend required")
+        if c["backend"] not in (None, c["expected_backend"]):
+            self._rdp_finish(c, "failed", "RDP native-Wayland backend required" if c["expected_backend"] == "wayland"
+                             else "RDP native-X11 backend required")
             return self._rdp_report(request_id)
+        if c["expected_backend"] == "x11":
+            return self._poll_rdp_x11(c)
         marked = [(identifier, entry) for identifier, entry in c["windows"].items() if entry["marked"]]
         if len(marked) > 1:
             self._rdp_finish(c, "ambiguous", "Competing RDP viewer UUIDs")
@@ -1732,6 +1812,9 @@ class Broker(dbus.service.Object):
             if self.observation_source is None:
                 self.observation_source = source
             if source != self.observation_source or revision <= self.observation_revision:
+                c = self._rdp_registration
+                if c and c["state"] == "PENDING" and c.get("expected_backend") == "x11":
+                    self._rdp_finish(c, "failed", "RDP observation source/revision gap")
                 return
             self.observation_revision = revision
         elif self.observation_synced:
@@ -1746,6 +1829,7 @@ class Broker(dbus.service.Object):
             self.observed_windows[identifier] = details
             self._refresh_registered_window(identifier, details)
             self._advance_placement()
+            self._rdp_recheck_x11()
             return
 
         # Only allocate an ID for a retained lifecycle record or change
@@ -1767,6 +1851,7 @@ class Broker(dbus.service.Object):
             self.observed_windows[identifier] = details
             self._refresh_registered_window(identifier, details)
             self._advance_placement()
+            self._rdp_recheck_x11()
             return
 
         if event == "removed":
@@ -1784,6 +1869,7 @@ class Broker(dbus.service.Object):
         # This is still a bounded diagnostic history, NOT an audit log.
         self.observation_events.append(record)
         self._bound_observation_events()
+        self._rdp_recheck_x11()
 
     # A whole inventory is one D-Bus method call and one broker replacement.
     # Per-window "existing" updates are not an atomic inventory boundary:
@@ -1818,6 +1904,9 @@ class Broker(dbus.service.Object):
                                      name=IFACE + ".BadArguments") from exc
 
         if source == self.observation_source and revision <= self.observation_revision:
+            c = self._rdp_registration
+            if c and c["state"] == "PENDING" and c.get("expected_backend") == "x11":
+                self._rdp_finish(c, "failed", "RDP observation revision gap")
             return  # Old/out-of-order inventory; do not roll back live changes.
         # A different resident instance replaces the source after a KWin
         # reload. These UUIDs are still *observed*, never managed windows.
@@ -1859,6 +1948,7 @@ class Broker(dbus.service.Object):
                     identifier, self.observed_windows.get(identifier))
         self._advance_placement()
         self._rdp_observation()
+        self._rdp_recheck_x11()
 
     # Read-only diagnostic query. Output is JSON, not a public management
     # registry: class, caption and PID are observational hints only.
