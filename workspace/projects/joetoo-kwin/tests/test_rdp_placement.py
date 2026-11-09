@@ -1,0 +1,433 @@
+#!/usr/bin/env python3
+# Copyright 2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Real broker/registry/process/FD validation; fake local bus/KWin, no GUI/network."""
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+import test_rdp_broker as broker_tests
+from test_rdp_broker import APP, OTHER
+from test_step1_3a import observation, WINDOW_ID
+
+
+class PlacementTests(unittest.TestCase):
+    def setUp(self):
+        self.f = broker_tests.SdlInterfaceTests()
+        self.f.setUp()
+        # The borrowed fixture guards registration-only behavior. Its final
+        # assertions do not apply after an explicitly authorized placement.
+        self.f._cleanups = [entry for entry in self.f._cleanups if entry[0] != self.f.finish]
+        self.addCleanup(self.f.doCleanups)
+        self.b = self.f.b
+        # Registration is exercised through the actual public process/FD path.
+        profile = getattr(self, 'profile', None)
+        if profile:
+            import os
+            renderer = self.renderer
+            env = patch.dict(os.environ)
+            env.start(); self.addCleanup(env.stop)
+            for key in ('SDL_RENDER_DRIVER', 'SDL_FRAMEBUFFER_ACCELERATION', 'SDL_VIDEODRIVER'):
+                os.environ.pop(key, None)
+            if renderer == 'software':
+                os.environ.update(SDL_RENDER_DRIVER='software', SDL_FRAMEBUFFER_ACCELERATION='0')
+            self.f.begin(payload=json.dumps(dict(protocol=1, desktop=3, slot=1,
+                profile=profile, bounds=dict(rdp_x11_renderer=renderer))))
+            self.f.spawn(backend='x11', driver='x11')
+        else:
+            self.f.begin(); self.f.spawn()
+        self.f.bind(); self.f.event()
+        if profile:
+            self.f.poll()  # First complete qualification starts the dwell clock.
+            self.f.clock += .501
+        self.registered = self.f.poll()
+        self.assertEqual(self.registered['state'], 'registered')
+        self.mid = self.registered['managed_id']
+        self.assertIsNone(self.b.request)
+        self.assertEqual(self.b.registry.get_window(self.mid).placement, 'not_requested')
+        self.f.patch(self.f.bus, 'GetNameOwner', lambda name, reply_handler, error_handler, timeout:
+                     reply_handler(':1.kwin'), create=True)
+        # _submit/_sync are guarded in the registration fixture; restore only
+        # now, after proving registration itself caused no placement.
+        self.b._submit = self.b.__class__._submit.__get__(self.b)
+        self.b._sync_managed_placement = self.b.__class__._sync_managed_placement.__get__(self.b)
+        self.reply, self.errors = [], []
+        self.sender = ':1.operator'
+        self.data = dict(protocol=1, confirmed=True, managed_id=self.mid, action_id='a' * 32,
+            source='source', revision=self.f.revision, desktop=3, slot=1,
+            x=25, y=35, width=800, height=600, timeout_ms=1000)
+        self.addCleanup(self.cleanup)
+
+    def cleanup(self):
+        c = self.b._sdl_placement
+        if c and not c.get('terminal'):
+            self.b._sdl_placement_finish(c, 'failed', 'test cleanup')
+        self.assertEqual(self.f.loop.callbacks, {})
+        self.assertTrue(all(m.removed for m in self.f.bus.matches))
+        self.f.submit.assert_not_called()
+        self.f.place.assert_not_called()
+        if self.f.child is not None:
+            if not self.f.child.stdin.closed: self.f.child.stdin.close()
+            self.f.child.wait(timeout=5)
+            self.f.child.stderr.close()
+
+    def submit(self, **changes):
+        self.reply.clear(); self.errors.clear()
+        payload = dict(self.data, **changes)
+        self.b.SubmitSdlPlacement(json.dumps(payload), sender=self.sender,
+                                  reply=self.reply.append, error=self.errors.append)
+        return json.loads(self.reply[-1]) if self.reply else None
+
+    def claim(self):
+        return json.loads(self.b.TakeSdlPlacement('source', sender=':1.kwin'))
+
+    def poll(self):
+        return json.loads(self.b.PollSdlPlacement(self.b._sdl_placement['id'], sender=self.sender))
+
+    def observe(self, kind='changed', identifier=WINDOW_ID, **changes):
+        w = dict(self.b.observed_windows.get(identifier) or json.loads(observation(uuid=identifier))['window'])
+        w.update(pid=self.f.child.pid, resource_class=APP, caption=self.f.marker)
+        w.update(changes)
+        self.f.revision += 1
+        self.b.ObserveWindow(json.dumps(dict(source='source', revision=self.f.revision, event=kind, window=w)))
+        return w
+
+    def verification(self, request, uuid=WINDOW_ID):
+        before = self.b.observed_windows[WINDOW_ID]
+        captured = {k: before[k] for k in ('geometry', 'desktops', 'on_all_desktops')}
+        resolved = dict(geometry={k: request[k] for k in ('x', 'y', 'width', 'height')},
+                        desktops=[request['desktop']], on_all_desktops=False)
+        return dict(window_uuid=uuid, source='source', before='before', tiled=False,
+                    fullscreen=False, captured=captured, resolved=resolved)
+
+    def complete(self, request, payload=None):
+        self.b.Complete(request['id'], 'VERIFY', json.dumps(payload or self.verification(request)), sender=':1.kwin')
+
+    def test_exact_uuid_success_and_original_launcher_child_remains_alive(self):
+        accepted = self.submit()
+        self.assertFalse(self.errors)
+        self.assertEqual(accepted['placement'], 'pending')
+        request = self.claim()
+        self.assertEqual(request['window_uuid'], WINDOW_ID)
+        self.complete(request)
+        self.assertEqual(self.poll()['placement'], 'pending')
+        self.observe(geometry=dict(x=25, y=35, width=800, height=600), desktops=[3])
+        result = self.poll()
+        self.assertEqual(result['placement'], 'succeeded')
+        self.assertEqual(result['registration'], 'registered')
+        self.assertEqual(result['remote_session'], 'unverified')
+        self.assertEqual(result['window_uuid'], WINDOW_ID)
+        self.assertEqual(self.b.registry.get_window(self.mid).placement, 'succeeded')
+        self.assertIsNone(self.f.child.poll())
+        self.assertEqual(self.f.poll(), self.registered)
+        self.assertEqual(self.f.loop.callbacks, {})
+        self.assertEqual(self.poll(), result)
+        # Subsequent manual geometry is retained, never repaired by a timer.
+        self.observe(geometry=dict(x=200, y=300, width=700, height=500))
+        self.assertEqual(self.b.observed_windows[WINDOW_ID]['geometry']['x'], 200)
+        self.assertEqual(self.poll(), result)
+
+    def test_resident_payload_drives_real_broker_verification_end_to_end(self):
+        self.submit(); request = self.claim()
+        # Execute real resident code inside Node's restricted fake KWin VM.
+        run = subprocess.run(['node', str(Path(__file__).with_suffix('.js')), '--fixture'],
+            input=json.dumps(request), text=True, capture_output=True, timeout=5)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        result = json.loads(run.stdout)
+        self.b.Complete(request['id'], result['state'], json.dumps(result['detail']), sender=':1.kwin')
+        self.observe(geometry=result['geometry'], desktops=result['desktops'])
+        self.assertEqual(self.poll()['placement'], 'succeeded')
+        self.assertEqual(result['uuid'], WINDOW_ID)
+        self.assertEqual(result['unrelated_mutations'], 0)
+
+    def test_invalid_policy_unknown_or_raw_uuid_never_arms(self):
+        for fields in [dict(managed_id='win-999'), dict(managed_id=WINDOW_ID), dict(desktop=4),
+                       dict(slot=2), dict(confirmed=False), dict(width=0), dict(x=True),
+                       dict(timeout_ms=15001), dict(source='old'), dict(revision=0)]:
+            with self.subTest(fields=fields):
+                self.submit(**fields)
+                self.assertTrue(self.errors)
+                self.assertIsNone(self.b.request)
+        self.assertEqual(self.b.registry.get_window(self.mid).placement, 'not_requested')
+
+    def test_busy_and_initial_layout_conflicts(self):
+        self.f.patch(self.b, '_initial_layout_active', lambda: True)
+        self.assertIsNone(self.submit()); self.assertTrue(self.errors)
+
+    def test_stale_action_replay_is_rejected_after_cancellation(self):
+        result = self.submit()
+        first = json.loads(self.b.CancelSdlPlacement(result['request_id'], sender=self.sender))
+        self.assertEqual(first['placement'], 'failed')
+        self.assertIsNone(self.submit())
+        self.assertTrue(self.errors)
+        self.assertEqual(self.poll(), first)
+        self.assertEqual(self.b.registry.get_window(self.mid).placement, 'failed')
+
+    def test_unknown_id_and_foreign_sender_cannot_claim_poll_cancel_or_complete(self):
+        result = self.submit()
+        for fn, args in [(self.b.TakeSdlPlacement, ('source',)),
+                         (self.b.PollSdlPlacement, (result['request_id'],)),
+                         (self.b.CancelSdlPlacement, (result['request_id'],)),
+                         (self.b.Complete, (result['request_id'], 'ERROR', 'forged'))]:
+            with self.assertRaises(Exception): fn(*args, sender=':1.foreign')
+        with self.assertRaises(Exception): self.b.PollSdlPlacement('unknown', sender=self.sender)
+        self.assertEqual(self.poll()['placement'], 'pending')
+
+    def test_late_completion_after_cancellation_is_inert(self):
+        self.submit(); request = self.claim()
+        first = json.loads(self.b.CancelSdlPlacement(request['id'], sender=self.sender))
+        self.complete(request)
+        self.assertEqual(self.poll(), first)
+        self.assertEqual(self.b.request['state'], 'ERROR')
+
+    def test_wrong_uuid_completion_does_not_succeed(self):
+        self.submit(); request = self.claim()
+        with self.assertRaises(Exception): self.complete(request, self.verification(request, OTHER))
+        self.assertEqual(self.poll()['placement'], 'pending')
+        self.f.clock += 1
+        self.assertEqual(self.poll()['placement'], 'failed')
+
+    def test_missing_or_uncertain_record_is_rejected(self):
+        self.b.registry.set_presence(WINDOW_ID, 'uncertain')
+        self.assertIsNone(self.submit()); self.assertTrue(self.errors)
+
+    def test_marker_loss_and_restoration_before_release_remains_invalid(self):
+        self.observe(caption='lost'); self.observe(caption=self.f.marker)
+        self.data['revision'] = self.f.revision
+        self.assertIsNone(self.submit()); self.assertTrue(self.errors)
+
+    def test_mutation_source_loss_removal_and_expiry_during_placement(self):
+        self.submit(); request = self.claim(); self.complete(request)
+        self.observe('removed')
+        self.assertEqual(self.poll()['placement'], 'failed')
+        self.assertEqual(self.b.registry.get_window(self.mid).placement, 'failed')
+        self.assertEqual(self.f.poll(), self.registered)
+
+    def test_source_replacement_after_claim_never_succeeds(self):
+        self.submit(); request = self.claim(); self.complete(request)
+        self.b.SyncInventory(json.dumps(dict(source='replaced', revision=1, windows=[])))
+        self.assertEqual(self.poll()['placement'], 'failed')
+
+    def test_mechanical_deadline_expires_without_any_operator_poll(self):
+        self.submit(); self.f.clock += 1; self.f.loop.tick()
+        self.assertEqual(self.poll()['placement'], 'failed')
+        self.assertEqual(self.f.loop.callbacks, {})
+        self.assertIsNone(self.f.child.poll())
+
+    def test_missing_processfd_cannot_authorize_placement(self):
+        self.f.bus.process_fd = False
+        result = self.submit()
+        self.assertEqual(result['placement'], 'failed')
+        self.assertIsNone(self.b.request)
+
+    def test_pending_credentials_reserve_placement_against_initial_layout(self):
+        self.f.bus.auto = False
+        self.submit()
+        with self.assertRaises(Exception): self.b.SubmitInitialLayout('{}')
+        self.f.bus.auto = True
+        self.f.bus.deliver()
+        self.assertIsNotNone(self.b.request)
+
+    def test_late_authentication_callbacks_cannot_arm_after_timeout(self):
+        self.f.bus.auto = False
+        self.submit(); self.f.clock += 1; self.f.loop.tick()
+        result = self.poll()
+        self.f.bus.deliver()
+        self.assertEqual(self.poll(), result)
+        self.assertIsNone(self.b.request)
+
+    def test_pid_lifetime_and_original_owner_mismatch_are_rejected(self):
+        meta = self.b._sdl_registered[self.mid]
+        meta['start'] -= 1
+        self.assertEqual(self.submit()['placement'], 'failed')
+        self.assertIsNone(self.b.request)
+
+    def test_original_launcher_connection_loss_fails_pending_placement(self):
+        self.submit(); self.f.bus.lost()
+        self.assertEqual(self.poll()['placement'], 'failed')
+        self.assertIsNone(self.f.child.poll())
+
+
+    def test_competing_uuid_and_pid_class_mutations_are_permanent_failures(self):
+        self.observe('added', OTHER)
+        self.data['revision'] = self.f.revision
+        self.assertIsNone(self.submit())
+        self.assertTrue(self.errors)
+        self.assertIsNone(self.b.request)
+
+    def test_class_mutation_during_claim_fails_without_verified_placement(self):
+        self.submit(); self.claim()
+        self.observe(resource_class='other')
+        self.assertEqual(self.poll()['placement'], 'failed')
+
+    def test_revision_gap_cannot_be_repaired_with_a_later_inventory(self):
+        self.f.revision += 1
+        self.observe()
+        w = self.b.observed_windows[WINDOW_ID]
+        self.f.revision += 1
+        self.b.SyncInventory(json.dumps(dict(source='source', revision=self.f.revision, windows=[w])))
+        self.data['revision'] = self.f.revision
+        self.assertIsNone(self.submit())
+        self.assertTrue(self.errors)
+
+    def test_slot_conflict_and_changed_registry_request_are_rejected(self):
+        record = self.b.registry.managed_windows[WINDOW_ID]
+        record.request_id = 'other'
+        self.assertIsNone(self.submit()); self.assertTrue(self.errors)
+        record.request_id = self.registered['request_id']
+        from copy import deepcopy
+        other = deepcopy(record)
+        other.managed_id = 'win-999'; other.window_uuid = OTHER
+        self.b.registry.managed_windows[OTHER] = other
+        self.assertIsNone(self.submit()); self.assertTrue(self.errors)
+        self.assertIsNone(self.b.request)
+
+    def test_live_generic_request_blocks_operator_action(self):
+        self.b.request = dict(id='generic', state='RUNNING', kind='move')
+        self.assertIsNone(self.submit()); self.assertTrue(self.errors)
+        self.assertEqual(self.b.request['id'], 'generic')
+
+    def test_child_exit_during_placement_never_succeeds(self):
+        self.submit(); self.claim()
+        self.f.child.stdin.close(); self.f.child.wait(timeout=5)
+        self.f.loop.tick()
+        self.assertEqual(self.poll()['placement'], 'failed')
+
+    def test_untrusted_operator_and_substituted_log_inode_are_rejected(self):
+        self.f.bus.uid += 1
+        self.assertEqual(self.submit()['placement'], 'failed')
+        self.assertIsNone(self.b.request)
+        self.f.bus.uid -= 1
+        self.data['action_id'] = 'b' * 32
+        self.b._sdl_registered[self.mid]['log_inode'] = (0, 0)
+        self.assertEqual(self.submit()['placement'], 'failed')
+        self.assertIsNone(self.b.request)
+
+    def test_wrong_source_claim_and_kwin_owner_loss_fail_closed(self):
+        self.submit()
+        self.assertEqual(self.b.TakeSdlPlacement('old', sender=':1.kwin'), '')
+        self.assertEqual(self.poll()['placement'], 'failed')
+        self.data['action_id'] = 'b' * 32
+        self.submit()
+        for match in self.f.bus.matches:
+            if not match.removed: match.callback('org.kde.KWin', ':1.kwin', ':1.new')
+        self.assertEqual(self.poll()['placement'], 'failed')
+
+    def test_cleanup_failure_remains_owned_and_blocks_new_work(self):
+        self.submit()
+        match = self.b._sdl_placement['match']
+        original = match.remove
+        self.f.patch(match, 'remove', lambda: (_ for _ in ()).throw(OSError('cleanup fault')))
+        result = json.loads(self.b.CancelSdlPlacement(self.b._sdl_placement['id'], sender=self.sender))
+        self.assertTrue(self.b._sdl_placement['cleanup_uncertain'])
+        self.assertEqual(result['placement'], 'failed')
+        self.assertEqual(self.b.request['state'], 'ERROR')
+        self.assertEqual(self.b._sdl_placement['unreleased'], [('match', match)])
+        self.data['action_id'] = 'b' * 32
+        self.assertIsNone(self.submit()); self.assertTrue(self.errors)
+        with self.assertRaises(Exception): self.b.Submit(3, 0, 0, 100, 100)
+        self.assertEqual(self.poll(), result)
+        original()  # Dispose only our fake match; production uncertainty remains.
+
+
+class X11PlacementTests(unittest.TestCase):
+    # Exercise the same public registration/release path with both accepted
+    # child profiles, without running SDL or weakening the 500 ms heuristic.
+    setUp = PlacementTests.setUp
+    cleanup = PlacementTests.cleanup
+    submit = PlacementTests.submit
+    claim = PlacementTests.claim
+    poll = PlacementTests.poll
+    observe = PlacementTests.observe
+    complete = PlacementTests.complete
+    verification = PlacementTests.verification
+    profile = 'sdl-x11-a1c-v1'
+    renderer = 'auto'
+
+    def test_x11_auto_registration_then_explicit_exact_uuid_placement(self):
+        PlacementTests.test_exact_uuid_success_and_original_launcher_child_remains_alive(self)
+
+
+class SoftwarePlacementTests(X11PlacementTests):
+    renderer = 'software'
+
+
+class OperatorClientTests(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location('sdl_release_test',
+            Path(__file__).resolve().parents[1] / 'tools/joetoo-sdl-release-placement.py')
+        self.client = importlib.util.module_from_spec(spec); spec.loader.exec_module(self.client)
+        self.calls, self.output, self.shortcuts = [], [], []
+        self.clock = 100.
+        self.result = dict(protocol=1, request_id='a' * 32, managed_id='win-001',
+            window_uuid=WINDOW_ID, registration='registered', remote_session='unverified', placement='pending')
+        self.mode = 'success'
+        outer = self
+        class Bus:
+            closed = False
+            def close(self): self.closed = True
+            def get_object(self, name, path, **kw):
+                outer.assertEqual(name, ':1.accel')
+                outer.assertEqual(path, '/component/kwin')
+                return SimpleNamespace(invokeShortcut=lambda key, **kw: outer.shortcuts.append(key))
+        self.bus = Bus()
+        class API:
+            def __init__(self, bus, interface, timeout):
+                outer.assertIs(bus, outer.bus)
+                self.daemon = SimpleNamespace(GetNameOwner=lambda name, **kw: ':1.accel')
+            def call(self, name, *args):
+                outer.calls.append((name, args))
+                if name == 'RegistryStatus':
+                    return dict(observation=dict(source='source', revision=9))
+                if name == 'SubmitSdlPlacement': return dict(outer.result)
+                if name == 'PollSdlPlacement':
+                    result = dict(outer.result)
+                    if outer.mode == 'success': result['placement'] = 'succeeded'
+                    if outer.mode == 'wrong_uuid': result['window_uuid'] = OTHER
+                    if outer.mode == 'unknown': result['placement'] = 'unknown'
+                    if outer.mode == 'owner_loss': raise RuntimeError('Broker owner changed')
+                    return result
+                if name == 'CancelSdlPlacement': return dict(outer.result, placement='failed')
+                raise AssertionError(name)
+        self.patcher = patch.object(self.client.connection, 'Connection', API)
+        self.patcher.start(); self.addCleanup(self.patcher.stop)
+
+    def run_client(self, confirmed=True):
+        def sleep(seconds): self.clock += seconds
+        return self.client.release(self.bus, lambda obj, iface: obj, 'win-001', 3, 1,
+            dict(x=25, y=35, width=800, height=600), confirmed=confirmed,
+            timeout_ms=1000, poll_ms=100, call_timeout_ms=1000,
+            emit=self.output.append, sleep=sleep, clock=lambda: self.clock)
+
+    def test_operator_confirmation_and_same_connection_exact_result(self):
+        self.assertEqual(self.run_client(), 0)
+        payload = json.loads(self.calls[1][1][0])
+        self.assertEqual(payload['managed_id'], 'win-001')
+        self.assertNotIn('window_uuid', payload)
+        self.assertEqual(payload['revision'], 9)
+        self.assertEqual(self.shortcuts, ['joetoo_bridge_sdl_placement'])
+        self.assertEqual(json.loads(self.output[-1])['window_uuid'], WINDOW_ID)
+        self.assertTrue(self.bus.closed)
+        self.assertFalse(any(name == 'CancelSdlPlacement' for name, _ in self.calls))
+
+    def test_absent_confirmation_never_submits(self):
+        with self.assertRaises(RuntimeError): self.run_client(confirmed=False)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.shortcuts, [])
+
+    def test_wrong_result_unknown_state_owner_loss_and_timeout_cancel(self):
+        for mode in ('wrong_uuid', 'unknown', 'owner_loss', 'timeout'):
+            with self.subTest(mode=mode):
+                self.mode = mode; self.calls.clear()
+                with self.assertRaises(RuntimeError): self.run_client()
+                self.assertEqual(self.calls[-1][0], 'CancelSdlPlacement')
+                self.assertTrue(self.bus.closed)
+                self.assertEqual(self.output, [])
+
+
+if __name__ == '__main__':
+    unittest.main()

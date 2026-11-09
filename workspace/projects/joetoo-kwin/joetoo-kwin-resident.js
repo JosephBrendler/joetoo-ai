@@ -187,6 +187,33 @@ function placeOptionalWindow(win, request) {
 
 registerShortcut("joetoo_bridge_move_optional", "Joetoo optional active-window move", "", moveOptionalFromBroker);
 
+// Explicit operator release: obtain the broker-owned UUID, never activeWindow.
+// Reuse optional-move assignment/verification with all fields explicit; no focus
+// or stacking request and no observer beyond the existing lifecycle resident.
+function sdlPlacementFromBroker() {
+    const started = Date.now();
+    callDBus(BRIDGE, PATH, BRIDGE, "TakeSdlPlacement", observerSource, function(payload) {
+        if (!payload) return;
+        let r;
+        try { r = JSON.parse(payload); } catch (error) { return; }
+        const elapsed = Date.now() - started;
+        if (r.source !== observerSource || !Number.isFinite(r.remaining_ms) || elapsed < 0 || elapsed >= r.remaining_ms) {
+            finish(r, "ERROR", "SDL placement callback expired/source changed"); return;
+        }
+        const canonical = value => String(value).replace(/[{}]/g, "").toLowerCase();
+        const matches = workspace.stackingOrder.filter(win => canonical(windowUUID(win)) === r.window_uuid);
+        const win = matches.length === 1 ? matches[0] : null;
+        if (!win || win.deleted || !win.normalWindow || Number(win.pid) !== r.pid ||
+                String(win.resourceClass || "").toLowerCase() !== r.resource_class ||
+                String(win.caption || "") !== r.title_marker || r.preserve_desktop !== false ||
+                r.preserve_position !== false || r.preserve_size !== false) {
+            finish(r, "ERROR", "Registered SDL viewer identity unavailable"); return;
+        }
+        placeOptionalWindow(win, r);
+    });
+}
+registerShortcut("joetoo_bridge_sdl_placement", "Joetoo operator SDL placement", "", sdlPlacementFromBroker);
+
 // New-window path: KWin emits the `windowAdded` signal with the specific
 // window object it just created. `.connect(function(win) { ... })` registers
 // a callback; it does not call that function immediately.

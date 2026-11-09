@@ -14,6 +14,7 @@ import json
 import math
 from copy import deepcopy
 import os
+import re
 import signal
 import secrets
 import stat
@@ -152,6 +153,8 @@ class Broker(dbus.service.Object):
         # Private SDL prototype; deliberately has no D-Bus entry points.
         self._rdp_registration = None
         self._sdl_pending_auth = None
+        self._sdl_registered = {}  # Metadata only: registration still closes its FDs.
+        self._sdl_placement = None
 
     def _sdl_bus_connection(self):
         address = os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")
@@ -416,6 +419,8 @@ class Broker(dbus.service.Object):
         """
         from joetoo_kwin_rdp_launch import settings, expected_backend, APPLICATION
         limits = settings(bounds, profile)
+        if self._sdl_placement and (not self._sdl_placement.get("terminal") or self._sdl_placement.get("cleanup_uncertain")):
+            raise RegistryError("SDL placement is active")
         backend = expected_backend(profile)
         # OpenRC can inherit a login-TTY label even for the running Plasma X11
         # session. Select only by the explicit profile; independently require
@@ -513,6 +518,14 @@ class Broker(dbus.service.Object):
             return
         if state == "registered" and c.get("owner_identity") is not None and not self._sdl_owner_alive(c):
             state, detail = "failed", "RDP caller lost"
+        provenance = None
+        if state == "registered" and c.get("owner_identity") is not None:
+            child, owner = c["process"], c["owner_identity"]
+            provenance = dict(pid=child.pid, start=child.start, executable=child.executable,
+                log_inode=child.log_inode, owner_name=c["owner_name"], owner_pid=owner.pid,
+                owner_start=owner.start, source=c["source"], revision=self.observation_revision,
+                marker=c["title_token"], profile=c.get("profile"), bounds=deepcopy(c["bounds"]),
+                invalid=False, actions=set())
         if not self._rdp_cleanup(c):
             state, detail = "failed", "RDP evidence cleanup failed"
         answer = {"state": state, "request_id": c["id"], "detail": detail,
@@ -525,6 +538,10 @@ class Broker(dbus.service.Object):
                     current_windows=self.observed_windows, source=self.observation_source,
                     synchronized=self.observation_synced)
                 answer.update(managed_id=record.managed_id, window_uuid=record.window_uuid)
+                if provenance is not None:
+                    provenance.update(managed_id=record.managed_id, uuid=record.window_uuid,
+                                      registration_id=record.request_id)
+                    self._sdl_registered[record.managed_id] = provenance
             except RegistryError:
                 state, detail = "failed", "RDP registry rejected ownership"
                 answer.update(state=state, detail=detail)
@@ -601,6 +618,7 @@ class Broker(dbus.service.Object):
             self._rdp_finish(c, "ambiguous", "Competing RDP viewer UUIDs")
 
     def _rdp_observation(self, event=None, details=None):
+        self._sdl_track_registered(event, details)
         c = self._rdp_registration
         if not c or c["state"] != "PENDING" or not self._rdp_guard(c):
             return
@@ -738,7 +756,273 @@ class Broker(dbus.service.Object):
                     self._rdp_finish(c, "failed", "RDP client exited before registration")
         return self._rdp_report(request_id)
 
+    def _sdl_track_registered(self, event, details):
+        """Retain identity continuity using existing observations, without new observers."""
+        for meta in self._sdl_registered.values():
+            if meta["invalid"] or meta["revision"] == self.observation_revision:
+                continue
+            if (not self.observation_synced or self.observation_source != meta["source"]
+                    or self.observation_revision != meta["revision"] + 1):
+                meta["invalid"] = True
+            meta["revision"] = self.observation_revision
+            windows = [details] if details is not None else list(self.observed_windows.values())
+            if details is None and meta["uuid"] not in self.observed_windows:
+                meta["invalid"] = True
+            for w in windows:
+                if w["uuid"] == meta["uuid"]:
+                    if (event in ("added", "removed") or w["pid"] != meta["pid"] or
+                            w["resource_class"].casefold() != "com.freerdp.client.sdl3" or w["caption"] != meta["marker"]):
+                        meta["invalid"] = True
+                elif w["pid"] == meta["pid"] and w["caption"] == meta["marker"]:
+                    meta["invalid"] = True
+
+    def _sdl_placement_record(self, meta):
+        record = self.registry.get_window(meta["managed_id"])
+        launch = self.registry.requests.get(meta["registration_id"])
+        w = self.observed_windows.get(meta["uuid"])
+        if (meta["invalid"] or not self.observation_synced or self.observation_source != meta["source"]
+                or not record or record.presence != "present" or record.window_uuid != meta["uuid"]
+                or record.request_id != meta["registration_id"] or not launch or launch.state != "succeeded"
+                or launch.result != record.managed_id or not w or w["pid"] != meta["pid"]
+                or w["resource_class"].casefold() != "com.freerdp.client.sdl3" or w["caption"] != meta["marker"]):
+            raise ValueError("SDL placement ownership unavailable")
+        return record
+
+    def _sdl_placement_valid(self, c):
+        try:
+            self._sdl_placement_record(c["meta"])
+            return (time.monotonic() < c["deadline"] and c["operator"].alive()
+                    and c["launch_owner"].alive() and c["kwin_identity"].alive()
+                    and c["child"].poll() is None and c["bus"].get_is_connected())
+        except Exception:
+            return False
+
+    def _sdl_placement_finish(self, c, state, reason):
+        if c.get("terminal"):
+            return
+        r = self.request
+        if r and r.get("id") == c["id"]:
+            if state != "succeeded":
+                r.update(state="ERROR", detail=reason)
+            self._sync_managed_placement()
+        okay = True
+        for key in ("timer", "match", "child", "operator", "launch_owner", "kwin_identity"):
+            obj = c.pop(key, None)
+            if obj is None:
+                continue
+            try:
+                if key == "timer": GLib.source_remove(obj)
+                elif key == "match": obj.remove()
+                else: obj.close()
+            except Exception:
+                okay = False
+                c.setdefault("unreleased", []).append((key, obj))
+        if not okay:
+            c["cleanup_uncertain"] = True
+            state, reason = "failed", "Placement cleanup incomplete"
+            if r and r.get("id") == c["id"]:
+                r.update(state="ERROR", detail=reason)
+        record = self.registry.get_window(c["meta"]["managed_id"])
+        if record and record.placement == "pending":
+            if state == "succeeded" and (not r or r["state"] != "OK" or record.presence != "present"):
+                state, reason = "failed", "Placement was not verified"
+            self.registry.set_placement(record.window_uuid, "succeeded" if state == "succeeded" else "failed")
+        c["terminal"] = dict(protocol=1, request_id=c["id"], managed_id=c["meta"]["managed_id"],
+            window_uuid=c["meta"]["uuid"], registration="registered", remote_session="unverified",
+            placement=state, reason=reason)
+        callback = c.pop("reply", None)
+        if callback:
+            callback(json.dumps(c["terminal"], sort_keys=True))
+
+    def _sdl_placement_check(self):
+        c = self._sdl_placement
+        if not c or c.get("terminal"):
+            return False
+        if not self._sdl_placement_valid(c):
+            self._sdl_placement_finish(c, "failed", "Placement identity/source/owner lost or expired")
+            return False
+        r = self.request
+        if r and r.get("id") == c["id"] and r["state"] in ("OK", "ERROR"):
+            self._sdl_placement_finish(c, "succeeded" if r["state"] == "OK" else "failed", "verified" if r["state"] == "OK" else "resident refused placement")
+            return False
+        return True
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s", sender_keyword="sender",
+                         async_callbacks=("reply", "error"))
+    def SubmitSdlPlacement(self, payload, sender=None, reply=None, error=None):
+        """Authenticate a separate same-user operator; never accept a raw UUID."""
+        from joetoo_kwin_rdp_launch import CallerIdentity, ChildIdentity, _proc_info, _inode
+        try:
+            def unique(pairs):
+                result = {}
+                for k, v in pairs:
+                    if k in result: raise ValueError("duplicate field")
+                    result[k] = v
+                return result
+            if not isinstance(payload, str) or len(payload) > 8192: raise ValueError("size")
+            data = json.loads(payload, object_pairs_hook=unique)
+            keys = {"protocol", "confirmed", "managed_id", "action_id", "source", "revision",
+                    "desktop", "slot", "x", "y", "width", "height", "timeout_ms"}
+            if (set(data) != keys or type(data["protocol"]) is not int or data["protocol"] != 1
+                    or data["confirmed"] is not True or not isinstance(sender, str) or not sender.startswith(":")):
+                raise ValueError("schema")
+            if not isinstance(data["managed_id"], str) or not re.fullmatch(r"win-[0-9]+", data["managed_id"]):
+                raise ValueError("managed ID required")
+            if not isinstance(data["action_id"], str) or not re.fullmatch(r"[0-9a-f]{32}", data["action_id"]):
+                raise ValueError("action ID required")
+            for k in ("revision", "desktop", "slot", "x", "y", "width", "height", "timeout_ms"):
+                if type(data[k]) is not int: raise ValueError("integer required")
+            if not (1 <= data["desktop"] <= 256 and 1 <= data["slot"] <= 256 and
+                    -32768 <= data["x"] <= 32768 and -32768 <= data["y"] <= 32768 and
+                    1 <= data["width"] <= 32768 and 1 <= data["height"] <= 32768): raise ValueError("geometry")
+            limits = viewer_settings({"vnc_placement_timeout_ms": data["timeout_ms"]})
+            meta = self._sdl_registered[data["managed_id"]]
+            record = self._sdl_placement_record(meta)
+            if (data["source"] != self.observation_source or data["revision"] != self.observation_revision
+                    or (data["desktop"], data["slot"]) != (record.recipe.get("desktop"), record.recipe.get("slot"))
+                    or data["action_id"] in meta["actions"] or len(meta["actions"]) >= self.registry._completed_limit):
+                raise ValueError("stale action or destination")
+            if (self._sdl_placement and (not self._sdl_placement.get("terminal") or self._sdl_placement.get("cleanup_uncertain")) or self._sdl_pending_auth
+                    or self.registry._active_request_id or self._initial_layout_active()
+                    or self.request and self.request["state"] in ("PENDING", "RUNNING", "VERIFYING")):
+                raise RegistryError("Placement busy")
+            for other in self.registry.managed_windows.values():
+                if other.managed_id != record.managed_id and (other.recipe.get("desktop"), other.recipe.get("slot")) == (data["desktop"], data["slot"]):
+                    raise ValueError("slot conflict")
+            bus = self._sdl_bus_connection()
+        except Exception as exc:
+            return error(self._sdl_error(IFACE + (".Busy" if isinstance(exc, RegistryError) else ".InvalidRequest")))
+        c = dict(id=uuid.uuid4().hex, meta=meta, sender=sender, bus=bus, reply=reply,
+                 deadline=time.monotonic() + limits["vnc_placement_timeout_ms"] / 1000, terminal=None)
+        self._sdl_placement = c
+        meta["actions"].add(data["action_id"])
+        def fail(*args):
+            if self._sdl_placement is c and not c.get("terminal"):
+                self._sdl_placement_finish(c, "failed", "Placement authentication/source unavailable")
+        def remaining():
+            value = c["deadline"] - time.monotonic()
+            if value <= 0 or c.get("terminal"): raise ValueError("expired")
+            return value
+        def received(credentials, key, continuation):
+            if c.get("terminal"):
+                self._sdl_discard_credentials(credentials)
+                return
+            try:
+                c[key] = CallerIdentity(credentials)
+                continuation()
+            except Exception:
+                fail()
+        def credentials(name, key, continuation):
+            try:
+                daemon.GetConnectionCredentials(name, reply_handler=lambda value: received(value, key, continuation),
+                                                error_handler=fail, timeout=remaining())
+            except Exception: fail()
+        def arm():
+            fd = None
+            try:
+                self._sdl_placement_record(meta)
+                if (self.observation_revision != data["revision"] or c["launch_owner"].pid != meta["owner_pid"]
+                        or c["launch_owner"].start != meta["owner_start"]): raise ValueError("owner/source changed")
+                info = _proc_info(meta["pid"])
+                if info["start"] != meta["start"]: raise ValueError("PID reused")
+                # Nonblocking open cannot wait on a substituted pipe; verify the
+                # owned regular inode before constructing the existing validator.
+                fd = os.open('/proc/' + str(meta["pid"]) + '/fd/1', os.O_RDONLY | os.O_NONBLOCK)
+                if not stat.S_ISREG(os.fstat(fd).st_mode) or _inode('/proc/' + str(meta["pid"]) + '/fd/1') != meta["log_inode"]:
+                    raise ValueError("stdout replaced")
+                c["child"] = ChildIdentity(c["launch_owner"], meta["pid"], fd, meta["start"],
+                    meta["executable"], meta["bounds"]["rdp_backend_log_byte_limit"],
+                    profile=meta["profile"], bounds=meta["bounds"])
+                if c["child"].start != meta["start"] or c["child"].log_inode != meta["log_inode"]:
+                    raise ValueError("child replaced")
+                remaining()
+                if not self._sdl_placement_valid(c): raise ValueError("placement authority lost")
+                c["arming"] = True
+                self._submit("sdl", *(data[k] for k in ("desktop", "x", "y", "width", "height")))
+                self.request.update(id=c["id"], placement_uuid=meta["uuid"], move_source=meta["source"],
+                    registration_request_id=meta["registration_id"], preserve_desktop=False,
+                    preserve_position=False, preserve_size=False)
+                self.registry.set_placement(meta["uuid"], "pending")
+                c.pop("arming", None)
+                cb = c.pop("reply")
+                cb(json.dumps(dict(protocol=1, request_id=c["id"], managed_id=meta["managed_id"],
+                    window_uuid=meta["uuid"], registration="registered", placement="pending", remote_session="unverified")))
+            except Exception: fail()
+            finally:
+                c.pop("arming", None)
+                if fd is not None: os.close(fd)
+        def kwin_owner(name):
+            if c.get("terminal"): return
+            if not str(name).startswith(":"): return fail()
+            c["kwin_name"] = str(name)
+            credentials(str(name), "kwin_identity", arm)
+        def original():
+            try: daemon.GetNameOwner("org.kde.KWin", reply_handler=kwin_owner, error_handler=fail, timeout=remaining())
+            except Exception: fail()
+        def lost(name, old, new):
+            if str(name) in (sender, meta["owner_name"], "org.kde.KWin") and old and old != new: fail()
+        try:
+            daemon = dbus.Interface(bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus", introspect=False), "org.freedesktop.DBus")
+            c["match"] = bus.add_signal_receiver(lost, signal_name="NameOwnerChanged",
+                dbus_interface="org.freedesktop.DBus", bus_name="org.freedesktop.DBus", path="/org/freedesktop/DBus")
+            def tick():
+                if c.get("terminal"): return GLib.SOURCE_REMOVE
+                if not c.get("child"):
+                    if time.monotonic() >= c["deadline"]: fail()
+                    return not bool(c.get("terminal"))
+                self._advance_placement()
+                return self._sdl_placement_check()
+            c["timer"] = GLib.timeout_add(meta["bounds"]["rdp_registration_poll_ms"], tick)
+            if not c["timer"]: raise ValueError("timer")
+            credentials(sender, "operator", lambda: credentials(meta["owner_name"], "launch_owner", original))
+        except Exception: fail()
+
+    def _sdl_placement_authorize(self, request_id, sender):
+        c = self._sdl_placement
+        if not c or sender != c["sender"]:
+            raise self._sdl_error("org.freedesktop.DBus.Error.AccessDenied")
+        if request_id != c["id"]:
+            raise self._sdl_error(IFACE + ".UnknownRequest")
+        return c
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s", sender_keyword="sender")
+    def TakeSdlPlacement(self, source, sender=None):
+        c, r = self._sdl_placement, self.request
+        if not c or sender != c.get("kwin_name"):
+            raise self._sdl_error("org.freedesktop.DBus.Error.AccessDenied")
+        if (c.get("terminal") or not r or r["id"] != c["id"] or r["state"] != "PENDING"):
+            return ""
+        if source != c["meta"]["source"] or not self._sdl_placement_valid(c):
+            self._sdl_placement_finish(c, "failed", "Placement claim rejected")
+            return ""
+        r["state"] = "RUNNING"
+        out = {k: r[k] for k in ("id", "desktop", "x", "y", "width", "height",
+            "preserve_desktop", "preserve_position", "preserve_size")}
+        out.update(source=source, window_uuid=c["meta"]["uuid"], pid=c["meta"]["pid"],
+                   resource_class="com.freerdp.client.sdl3", title_marker=c["meta"]["marker"],
+                   remaining_ms=max(0, int((c["deadline"] - time.monotonic()) * 1000)))
+        return json.dumps(out)
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s", sender_keyword="sender")
+    def PollSdlPlacement(self, request_id, sender=None):
+        c = self._sdl_placement_authorize(request_id, sender)
+        if not c.get("terminal"):
+            self._advance_placement()
+            self._sdl_placement_check()
+        return json.dumps(c.get("terminal") or dict(protocol=1, request_id=c["id"],
+            managed_id=c["meta"]["managed_id"], window_uuid=c["meta"]["uuid"],
+            registration="registered", placement="pending", remote_session="unverified"), sort_keys=True)
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s", sender_keyword="sender")
+    def CancelSdlPlacement(self, request_id, sender=None):
+        c = self._sdl_placement_authorize(request_id, sender)
+        self._sdl_placement_finish(c, "failed", "Operator cancelled placement")
+        return json.dumps(c["terminal"], sort_keys=True)
+
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
+        pending = self._sdl_placement
+        if pending and (not pending.get("terminal") or pending.get("cleanup_uncertain")) and not pending.get("arming"):
+            raise dbus.DBusException("SDL placement is active", name=IFACE + ".Busy")
         self._expire_managed_correlation()
         if (self._managed_correlation and self._managed_correlation.get("viewer")
                 and (self._managed_correlation["state"] == "PENDING" or self._managed_correlation.get("observer_cleanup_uncertain"))):
@@ -942,6 +1226,8 @@ class Broker(dbus.service.Object):
         if target is not None and target != managed.window_uuid:
             r["state"] = "ERROR"
             r["detail"] = "placement UUID differs from positively registered UUID"
+        if r["kind"] == "sdl":
+            return  # SDL commits placement state only after bounded FD/watch cleanup.
         if managed.placement != "pending":
             return
         if (r["state"] == "OK" and target == managed.window_uuid
@@ -957,6 +1243,12 @@ class Broker(dbus.service.Object):
         desktop changes. No arbitrary sleeps or JS timer API are needed.
         """
         r = self.request
+        if r and r["kind"] == "sdl":
+            self._sdl_track_registered(None, None)
+            c = self._sdl_placement
+            if c and not c.get("terminal") and not self._sdl_placement_valid(c):
+                self._sdl_placement_finish(c, "failed", "Placement identity/source/owner lost or expired")
+                return
         if (r and r["kind"] == "viewer" and r["state"] in ("RUNNING", "VERIFYING")
                 and time.monotonic() >= r["viewer_placement_deadline"]):
             r.update(state="ERROR", detail="Verified viewer placement deadline expired")
@@ -978,7 +1270,7 @@ class Broker(dbus.service.Object):
                               for key in ("x", "y", "width", "height"))
                 desktop_ok = (observed["desktops"] == [r["desktop"]]
                               and not observed["on_all_desktops"])
-                if r["kind"] == "move_optional":
+                if r["kind"] in ("move_optional", "sdl"):
                     desktop_ok = (sorted(observed["desktops"]) == r["expected_desktops"]
                                   and observed["on_all_desktops"] == r["expected_sticky"])
                 if desired and desktop_ok:
@@ -986,7 +1278,7 @@ class Broker(dbus.service.Object):
                     # Optional moves report verified membership, not the zero
                     # request placeholder. Keep legacy Submit's format intact.
                     after = f'[{r["desktop"]}]'
-                    if r["kind"] == "move_optional":
+                    if r["kind"] in ("move_optional", "sdl"):
                         after = ('[all desktops]' if observed["on_all_desktops"] else
                                  '[' + ','.join(map(str, sorted(observed["desktops"]))) + ']')
                     r["detail"] = (f'{r["kind"]}: {observed["caption"]} '
@@ -1009,14 +1301,23 @@ class Broker(dbus.service.Object):
         if r["state"] in ("OK", "ERROR"):
             self._sync_managed_placement()
 
-    @dbus.service.method(IFACE, in_signature="sss", out_signature="")
-    def Complete(self, request_id, result, detail):
+    @dbus.service.method(IFACE, in_signature="sss", out_signature="", sender_keyword="sender")
+    def Complete(self, request_id, result, detail, sender=None):
         """KWin reports accepted assignment; broker confirms observed state.
 
         Preserve existing OK/ERROR messages for legacy callers and tests.
         VERIFY is an additive result, with an exact KWin UUID and diagnostics.
         """
         r = self.request
+        if r and r["kind"] == "sdl" and r["id"] == request_id:
+            c = self._sdl_placement
+            if not c or sender != c.get("kwin_name"):
+                raise self._sdl_error("org.freedesktop.DBus.Error.AccessDenied")
+            if not self._sdl_placement_valid(c):
+                self._sdl_placement_finish(c, "failed", "Placement identity/source/owner lost or expired")
+                return
+            if result == "OK":
+                raise self._sdl_error(IFACE + ".BadArguments")
         if r is None or r["id"] != request_id or r["state"] != "RUNNING":
             raise dbus.DBusException("Unknown or inactive request",
                                      name=IFACE + ".InvalidRequest")
@@ -1036,6 +1337,8 @@ class Broker(dbus.service.Object):
             try:
                 payload = json.loads(detail)
                 identifier = str(uuid.UUID(payload["window_uuid"]))
+                if r["kind"] == "sdl" and identifier != r["placement_uuid"]:
+                    raise ValueError("SDL placement UUID mismatch")
                 if r["kind"] == "viewer" and identifier != r.get("viewer_uuid"):
                     raise ValueError("viewer placement UUID mismatch")
                 before = payload["before"]
@@ -1043,7 +1346,7 @@ class Broker(dbus.service.Object):
                         or not isinstance(payload["tiled"], bool)
                         or not isinstance(payload["fullscreen"], bool)):
                     raise ValueError("invalid placement detail")
-                if r["kind"] == "move_optional":
+                if r["kind"] in ("move_optional", "sdl"):
                     resolved_geometry, resolved_desktops, resolved_sticky = self._resolve_move(r, payload, identifier)
             except (KeyError, TypeError, ValueError, AttributeError) as exc:
                 raise dbus.DBusException("Invalid placement verification",
@@ -1052,7 +1355,7 @@ class Broker(dbus.service.Object):
                 r["state"] = "ERROR"
                 r["detail"] = "KWin observation is not synchronized"
             else:
-                if r["kind"] == "move_optional":
+                if r["kind"] in ("move_optional", "sdl"):
                     r.update(resolved_geometry)
                     r["expected_desktops"] = resolved_desktops
                     r["expected_sticky"] = resolved_sticky
@@ -1067,6 +1370,8 @@ class Broker(dbus.service.Object):
             r["state"] = result
             r["detail"] = str(detail)[:1024]
         self._sync_managed_placement()
+        if r["kind"] == "sdl":
+            self._sdl_placement_check()
 
     @dbus.service.method(IFACE, in_signature="s", out_signature="s")
     def Status(self, request_id):
@@ -1145,7 +1450,8 @@ class Broker(dbus.service.Object):
         """Freeze broker-owned registrations, never accept launcher-selected UUIDs."""
         self._advance_placement()
         self._expire_managed_correlation()
-        if (self._initial_layout_active() or
+        if ((self._sdl_placement and (not self._sdl_placement.get("terminal") or self._sdl_placement.get("cleanup_uncertain")))
+                or self._initial_layout_active() or
                 (self.request and self.request["state"] in ("PENDING", "RUNNING", "VERIFYING")) or
                 any(r.state in ("pending", "running") for r in self.registry.requests.values()) or
                 (self.correlation and self.correlation["state"] == "PENDING"
