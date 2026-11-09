@@ -461,6 +461,181 @@ class PlacementTests(unittest.TestCase):
         original()  # Dispose only our fake match; production uncertainty remains.
 
 
+class PlacementDiagnosticTests(unittest.TestCase):
+    # Real Linux process/FD validators, synthetic transport/scheduling/faults.
+    # Labels diagnose rejection boundaries; no native KWin permissions are inferred.
+    cleanup = PlacementTests.cleanup
+    submit = PlacementTests.submit
+    observe = PlacementTests.observe
+
+    def setUp(self):
+        import io
+        from contextlib import redirect_stderr
+        PlacementTests.setUp(self)
+        self.log = io.StringIO()
+        capture = redirect_stderr(self.log)
+        capture.__enter__(); self.addCleanup(capture.__exit__, None, None, None)
+
+    def inject(self, fault):
+        def private_error(*args, **kw): raise PermissionError('PRIVATE-DO-NOT-LOG')
+        meta = self.b._sdl_registered[self.mid]
+        if fault.startswith('credentials_'):
+            _, index, kind = fault.split('_'); index = int(index)
+            original = self.f.bus.GetConnectionCredentials
+            calls = 0
+            def credentials(name, reply_handler, error_handler, timeout):
+                nonlocal calls
+                calls += 1
+                if calls != index: return original(name, reply_handler, error_handler, timeout)
+                if kind == 'request': return private_error()
+                if kind == 'reply': return error_handler(RuntimeError('PRIVATE-DO-NOT-LOG'))
+                # ProcessFD is transferred normally, but the UID is rejected
+                # by the real CallerIdentity; it must close the transferred FD.
+                value = self.f.bus.credentials(); value['UnixUserID'] += 1
+                return reply_handler(value)
+            self.f.patch(self.f.bus, 'GetConnectionCredentials', credentials)
+        elif fault == 'kwin_proc_permission':
+            original = self.f.bus.GetConnectionCredentials
+            calls = 0
+            inode = self.f.adapter._inode
+            def credentials(name, **kw):
+                nonlocal calls
+                calls += 1
+                if calls == 3:
+                    def denied(path):
+                        if path == '/proc/' + str(self.f.os.getpid()) + '/exe': return private_error()
+                        return inode(path)
+                    self.f.patch(self.f.adapter, '_inode', denied)
+                return original(name, **kw)
+            self.f.patch(self.f.bus, 'GetConnectionCredentials', credentials)
+        elif fault in ('revision', 'record'):
+            def owner(name, reply_handler, **kw):
+                if fault == 'revision': self.observe()  # Valid event; no identity mutation.
+                else: meta['invalid'] = True
+                reply_handler(':1.kwin')
+            self.f.patch(self.f.bus, 'GetNameOwner', owner)
+        elif fault in ('owner_name', 'owner_request', 'owner_reply'):
+            def owner(name, reply_handler, error_handler, **kw):
+                if fault == 'owner_request': return private_error()
+                if fault == 'owner_reply': return error_handler(RuntimeError('PRIVATE-DO-NOT-LOG'))
+                reply_handler('org.kde.KWin')
+            self.f.patch(self.f.bus, 'GetNameOwner', owner)
+        elif fault in ('owner_pid', 'owner_start', 'child_start'):
+            key = {'owner_pid': 'owner_pid', 'owner_start': 'owner_start', 'child_start': 'start'}[fault]
+            meta[key] -= 1
+        elif fault == 'child_proc':
+            original = self.f.adapter._proc_info
+            self.f.patch(self.f.adapter, '_proc_info', lambda pid:
+                private_error() if pid == self.f.child.pid else original(pid))
+        elif fault == 'stdout_open':
+            original = self.f.os.open
+            self.f.patch(self.f.os, 'open', lambda path, *a, **kw:
+                private_error() if path == '/proc/' + str(self.f.child.pid) + '/fd/1' else original(path, *a, **kw))
+        elif fault == 'stdout_stat':
+            self.f.patch(self.f.os, 'fstat', lambda fd: SimpleNamespace(st_mode=0))
+        elif fault == 'stdout_inode': meta['log_inode'] = (0, 0)
+        elif fault == 'log_mode': self.f.os.fchmod(self.f.log.fileno(), 0o640)
+        elif fault == 'log_budget':
+            self.f.os.ftruncate(self.f.log.fileno(), meta['bounds']['rdp_backend_log_byte_limit'] + 1)
+        elif fault in ('child_snapshot', 'deadline'):
+            original = self.f.adapter.ChildIdentity
+            def identity(*args, **kw):
+                child = original(*args, **kw)
+                if fault == 'child_snapshot': child.start -= 1
+                else: self.f.clock += 2
+                return child
+            self.f.patch(self.f.adapter, 'ChildIdentity', identity)
+        elif fault.startswith('guard_'):
+            original = self.b._sdl_placement_valid
+            def valid(c):
+                key = fault[6:]
+                if key == 'record': c['meta']['invalid'] = True
+                elif key == 'deadline': c['deadline'] = self.f.clock
+                elif key == 'bus': self.f.bus.connected = False
+                elif key == 'child': c['child'].poll = lambda: 1
+                else: c[key].alive = lambda: False
+                return original(c)
+            self.f.patch(self.b, '_sdl_placement_valid', valid)
+        elif fault == 'bus_proxy': self.f.patch(self.f.module.dbus, 'Interface', private_error)
+        elif fault == 'owner_watch': self.f.patch(self.f.bus, 'add_signal_receiver', private_error)
+        elif fault == 'watchdog': self.f.patch(self.f.module.GLib, 'timeout_add', lambda *a: 0)
+        elif fault == 'submit': self.f.patch(self.b, '_submit', private_error)
+        else: raise AssertionError(fault)
+
+    def failed_at(self, stage):
+        c = self.b._sdl_placement
+        result = dict(c['terminal'])
+        self.assertEqual(result['placement'], 'failed')
+        self.assertEqual(result['reason'], 'Placement authentication/source unavailable')
+        self.assertEqual(self.log.getvalue(), 'joetoo-kwind: SDL placement preflight failed stage=' + stage + '\n')
+        self.assertIsNone(self.b.request)
+        self.assertIsNone(self.f.child.poll())
+        self.assertEqual(self.b.registry.get_window(self.mid).placement, 'not_requested')
+        self.assertEqual(self.f.loop.callbacks, {})
+        self.assertTrue(all(m.removed for m in self.f.bus.matches))
+        self.assertFalse(any(k in c for k in ('child', 'operator', 'launch_owner', 'kwin_identity')))
+        # Internal idempotence only. A disconnected sender cannot make a new
+        # external Poll call; late timer/authentication outcomes remain inert.
+        self.b._sdl_placement_finish(c, 'failed', 'late private exception')
+        self.assertEqual(c['terminal'], result)
+        self.assertEqual(self.log.getvalue().count('stage='), 1)
+
+    def test_missing_auth_callback_expires_and_late_fd_is_discarded(self):
+        self.f.bus.auto = False
+        self.submit(); self.f.clock += 2; self.f.loop.tick()
+        self.failed_at('auth_deadline')
+        value = self.f.bus.credentials(); fd = value['ProcessFD'].fd
+        reply, _ = self.f.bus.pending.pop(0); reply(value)
+        with self.assertRaises(OSError): self.f.os.fstat(fd)
+        self.failed_at('auth_deadline')
+
+    def test_owner_loss_during_auth_is_distinct(self):
+        self.f.bus.auto = False
+        self.submit(); self.f.bus.lost()
+        self.failed_at('owner_changed')
+
+    def test_success_is_silent_and_schema_errors_do_not_claim_auth_failure(self):
+        self.submit(managed_id='win-999')
+        self.assertTrue(self.errors); self.assertEqual(self.log.getvalue(), '')
+        self.assertEqual(self.submit()['placement'], 'pending')
+        self.assertEqual(self.log.getvalue(), '')
+
+    def test_diagnostic_sink_failure_cannot_bypass_terminal_cleanup(self):
+        self.f.bus.process_fd = False
+        with patch('builtins.print', side_effect=OSError('sink unavailable')):
+            self.assertEqual(self.submit()['placement'], 'failed')
+        self.assertIsNone(self.b.request)
+        self.assertEqual(self.f.loop.callbacks, {})
+        self.assertFalse(self.b._sdl_placement.get('cleanup_uncertain'))
+
+
+def placement_diagnostic_case(fault, stage):
+    def test(self):
+        self.inject(fault); self.submit(); self.failed_at(stage)
+    return test
+
+
+for _index, _key in ((1, 'operator'), (2, 'launch_owner'), (3, 'kwin_identity')):
+    for _kind in ('request', 'reply', 'verify'):
+        setattr(PlacementDiagnosticTests, 'test_credentials_' + str(_index) + '_' + _kind,
+            placement_diagnostic_case('credentials_' + str(_index) + '_' + _kind, _key + '_credentials_' + _kind))
+for _fault, _stage in (
+        ('kwin_proc_permission', 'kwin_identity_credentials_verify'),
+        ('revision', 'revision_recheck'), ('record', 'record_recheck'),
+        ('owner_name', 'kwin_owner_name'), ('owner_request', 'kwin_owner_request'), ('owner_reply', 'kwin_owner_reply'),
+        ('owner_pid', 'launcher_pid_recheck'), ('owner_start', 'launcher_start_recheck'),
+        ('child_proc', 'child_proc'), ('child_start', 'child_start'),
+        ('stdout_open', 'stdout_open'), ('stdout_stat', 'stdout_stat'), ('stdout_inode', 'stdout_inode'),
+        ('log_mode', 'child_identity'), ('log_budget', 'child_identity'),
+        ('child_snapshot', 'child_snapshot'), ('deadline', 'deadline_recheck'),
+        ('bus_proxy', 'bus_proxy'), ('owner_watch', 'owner_watch'), ('watchdog', 'watchdog_setup'), ('submit', 'submit')):
+    setattr(PlacementDiagnosticTests, 'test_stage_' + _fault, placement_diagnostic_case(_fault, _stage))
+for _key in ('record', 'deadline', 'operator', 'launch_owner', 'kwin_identity', 'child', 'bus'):
+    # Log names describe public roles; dictionary keys retain existing names.
+    _stage = {'launch_owner': 'launcher', 'kwin_identity': 'kwin'}.get(_key, _key)
+    setattr(PlacementDiagnosticTests, 'test_guard_' + _key, placement_diagnostic_case('guard_' + _key, 'guard_' + _stage))
+
+
 class X11PlacementTests(unittest.TestCase):
     # Exercise the same public registration/release path with both accepted
     # child profiles, without running SDL or weakening the 500 ms heuristic.

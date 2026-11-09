@@ -790,10 +790,21 @@ class Broker(dbus.service.Object):
 
     def _sdl_placement_valid(self, c):
         try:
+            c["diagnostic_stage"] = "guard_record"
             self._sdl_placement_record(c["meta"])
-            return (time.monotonic() < c["deadline"] and c["operator"].alive()
-                    and c["launch_owner"].alive() and c["kwin_identity"].alive()
-                    and c["child"].poll() is None and c["bus"].get_is_connected())
+            # Keep the original short-circuit order; labels contain no identity
+            # data and are only emitted if the pre-submit authentication fails.
+            for stage, check in (
+                    ("guard_deadline", lambda: time.monotonic() < c["deadline"]),
+                    ("guard_operator", lambda: c["operator"].alive()),
+                    ("guard_launcher", lambda: c["launch_owner"].alive()),
+                    ("guard_kwin", lambda: c["kwin_identity"].alive()),
+                    ("guard_child", lambda: c["child"].poll() is None),
+                    ("guard_bus", lambda: c["bus"].get_is_connected())):
+                c["diagnostic_stage"] = stage
+                if not check():
+                    return False
+            return True
         except Exception:
             return False
 
@@ -896,8 +907,18 @@ class Broker(dbus.service.Object):
                  deadline=time.monotonic() + limits["vnc_placement_timeout_ms"] / 1000, terminal=None)
         self._sdl_placement = c
         meta["actions"].add(data["action_id"])
-        def fail(*args):
+        def fail(*args, stage=None):
             if self._sdl_placement is c and not c.get("terminal"):
+                # One fixed stage label per failed attempt, using the daemon's
+                # existing stderr convention. Never log exception arguments,
+                # credentials, process metadata, request IDs or evidence text.
+                if stage is not None:
+                    c["diagnostic_stage"] = stage
+                try:
+                    print("joetoo-kwind: SDL placement preflight failed stage=" +
+                          c["diagnostic_stage"], file=sys.stderr, flush=True)
+                except Exception:
+                    pass  # An unavailable diagnostic sink cannot bypass cleanup.
                 self._sdl_placement_finish(c, "failed", "Placement authentication/source unavailable")
         def remaining():
             value = c["deadline"] - time.monotonic()
@@ -908,42 +929,63 @@ class Broker(dbus.service.Object):
                 self._sdl_discard_credentials(credentials)
                 return
             try:
+                c["diagnostic_stage"] = key + "_credentials_verify"
                 c[key] = CallerIdentity(credentials)
+                c["diagnostic_stage"] = key + "_continuation"
                 continuation()
             except Exception:
                 fail()
         def credentials(name, key, continuation):
             try:
+                c["diagnostic_stage"] = key + "_credentials_request"
                 daemon.GetConnectionCredentials(name, reply_handler=lambda value: received(value, key, continuation),
-                                                error_handler=fail, timeout=remaining())
+                    error_handler=lambda *unused: fail(stage=key + "_credentials_reply"), timeout=remaining())
             except Exception: fail()
         def arm():
             fd = None
             try:
+                c["diagnostic_stage"] = "record_recheck"
                 self._sdl_placement_record(meta)
-                if (self.observation_revision != data["revision"] or c["launch_owner"].pid != meta["owner_pid"]
-                        or c["launch_owner"].start != meta["owner_start"]): raise ValueError("owner/source changed")
+                c["diagnostic_stage"] = "revision_recheck"
+                if self.observation_revision != data["revision"]: raise ValueError("owner/source changed")
+                c["diagnostic_stage"] = "launcher_pid_recheck"
+                if c["launch_owner"].pid != meta["owner_pid"]: raise ValueError("owner/source changed")
+                c["diagnostic_stage"] = "launcher_start_recheck"
+                if c["launch_owner"].start != meta["owner_start"]: raise ValueError("owner/source changed")
+                c["diagnostic_stage"] = "child_proc"
                 info = _proc_info(meta["pid"])
+                c["diagnostic_stage"] = "child_start"
                 if info["start"] != meta["start"]: raise ValueError("PID reused")
                 # Nonblocking open cannot wait on a substituted pipe; verify the
                 # owned regular inode before constructing the existing validator.
+                c["diagnostic_stage"] = "stdout_open"
                 fd = os.open('/proc/' + str(meta["pid"]) + '/fd/1', os.O_RDONLY | os.O_NONBLOCK)
-                if not stat.S_ISREG(os.fstat(fd).st_mode) or _inode('/proc/' + str(meta["pid"]) + '/fd/1') != meta["log_inode"]:
+                c["diagnostic_stage"] = "stdout_stat"
+                if not stat.S_ISREG(os.fstat(fd).st_mode): raise ValueError("stdout replaced")
+                c["diagnostic_stage"] = "stdout_inode"
+                if _inode('/proc/' + str(meta["pid"]) + '/fd/1') != meta["log_inode"]:
                     raise ValueError("stdout replaced")
+                c["diagnostic_stage"] = "child_identity"
                 c["child"] = ChildIdentity(c["launch_owner"], meta["pid"], fd, meta["start"],
                     meta["executable"], meta["bounds"]["rdp_backend_log_byte_limit"],
                     profile=meta["profile"], bounds=meta["bounds"])
+                c["diagnostic_stage"] = "child_snapshot"
                 if c["child"].start != meta["start"] or c["child"].log_inode != meta["log_inode"]:
                     raise ValueError("child replaced")
+                c["diagnostic_stage"] = "deadline_recheck"
                 remaining()
                 if not self._sdl_placement_valid(c): raise ValueError("placement authority lost")
                 c["arming"] = True
+                c["diagnostic_stage"] = "submit"
                 self._submit("sdl", *(data[k] for k in ("desktop", "x", "y", "width", "height")))
+                c["diagnostic_stage"] = "request_bind"
                 self.request.update(id=c["id"], placement_uuid=meta["uuid"], move_source=meta["source"],
                     registration_request_id=meta["registration_id"], preserve_desktop=False,
                     preserve_position=False, preserve_size=False)
+                c["diagnostic_stage"] = "registry_pending"
                 self.registry.set_placement(meta["uuid"], "pending")
                 c.pop("arming", None)
+                c["diagnostic_stage"] = "reply"
                 cb = c.pop("reply")
                 cb(json.dumps(dict(protocol=1, request_id=c["id"], managed_id=meta["managed_id"],
                     window_uuid=meta["uuid"], registration="registered", placement="pending", remote_session="unverified")))
@@ -953,25 +995,31 @@ class Broker(dbus.service.Object):
                 if fd is not None: os.close(fd)
         def kwin_owner(name):
             if c.get("terminal"): return
-            if not str(name).startswith(":"): return fail()
+            if not str(name).startswith(":"): return fail(stage="kwin_owner_name")
             c["kwin_name"] = str(name)
             credentials(str(name), "kwin_identity", arm)
         def original():
-            try: daemon.GetNameOwner("org.kde.KWin", reply_handler=kwin_owner, error_handler=fail, timeout=remaining())
+            try:
+                c["diagnostic_stage"] = "kwin_owner_request"
+                daemon.GetNameOwner("org.kde.KWin", reply_handler=kwin_owner,
+                    error_handler=lambda *unused: fail(stage="kwin_owner_reply"), timeout=remaining())
             except Exception: fail()
         def lost(name, old, new):
-            if str(name) in (sender, meta["owner_name"], "org.kde.KWin") and old and old != new: fail()
+            if str(name) in (sender, meta["owner_name"], "org.kde.KWin") and old and old != new: fail(stage="owner_changed")
         try:
+            c["diagnostic_stage"] = "bus_proxy"
             daemon = dbus.Interface(bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus", introspect=False), "org.freedesktop.DBus")
+            c["diagnostic_stage"] = "owner_watch"
             c["match"] = bus.add_signal_receiver(lost, signal_name="NameOwnerChanged",
                 dbus_interface="org.freedesktop.DBus", bus_name="org.freedesktop.DBus", path="/org/freedesktop/DBus")
             def tick():
                 if c.get("terminal"): return GLib.SOURCE_REMOVE
                 if not c.get("child"):
-                    if time.monotonic() >= c["deadline"]: fail()
+                    if time.monotonic() >= c["deadline"]: fail(stage="auth_deadline")
                     return not bool(c.get("terminal"))
                 self._advance_placement()
                 return self._sdl_placement_check()
+            c["diagnostic_stage"] = "watchdog_setup"
             c["timer"] = GLib.timeout_add(meta["bounds"]["rdp_registration_poll_ms"], tick)
             if not c["timer"]: raise ValueError("timer")
             credentials(sender, "operator", lambda: credentials(meta["owner_name"], "launch_owner", original))
