@@ -195,6 +195,98 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(self.run_launcher(profile=self.f.adapter.X11_PROFILE), 1)
         self.assertFalse(self.f.b.registry.managed_windows)
 
+    def retained_placement(self, state):
+        # A real RegistryStatus snapshot, with a non-null historical ID. Do not
+        # clear the history while the launcher runs or fake it into active work.
+        from contextlib import ExitStack
+        stack = ExitStack()
+        self.addCleanup(stack.close)
+        history = dict(id='previous-placement', kind='move', state=state, detail='completed')
+        stack.enter_context(patch.object(self.f.b, 'request', history))
+        stack.enter_context(patch.object(self.f.b, '_sync_managed_placement',
+            self.f.b.__class__._sync_managed_placement.__get__(self.f.b)))
+        self.statuses = []
+        original = self.bridge.RegistryStatus
+        def status(**kwargs):
+            result = original(**kwargs)
+            self.statuses.append(json.loads(result))
+            return result
+        stack.enter_context(patch.object(self.bridge, 'RegistryStatus', status))
+        return history
+
+    def test_retained_ok_permits_x11_auto_preflight_and_pending_monitor(self):
+        history = self.retained_placement('OK')
+        self.assertEqual(self.run_launcher(profile=self.f.adapter.X11_PROFILE), 0)
+        self.assertIs(self.f.b.request, history)
+        self.assertGreater(len(self.statuses), 2)
+        self.assertTrue(all(s['placement_transaction'] == dict(id=history['id'], state='OK') for s in self.statuses))
+        self.f.b.request = None  # Fixture disposal, after proving history retained.
+
+    def test_retained_error_permits_x11_software_preflight_and_pending_monitor(self):
+        history = self.retained_placement('ERROR')
+        self.assertEqual(self.run_launcher(profile=self.f.adapter.X11_PROFILE,
+            bounds={'rdp_x11_renderer': 'software'}), 0)
+        self.assertIs(self.f.b.request, history)
+        self.assertGreater(len(self.statuses), 2)
+        self.assertTrue(all(s['placement_transaction'] == dict(id=history['id'], state='ERROR') for s in self.statuses))
+        self.f.b.request = None
+
+    def test_active_or_unknown_placement_refuses_before_begin_and_spawn(self):
+        # Each failing preflight closes only this synthetic caller connection;
+        # reconnect for the next independent negative vector, without a restart.
+        for state in ('PENDING', 'RUNNING', 'VERIFYING', 'UNKNOWN'):
+            with self.subTest(state=state):
+                self.f.bus.connected = True
+                self.f.bus.lost_senders.clear()
+                self.f.b.request = dict(id='historical-id-is-not-a-busy-test', state=state)
+                try:
+                    with self.assertRaisesRegex(RuntimeError, 'Broker is busy'): self.run_launcher()
+                    self.assertEqual(self.events, [])
+                finally: self.f.b.request = None
+
+    def test_pending_monitor_rejects_active_layout_or_uncertain_cleanup(self):
+        original = self.bridge.RegistryStatus
+        calls = 0
+        def status(**kwargs):
+            nonlocal calls
+            calls += 1
+            result = json.loads(original(**kwargs))
+            if calls > 1: result['viewer_cleanup_uncertain'] = True
+            return json.dumps(result)
+        self.patch(self.bridge, 'RegistryStatus', status)
+        with self.assertRaisesRegex(RuntimeError, 'Placement became active'):
+            self.run_launcher(profile=self.f.adapter.X11_PROFILE)
+        self.assertEqual(self.events[:4], ['begin', 'spawn', 'bind', 'poll'])
+        self.assertIn('cancel', self.events)
+        self.assertEqual(self.f.b.registry.managed_windows, {})
+
+    def test_terminal_error_with_uncertain_sdl_cleanup_is_rejected_by_begin(self):
+        self.retained_placement('ERROR')
+        self.f.b._sdl_placement = dict(terminal=dict(placement='failed'), cleanup_uncertain=True)
+        try:
+            self.assertFalse(json.loads(self.bridge.RegistryStatus())['viewer_cleanup_uncertain'])
+            with self.assertRaises(Exception): self.run_launcher()
+            self.assertEqual(self.events, ['begin'])
+            self.assertIsNone(self.f.b._rdp_registration)
+            self.assertEqual(self.children, [])
+        finally:
+            self.f.b.request = None
+            self.f.b._sdl_placement = None
+
+    def test_unsynchronized_observation_and_active_initial_layout_refuse_before_spawn(self):
+        original = self.bridge.RegistryStatus
+        for field in ('observation', 'initial_layout_active'):
+            with self.subTest(field=field):
+                self.f.bus.connected = True; self.f.bus.lost_senders.clear()
+                def status(**kwargs):
+                    result = json.loads(original(**kwargs))
+                    if field == 'observation': result[field]['synchronized'] = False
+                    else: result[field] = True
+                    return json.dumps(result)
+                with patch.object(self.bridge, 'RegistryStatus', status):
+                    with self.assertRaises(RuntimeError): self.run_launcher()
+                self.assertEqual(self.events, [])
+
     def test_begin_dbus_error_reports_safe_name_and_operation_before_spawn(self):
         class Rejected(Exception):
             def get_dbus_name(self): return 'org.joetoo.KWinBridge.InvalidRequest'
@@ -307,6 +399,30 @@ def negative_case(mode):
 for _mode in ('cancel', 'deadline', 'owner_change', 'bind_lost', 'wrong_reply',
               'unknown', 'caller_loss', 'spawn_failure', 'budget', 'exit', 'buffered'):
     setattr(LauncherTests, 'test_negative_' + _mode, negative_case(_mode))
+
+
+def pending_placement_case(state):
+    def test(self):
+        original = self.bridge.RegistryStatus
+        calls = 0
+        def status(**kwargs):
+            nonlocal calls
+            calls += 1
+            result = json.loads(original(**kwargs))
+            if calls > 1:
+                if state == 'layout': result['initial_layout_active'] = True
+                else: result['placement_transaction'] = dict(id='active', state=state)
+            return json.dumps(result)
+        self.patch(self.bridge, 'RegistryStatus', status)
+        with self.assertRaisesRegex(RuntimeError, 'Placement became active'):
+            self.run_launcher(profile=self.f.adapter.X11_PROFILE)
+        self.assertIn('cancel', self.events)
+        self.assertEqual(self.f.b.registry.managed_windows, {})
+    return test
+
+
+for _state in ('PENDING', 'RUNNING', 'VERIFYING', 'layout'):
+    setattr(LauncherTests, 'test_pending_guard_rejects_' + _state, pending_placement_case(_state))
 
 
 if __name__ == '__main__':

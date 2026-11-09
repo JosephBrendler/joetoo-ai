@@ -109,6 +109,18 @@ def stop_child(child, pidfd, timeout):
     child.wait(timeout=timeout)
 
 
+def placement_available(status):
+    """Retained OK/ERROR IDs are history, not active placement work.
+
+    This snapshot does not certify SDL cleanup. BeginSdlRegistration remains
+    the authoritative active/uncertain-cleanup gate before child creation.
+    """
+    transaction = status['placement_transaction']
+    return (not status['initial_layout_active'] and not status['viewer_cleanup_uncertain']
+            and (transaction == {'id': None, 'state': 'IDLE'}
+                 or transaction['state'] in ('OK', 'ERROR')))
+
+
 def launch(bus, interface, unix_fd, adapter, host, port, username, desktop, slot,
            bounds, call_timeout=3., emit=print, spawn=subprocess.Popen,
            sleep=time.sleep, clock=time.monotonic, cancelled=lambda: False, profile=None):
@@ -133,9 +145,8 @@ def launch(bus, interface, unix_fd, adapter, host, port, username, desktop, slot
         before = api.call('RegistryStatus')
         require(before['observation']['synchronized'] is True, 'Inventory is not synchronized')
         source = before['observation']['source']
-        require(not before['initial_layout_active'] and not before['viewer_cleanup_uncertain']
-                and before['request_counts']['pending'] == before['request_counts']['running'] == 0
-                and before['placement_transaction'] == {'id': None, 'state': 'IDLE'}, 'Broker is busy')
+        require(before['request_counts']['pending'] == before['request_counts']['running'] == 0
+                and placement_available(before), 'Broker is busy')
         folder = Path(tempfile.mkdtemp(prefix='joetoo-sdl-registration-'))
         os.chmod(folder, 0o700)
         descriptor = os.open(folder / 'stdout.log', os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -210,7 +221,7 @@ def launch(bus, interface, unix_fd, adapter, host, port, username, desktop, slot
                 status = api.call('RegistryStatus')
                 require(status['observation']['synchronized'] is True
                         and status['observation']['source'] == source, 'Observation source lost')
-                require(status['placement_transaction'] == {'id': None, 'state': 'IDLE'}, 'Placement became active')
+                require(placement_available(status), 'Placement became active')
             sleep(bounds['rdp_registration_poll_ms'] / 1000)
     finally:
         try:

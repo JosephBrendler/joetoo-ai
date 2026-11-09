@@ -131,6 +131,133 @@ class PlacementTests(unittest.TestCase):
         self.assertEqual(self.b.observed_windows[WINDOW_ID]['geometry']['x'], 200)
         self.assertEqual(self.poll(), result)
 
+    def second_registration_after_placement(self, succeeded, slot=2):
+        # One real broker/registry survives A's placement and closure and B's
+        # actual development-launcher preflight, Begin/Bind/Poll and cleanup.
+        self.submit(); request = self.claim()
+        if succeeded:
+            self.complete(request)
+            self.observe(geometry=dict(x=25, y=35, width=800, height=600), desktops=[3])
+            self.assertEqual(self.poll()['placement'], 'succeeded')
+        else:
+            self.b.CancelSdlPlacement(request['id'], sender=self.sender)
+            self.assertEqual(self.poll()['placement'], 'failed')
+        context = self.b._sdl_placement
+        self.assertFalse(context.get('cleanup_uncertain', False))
+        self.assertFalse(any(k in context for k in ('timer', 'match', 'child', 'operator', 'launch_owner', 'kwin_identity')))
+        self.observe('removed')
+        self.f.child.stdin.close(); self.f.child.wait(timeout=5)
+        original = self.b.registry.get_window(self.mid)
+        self.assertEqual(original.presence, 'missing')
+        history = self.b.request
+        self.assertEqual(history['state'], 'OK' if succeeded else 'ERROR')
+        self.assertIsNotNone(history['id'])
+        spec = importlib.util.spec_from_file_location('sdl_sequential_launcher',
+            Path(__file__).resolve().parents[1] / 'tools/joetoo-sdl-registration-launch.py')
+        client = importlib.util.module_from_spec(spec); spec.loader.exec_module(client)
+        test = self
+        children, statuses, output = [], [], []
+        polls = 0
+        sender = ':1.next-launcher'
+        class Bridge:
+            def Introspect(self, **kw):
+                return '<node><interface name="org.joetoo.KWinBridge">' + ''.join(
+                    '<method name="' + name + '">' + ''.join('<arg type="' + c + '" direction="in"/>' for c in sig)
+                    + '<arg type="s" direction="out"/></method>' for name, sig in
+                    dict(BeginSdlRegistration='s', BindSdlRegistration='sih', PollSdlRegistration='s', CancelSdlRegistration='s').items()) + '</interface></node>'
+            def RegistryStatus(self, **kw):
+                result = test.b.RegistryStatus(); statuses.append(json.loads(result)); return result
+            def BeginSdlRegistration(self, payload, **kw):
+                replies, errors = [], []
+                test.b.BeginSdlRegistration(payload, sender=sender, reply=replies.append, error=errors.append)
+                if errors: raise errors[0]
+                return replies[0]
+            def BindSdlRegistration(self, rid, pid, fd, **kw):
+                return test.b.BindSdlRegistration(rid, pid, test.f.FD(test.f.os.dup(fd.fd)), sender=sender)
+            def PollSdlRegistration(self, rid, **kw):
+                nonlocal polls
+                polls += 1
+                if polls == 2:
+                    test.observe('added', OTHER, pid=children[0].pid,
+                                 caption=test.b._rdp_registration['title_token'])
+                result = test.b.PollSdlRegistration(rid, sender=sender)
+                if json.loads(result)['state'] == 'registered':
+                    children[0].stdin.close(); children[0].wait(timeout=5)
+                return result
+            def CancelSdlRegistration(self, rid, **kw):
+                return test.b.CancelSdlRegistration(rid, sender=sender)
+        bridge = Bridge()
+        daemon = SimpleNamespace(GetNameOwner=lambda *a, **kw: ':1.broker')
+        class Bus:
+            connected = True
+            def get_is_connected(self): return self.connected
+            def get_object(self, name, path, **kw):
+                return daemon if name == 'org.freedesktop.DBus' else bridge
+            def close(self):
+                self.connected = False
+                for match in list(test.f.bus.matches):
+                    if not match.removed: match.callback(sender, sender, '')
+        def spawn(argv, **kw):
+            import select
+            code = ('import os,sys; print("[0] [%d:thread] [DEBUG][com.freerdp.client.SDL] - '
+                    '[main]: client is using backend \'%s\'" % (os.getpid(),sys.argv[1]),flush=True); '
+                    'print("ready",file=sys.stderr,flush=True); sys.stdin.read()')
+            child = subprocess.Popen([sys.executable, '-c', code, kw['env']['SDL_VIDEO_DRIVER']],
+                stdin=subprocess.PIPE, stdout=kw['stdout'], stderr=subprocess.PIPE, env=kw['env'], close_fds=True)
+            children.append(child)
+            self.assertTrue(select.select([child.stderr], [], [], 5)[0])
+            self.assertEqual(child.stderr.readline(), b'ready\n')
+            return child
+        def wait(seconds): self.f.clock += seconds
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix='sdl-sequential-test-') as folder:
+            mkdtemp = client.tempfile.mkdtemp
+            with patch.object(client.tempfile, 'mkdtemp', lambda **kw: mkdtemp(dir=folder, **kw)):
+                try:
+                    result = client.launch(Bus(), lambda obj, iface: obj,
+                        lambda fd: self.f.FD(self.f.os.dup(fd)), self.f.adapter,
+                        'example.invalid', 3389, 'testuser', 3, slot,
+                        {'rdp_x11_renderer': self.renderer} if getattr(self, 'profile', None) else {},
+                        emit=output.append, spawn=spawn, sleep=wait, clock=lambda: self.f.clock,
+                        profile=getattr(self, 'profile', None))
+                    self.assertEqual(result, 0)
+                except RuntimeError as error:
+                    if slot != 1: raise
+                    self.assertIn('BeginSdlRegistration failed: org.joetoo.KWinBridge.Busy', str(error))
+                    self.assertEqual(children, [])  # Slot refusal precedes spawn.
+                    self.assertEqual(self.b.registry.get_window(self.mid), original)
+                    self.assertIs(self.b.request, history)
+                    self.assertIsNone(self.b.registry._active_request_id)
+                    return 'slot_rejected'
+                finally:
+                    for child in children:
+                        if not child.stdin.closed: child.stdin.close()
+                        child.wait(timeout=5); child.stderr.close()
+        registered = next(json.loads(line) for line in output if json.loads(line).get('state') == 'registered')
+        second = self.b.registry.get_window(registered['managed_id'])
+        self.assertNotEqual(second.managed_id, original.managed_id)
+        self.assertNotEqual(second.request_id, original.request_id)
+        self.assertEqual(second.window_uuid, OTHER)
+        self.assertNotEqual(second.observation['pid'], original.observation['pid'])
+        self.assertNotEqual(second.observation['caption'], original.observation['caption'])
+        self.assertEqual(second.recipe['slot'], 2)
+        self.assertEqual(second.placement, 'not_requested')
+        self.assertEqual(self.b.registry.get_window(self.mid), original)
+        self.assertIs(self.b.request, history)
+        self.assertIs(self.b._sdl_placement, context)
+        self.assertGreaterEqual(len(statuses), 2)  # Includes pending-monitor guard.
+        self.assertTrue(all(s['placement_transaction'] == dict(id=history['id'], state=history['state']) for s in statuses))
+        self.assertIsNone(self.b.registry._active_request_id)
+
+    def test_second_launcher_after_verified_placement_and_close_without_restart(self):
+        self.second_registration_after_placement(True)
+
+    def test_second_launcher_cannot_reuse_closed_viewers_reserved_slot(self):
+        self.assertEqual(self.second_registration_after_placement(True, slot=1), 'slot_rejected')
+
+    def test_second_launcher_after_safely_failed_placement_without_restart(self):
+        self.second_registration_after_placement(False)
+
     def test_resident_payload_drives_real_broker_verification_end_to_end(self):
         self.submit(); request = self.claim()
         # Execute real resident code inside Node's restricted fake KWin VM.
@@ -347,6 +474,10 @@ class X11PlacementTests(unittest.TestCase):
     verification = PlacementTests.verification
     profile = 'sdl-x11-a1c-v1'
     renderer = 'auto'
+    second_registration_after_placement = PlacementTests.second_registration_after_placement
+
+    def test_second_launcher_after_completed_x11_placement_without_restart(self):
+        self.second_registration_after_placement(True)
 
     def test_x11_auto_registration_then_explicit_exact_uuid_placement(self):
         PlacementTests.test_exact_uuid_success_and_original_launcher_child_remains_alive(self)
