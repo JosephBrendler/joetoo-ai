@@ -360,25 +360,21 @@ Gate I broker/launcher implementation and Gate A native managed-registration
 acceptance remain **NOT YET AUTHORIZED**, requiring separate bounded grants.
 Increment 2 remains OPEN; no placement or later-increment authority is implied.
 
-### Increment 3 — Controlled placement release
+### Increment 3 — Controlled placement release (IMPLEMENTED; NATIVE X11 VALIDATED IN PART)
 
-Registration does not establish successful GDM login, authenticated GNOME
-desktop readiness or allowed placement. Propose explicit operator-confirmed
-release first; automatic release requires separately reliable readiness
-evidence. Revalidate exact registered UUID, owner/source and transaction
-before existing desktop/geometry/layer/focus operations. Address Busy, slot
-reservation, cancellation, expiry and initial layout completeness without
-holding the ordinary launcher lock throughout interactive authentication.
+The implementation at `e7f63ce2a9bbb0ed09f7f7465099e360ecd88fa1` adds independent, operator-confirmed SDL viewer placement, targeting the existing broker-owned managed ID and original exact KWin UUID. SDL registration alone remains `placement=not_requested`, and an observed window/GDM greeter is not proof of successful remote login or permission for automatic focus/stack changes. Revalidate launcher/child/PID/marker ownership, source/revision, actual presence, reserved desktop/slot and geometry through existing resident/broker transaction machinery; fail closed on missing, replaced, disputed or unverified identity. A one-shot placement does not continuously enforce window location or size.
 
-### Increment 4 — Configured SDL RDP workflow
+On `gmki91` native KWin X11, the `software` and `auto` renderer paths both demonstrated exact-UUID placement, correct requested position, verified broker completion, preserved missing-state records after titlebar close, and safe rejection of a closed viewer. Headless regression: 191 focused Python, 676 full Python, 158 JavaScript PASS. **Increment 3 is not yet formally accepted:** the standalone registration launcher rejects a next registration while previous placement history is terminal `OK` (two stale `IDLE`-only guards); native Wayland release is untested; both X11 renderer modes subsequently exposed 1032×804 decorated frames despite requesting 800×600. Preserve these as distinct findings in [Increment 3 native evidence](step1.5c5d-increment3-native-x11-placement-2026-11-09.md). Fix/test serial preflight first; characterize SDL client-area versus KWin frame-size behavior without introducing an endless geometry-correction loop; finish a separately maintainer-approved native Wayland placement/closure test.
 
-With separate authorization, implement exact safe SDL recipe grammar and
-offline whole-plan `-c` validation plus confirmed `-o` execution. Reject
-unsupported/invalid plans before side effects. Preserve security policy,
-independent registration/placement/remote outcome reporting, slot ownership,
-layer/focus guarantees and Konsole/Dolphin/TigerVNC behavior. No automatic
-reconnect, UUID reassignment, multimonitor, RemoteApp or client fallback is
-implied.
+Increment 3 does **not** implement prompt relocation, authentication observers, automatic login, concurrency, configured RDP `-o` recipe parsing, or changes to VNC/SSH/RDP human-authentication deadlines. Their absence is not an Increment 2 regression or proof of Increment 4 functionality.
+
+### Increment 4 — Configured SDL RDP workflow (SEQUENTIAL DESIGN ACCEPTED; NOT IMPLEMENTED)
+
+Integrate SDL RDP into the existing `DESKTOP|PROGRAM|MODE|TARGET[|LAYER]` configuration grammar and confirmed `joetoo-kwin -o` workflow, using the existing planner's **derived slot and geometry**, not a hand-calculated layout from the standalone registration tool. Preserve offline whole-plan `-c` validation, mixed Konsole/Dolphin/TigerVNC/RDP sequential launch, unique exact-UUID ownership, source/owner/slot checks, per-desktop layers/stack/focus, explicit confirmation, and truthful partial-completion/remote-session status.
+
+**Mandatory human-wait correctness:** a client or tunnel genuinely waiting for operator NLA/VNC/SSH credentials must **not** be killed solely because the human took minutes or longer to answer. Distinguish observable, cancellable human-wait states from genuine child/transport failure, ambiguous/lost ownership, server-side expiry and explicit cancellation. Do **not** replace mechanical D-Bus, post-viewer UUID/placement, or cleanup timeouts with unbounded waits. Existing development RDP/VNC deadlines can terminate processes during authentication, so this requirement remains **unimplemented** and must be addressed in this increment. If the client contracts cannot identify a safe human-wait state, report the design limitation instead of silently disabling safety checks.
+
+The maintainer accepts serial completion time spanning several minutes or longer; later plan entries remain pending while an earlier interactive remote launch is serviced. Parallel launch, prompt staging/cascades and selective queueing remain measured **Phase 2** optimization options, not prerequisites. See the [maintainer strategy decision](step1.5c5d-increment3-strategy-decision.md) and [authentication contract](increment2-deferred-authentication-workflow-section.md).
 
 ### Increment 5 — Security, regression and milestone closure
 
