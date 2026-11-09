@@ -266,6 +266,153 @@ class X11AdapterTests(unittest.TestCase):
                 child.stdin.close(); child.wait(timeout=3); child.stderr.close()
 
 
+class ProcessIdentityTests(unittest.TestCase):
+    """Actual pidfds and validators, with isolated /proc access fault seams."""
+    class FD:
+        def __init__(self, fd): self.fd = fd
+        def take(self):
+            fd, self.fd = self.fd, None
+            return fd
+
+    def credentials(self, pid=None, uid=None, descriptor=None):
+        pid = os.getpid() if pid is None else pid
+        value = self.FD(os.pidfd_open(pid) if descriptor is None else descriptor)
+        self.addCleanup(lambda: os.close(value.fd) if value.fd is not None else None)
+        return dict(ProcessFD=value, ProcessID=pid, UnixUserID=os.geteuid() if uid is None else uid)
+
+    def caller(self):
+        identity = adapter.CallerIdentity(self.credentials())
+        self.addCleanup(identity.close)
+        return identity
+
+    def deny_executable(self, path):
+        if path.endswith('/exe'): raise PermissionError('synthetic restricted executable link')
+        return self.original_inode(path)
+
+    def setUp(self):
+        self.original_inode = adapter._inode
+
+    def child(self):
+        folder = tempfile.TemporaryDirectory(prefix='sdl-process-identity-')
+        self.addCleanup(folder.cleanup)
+        log = open(Path(folder.name) / 'stdout.log', 'w+b')
+        os.fchmod(log.fileno(), 0o600); self.addCleanup(log.close)
+        child = subprocess.Popen([sys.executable, '-c',
+            'import sys; print("ready",file=sys.stderr,flush=True); sys.stdin.read()'],
+            stdin=subprocess.PIPE, stdout=log, stderr=subprocess.PIPE,
+            env=adapter.development_environment(os.environ))
+        def cleanup():
+            if not child.stdin.closed: child.stdin.close()
+            child.wait(timeout=5); child.stderr.close()
+        self.addCleanup(cleanup)
+        import select
+        self.assertTrue(select.select([child.stderr], [], [], 5)[0])
+        self.assertEqual(child.stderr.readline(), b'ready\n')
+        return child, log
+
+    def test_caller_creation_and_alive_never_access_unused_executable(self):
+        with patch.object(adapter, '_inode', side_effect=self.deny_executable) as inode:
+            caller = self.caller()
+            self.assertTrue(caller.alive())
+            self.assertEqual(caller.pid, os.getpid())
+            inode.assert_not_called()
+
+    def test_proc_info_default_stays_strict_and_opt_out_omits_executable(self):
+        with patch.object(adapter, '_inode', side_effect=self.deny_executable):
+            with self.assertRaises(PermissionError): adapter._proc_info(os.getpid())
+            info = adapter._proc_info(os.getpid(), include_executable=False)
+        self.assertNotIn('exe', info)
+        self.assertEqual(info['uid'], os.geteuid())
+        self.assertEqual(info['start'], adapter._proc_info(os.getpid())['start'])
+        self.assertIn('exe', adapter._proc_info(os.getpid()))
+
+    def test_caller_requires_processfd_and_processid(self):
+        for key in ('ProcessFD', 'ProcessID'):
+            credentials = self.credentials(); credentials.pop(key)
+            with self.subTest(key=key), self.assertRaises(NotImplementedError):
+                adapter.CallerIdentity(credentials)
+
+    def test_caller_rejects_regular_fd_and_closes_it(self):
+        fd = os.open('/dev/null', os.O_RDONLY)
+        with self.assertRaises(ValueError): adapter.CallerIdentity(self.credentials(descriptor=fd))
+        with self.assertRaises(OSError): os.fstat(fd)
+
+    def test_caller_rejects_descriptor_pid_mismatch(self):
+        credentials = self.credentials(); credentials['ProcessID'] += 1
+        with self.assertRaises(ValueError): adapter.CallerIdentity(credentials)
+
+    def test_caller_rejects_credential_uid_mismatch(self):
+        with self.assertRaises(PermissionError):
+            adapter.CallerIdentity(self.credentials(uid=os.geteuid() + 1))
+
+    def test_caller_rejects_proc_uid_mismatch(self):
+        original = adapter._proc_info
+        def changed(pid, **kwargs):
+            info = original(pid, **kwargs); info['uid'] += 1
+            return info
+        with patch.object(adapter, '_proc_info', changed), self.assertRaises(ValueError):
+            self.caller()
+
+    def test_caller_rejects_exited_process_descriptor(self):
+        child, _ = self.child()
+        credentials = self.credentials(pid=child.pid)
+        child.stdin.close(); child.wait(timeout=5)
+        with self.assertRaises(ValueError): adapter.CallerIdentity(credentials)
+
+    def test_caller_alive_rejects_changed_start_and_uid(self):
+        caller = self.caller()
+        original = adapter._proc_info
+        for field in ('start', 'uid'):
+            def changed(pid, **kwargs):
+                info = original(pid, **kwargs); info[field] += 1
+                return info
+            with self.subTest(field=field), patch.object(adapter, '_proc_info', changed):
+                self.assertFalse(caller.alive())
+        self.assertTrue(caller.alive())
+
+    def test_caller_start_change_during_constructor_is_rejected(self):
+        original = adapter._proc_info
+        calls = 0
+        def changed(pid, **kwargs):
+            nonlocal calls
+            calls += 1
+            info = original(pid, **kwargs)
+            if calls > 1: info['start'] += 1
+            return info
+        with patch.object(adapter, '_proc_info', changed), self.assertRaises(ValueError): self.caller()
+
+    def test_required_proc_reads_still_fail_closed(self):
+        caller = self.caller()
+        with patch.object(adapter, '_proc_info', side_effect=PermissionError('stat inaccessible')):
+            self.assertFalse(caller.alive())
+            with self.assertRaises(PermissionError): self.caller()
+        import builtins, io
+        original_open = builtins.open
+        def malformed(path, *args, **kwargs):
+            if path == '/proc/' + str(os.getpid()) + '/stat':
+                return io.BytesIO(b'malformed proc stat')
+            return original_open(path, *args, **kwargs)
+        with patch('builtins.open', side_effect=malformed):
+            with self.assertRaises((ValueError, IndexError)): self.caller()
+
+    def test_child_executable_evidence_remains_required_at_creation_and_poll(self):
+        caller = self.caller(); child, log = self.child()
+        executable = adapter._inode('/proc/' + str(child.pid) + '/exe')
+        def identity():
+            return adapter.ChildIdentity(caller, child.pid, log.fileno(), 0, executable, 65536)
+        with patch.object(adapter, '_inode', side_effect=self.deny_executable):
+            with self.assertRaises(PermissionError): identity()
+        owned = identity(); self.addCleanup(owned.close)
+        self.assertIsNone(owned.poll())
+        with patch.object(adapter, '_inode', side_effect=self.deny_executable):
+            with self.assertRaises(PermissionError): owned.poll()
+        original = adapter._inode
+        def substituted(path): return (0, 0) if path.endswith('/exe') else original(path)
+        with patch.object(adapter, '_inode', side_effect=substituted):
+            self.assertEqual(owned.poll(), 1)
+            with self.assertRaises(ValueError): identity()
+
+
 class PublicDeclarationTests(unittest.TestCase):
     def test_real_dbus_python_declarations_without_connecting_to_a_bus(self):
         # Validate the actual decorators/signature marshalling metadata, rather

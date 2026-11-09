@@ -924,8 +924,8 @@ class SdlInterfaceTests(unittest.TestCase):
     def test_pid_reuse_metadata_cannot_retarget_held_reference(self):
         self.begin(); self.spawn(); self.bind(); self.event()
         original = self.adapter._proc_info
-        def reused(pid):
-            info = original(pid)
+        def reused(pid, **kwargs):
+            info = original(pid, **kwargs)
             if pid == self.child.pid: info['start'] += 1
             return info
         with patch.object(self.adapter, '_proc_info', reused):
@@ -1017,8 +1017,8 @@ class SdlInterfaceTests(unittest.TestCase):
     def test_child_reparent_or_uid_change_rejected(self):
         self.begin(); self.spawn()
         original = self.adapter._proc_info
-        def different_parent(pid):
-            info = original(pid)
+        def different_parent(pid, **kwargs):
+            info = original(pid, **kwargs)
             if pid == self.child.pid: info['parent'] += 1
             return info
         with patch.object(self.adapter, '_proc_info', different_parent):
@@ -1050,8 +1050,8 @@ class SdlInterfaceTests(unittest.TestCase):
     def test_owner_start_identity_change_fails_before_bind(self):
         self.begin(); self.spawn()
         original = self.adapter._proc_info
-        def reused(pid):
-            info = original(pid)
+        def reused(pid, **kwargs):
+            info = original(pid, **kwargs)
             if pid == self.os.getpid(): info['start'] += 1
             return info
         with patch.object(self.adapter, '_proc_info', reused):
@@ -1088,8 +1088,8 @@ class SdlInterfaceTests(unittest.TestCase):
     def test_child_effective_uid_changed_rejected(self):
         self.begin(); self.spawn()
         original = self.adapter._proc_info
-        def different_uid(pid):
-            info = original(pid)
+        def different_uid(pid, **kwargs):
+            info = original(pid, **kwargs)
             if pid == self.child.pid: info['uid'] += 1
             return info
         with patch.object(self.adapter, '_proc_info', different_uid):

@@ -495,6 +495,7 @@ class PlacementDiagnosticTests(unittest.TestCase):
                 return reply_handler(value)
             self.f.patch(self.f.bus, 'GetConnectionCredentials', credentials)
         elif fault == 'kwin_proc_permission':
+            self.denied_exe_lookups = []
             original = self.f.bus.GetConnectionCredentials
             calls = 0
             inode = self.f.adapter._inode
@@ -503,7 +504,9 @@ class PlacementDiagnosticTests(unittest.TestCase):
                 calls += 1
                 if calls == 3:
                     def denied(path):
-                        if path == '/proc/' + str(self.f.os.getpid()) + '/exe': return private_error()
+                        if path == '/proc/' + str(self.f.os.getpid()) + '/exe':
+                            self.denied_exe_lookups.append(path)
+                            return private_error()
                         return inode(path)
                     self.f.patch(self.f.adapter, '_inode', denied)
                 return original(name, **kw)
@@ -525,8 +528,8 @@ class PlacementDiagnosticTests(unittest.TestCase):
             meta[key] -= 1
         elif fault == 'child_proc':
             original = self.f.adapter._proc_info
-            self.f.patch(self.f.adapter, '_proc_info', lambda pid:
-                private_error() if pid == self.f.child.pid else original(pid))
+            self.f.patch(self.f.adapter, '_proc_info', lambda pid, **kwargs:
+                private_error() if pid == self.f.child.pid else original(pid, **kwargs))
         elif fault == 'stdout_open':
             original = self.f.os.open
             self.f.patch(self.f.os, 'open', lambda path, *a, **kw:
@@ -580,6 +583,19 @@ class PlacementDiagnosticTests(unittest.TestCase):
         self.assertEqual(c['terminal'], result)
         self.assertEqual(self.log.getvalue().count('stage='), 1)
 
+    def test_kwin_exe_denial_does_not_block_real_wayland_authorization_or_placement(self):
+        self.inject('kwin_proc_permission')
+        self.assertEqual(self.submit()['placement'], 'pending')
+        request = PlacementTests.claim(self)
+        payload = PlacementTests.verification(self, request)
+        self.b.Complete(request['id'], 'VERIFY', json.dumps(payload), sender=':1.kwin')
+        self.observe(geometry=dict(x=25, y=35, width=800, height=600), desktops=[3])
+        result = json.loads(self.b.PollSdlPlacement(request['id'], sender=self.sender))
+        self.assertEqual(result['placement'], 'succeeded')
+        self.assertEqual(result['window_uuid'], WINDOW_ID)
+        self.assertEqual(self.denied_exe_lookups, [])
+        self.assertEqual(self.log.getvalue(), '')
+
     def test_missing_auth_callback_expires_and_late_fd_is_discarded(self):
         self.f.bus.auto = False
         self.submit(); self.f.clock += 2; self.f.loop.tick()
@@ -620,7 +636,6 @@ for _index, _key in ((1, 'operator'), (2, 'launch_owner'), (3, 'kwin_identity'))
         setattr(PlacementDiagnosticTests, 'test_credentials_' + str(_index) + '_' + _kind,
             placement_diagnostic_case('credentials_' + str(_index) + '_' + _kind, _key + '_credentials_' + _kind))
 for _fault, _stage in (
-        ('kwin_proc_permission', 'kwin_identity_credentials_verify'),
         ('revision', 'revision_recheck'), ('record', 'record_recheck'),
         ('owner_name', 'kwin_owner_name'), ('owner_request', 'kwin_owner_request'), ('owner_reply', 'kwin_owner_reply'),
         ('owner_pid', 'launcher_pid_recheck'), ('owner_start', 'launcher_start_recheck'),

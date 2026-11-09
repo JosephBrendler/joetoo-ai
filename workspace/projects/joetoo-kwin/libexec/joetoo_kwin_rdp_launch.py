@@ -193,15 +193,23 @@ def _exited(fd):
     return bool(poller.poll(0))
 
 
-def _proc_info(pid):
+def _proc_info(pid, *, include_executable=True):
+    """Read process metadata; executable evidence remains required by default.
+
+    D-Bus caller identity uses its supplied pidfd, UID and start time. Reading
+    an unused exe symlink can fail for KWin Wayland under /proc access policy.
+    SDL child validators still require that lookup and propagate its errors.
+    """
     base = '/proc/' + str(pid)
     with open(base + '/stat', 'rb') as stream:
         raw = stream.read(8193)
     if len(raw) > 8192:
         raise ValueError('Invalid process identity')
     fields = raw.rsplit(b')', 1)[1].split()
-    return dict(parent=int(fields[1]), start=int(fields[19]),
-                uid=os.stat(base).st_uid, exe=_inode(base + '/exe'))
+    info = dict(parent=int(fields[1]), start=int(fields[19]), uid=os.stat(base).st_uid)
+    if include_executable:
+        info['exe'] = _inode(base + '/exe')
+    return info
 
 
 def _inode(path):
@@ -244,7 +252,7 @@ class CallerIdentity:
             self.pid = int(credentials['ProcessID'])
             if self.pid <= 0 or _pidfd_pid(self.fd) != self.pid or _exited(self.fd):
                 raise ValueError('Caller process identity rejected')
-            info = _proc_info(self.pid)
+            info = _proc_info(self.pid, include_executable=False)
             self.start = info['start']
             if info['uid'] != os.geteuid() or not self.alive():
                 raise ValueError('Caller process identity rejected')
@@ -256,7 +264,7 @@ class CallerIdentity:
         try:
             if self.fd is None or _exited(self.fd):
                 return False
-            info = _proc_info(self.pid)
+            info = _proc_info(self.pid, include_executable=False)
             return (info['start'] == self.start and info['uid'] == os.geteuid()
                     and not _exited(self.fd))
         except (OSError, ValueError, IndexError):
