@@ -1,65 +1,29 @@
-## Deferred decision — interactive authentication, placement and multiwindow scheduling
+# Interactive authentication, placement and multiwindow scheduling — decided baseline
 
-**Decision status:** OPEN. This is a forward-looking dependency for §5A
-**Increment 3 (controlled placement)** and **Increment 4 (configured `-o` workflow)**,
-with security/time-limit verification in **Increment 5**. It does not broaden
-Increment 2 or authorize new implementation/native tests. Consider a plan with,
-for example, four RDP and two VNC connections spread among many desktops.
+**Status:** The **initial orchestration strategy is ACCEPTED** by the maintainer as of 2026-11-08; advanced prompt staging and concurrent/queued scheduling remain deliberately **deferred**. The historical filename reflects where the question originated in Increment 2, not its present decision status. See [decision rationale](step1.5c5d-increment3-strategy-decision.md) and [scope](Step1.5c5_implementation_scope.md).
 
-**Distinct stages and window identities:** An SDL FreeRDP client-side NLA/credential
-dialog may precede creation of the persistent viewer; it must not be adopted as
-a managed desktop viewer merely to allow placement. A GDM login greeter is
-remote content *inside* the viewer after RDP transport/session negotiation, not
-the same local window as the SDL credentials dialog. VNC and SSH authentication
-must be analyzed under their actual, separate client process/window contracts.
-A noninteractive X11 viewer-role selector (Increment 2 Candidate A) eliminates
-only a *post-viewer-creation interaction requirement*; it does not eliminate
-human authentication that occurs before that viewer exists.
+## Accepted baseline: serialized, human-interactive launch
 
-**Future workflow choice requiring maintainer approval:**
+A configured `-o` launch plan proceeds through its windows sequentially, one positively owned registration/placement operation at a time. Remote authentication is an interactive part of a launch and **may take several minutes or longer**. The program must not automatically terminate an owned viewer or tunnel solely because the operator has not answered a password/NLA/host-key dialog within an arbitrary finite human-wait deadline. An operator can explicitly cancel; an actual client/transport exit, expired remote server session or loss of proven ownership is distinct and must be handled honestly. The configured plan may remain paused awaiting the human rather than opening all later windows concurrently. Its progress, pending request/target, cancel path and partial-completion reporting must remain intelligible.
 
-- **Staged prompts at launch desktop:** Keep pending NLA/VNC authentication
-  dialogs accessible near the launch console. Provide an explicit per-target,
-  per-request status/identity mapping and discoverable prompt labeling without
-  exposing passwords or conflating a temporary dialog with a registered viewer.
-- **Temporary prompt placement:** Consider placing an independently identified
-  *unregistered* authentication dialog at its intended desktop, with an explicit
-  temporary lifecycle/ownership/cleanup contract. This is **not** placement of
-  a registered SDL viewer and cannot rely on a fake managed UUID or class/title
-  guess. A dialog need not exist before its launch request reaches authentication.
-- **Mixed strategy:** Stage prompts near the operator during authentication,
-  then release exact registered persistent viewer windows for later placement,
-  subject to separately approved placement/readiness rules. No automatic
-  movement or operator-focus stealing is implied.
+Human waiting must not convert mechanical safety checks into unbounded operations. D-Bus calls, UUID proof after the correct viewer exists, broker placement, cancellation and owned cleanup still use separately justified bounded timeouts. The implementation must not label unverified remote usability as successful merely because the local viewer was registered or placed. Do not conflate source/owner ambiguity with a normal interactive wait.
 
-**Uninterrupted plan execution:** Decide whether a pending interactive RDP/VNC
-connection may coexist with continued launching of unrelated plan entries,
-including later desktops. A sequential `-o` that waits for credentials or for
-post-viewer user activity could suspend a 40-window plan. An asynchronous
-or staged plan must still respect the current broker's single active
-registration/correlation transaction, per-slot reservation, launcher lock
-lifetime and bounded cleanup; concurrency cannot be assumed from the word
-“asynchronous.” Define explicit pending, failed, expired and registered
-outcomes and how a pending entry is resumed, skipped or cancelled without
-blocking unrelated launches or falsely declaring success. This is an Increment
-4 design concern, dependent on any necessary Increment 3 window-handling rules.
+**Existing known gap, to be addressed during Increment 4 integration (not already implemented):** current development RDP launcher has a 120 s pre-registration deadline; current VNC supervisor has a 10 s SSH startup and 120 s viewer-ready deadline. A fixed deadline can cancel the owned process while a human is entering credentials. Increment 4 must distinguish demonstrable human-wait state from technical failure while preserving safe resource and transaction ownership. If an interactive prompt cannot be identified reliably, no unbounded unknown state or unsafe adoption is permitted: return a precise blocker for maintainer design review. The decision does not imply that GRD, GDM or VNC servers permit indefinite inactivity.
 
-**Timeout/idle questions — must be measured or sourced; no timeout presumed:**
+## Distinct lifecycle states
 
-1. Local FreeRDP/SDL NLA credential-dialog idle behavior and any RDP server
-   pre-authentication timeout (including failures/cancellation while unattended).
-2. System GNOME Remote Desktop handover/authentication timeouts, *distinct* from
-   any GDM greeter idle lifetime after the viewer reaches GDM.
-3. Whether GDM/GRD closes, locks or retains the pre-login or logged-in session
-   when left unattended across many virtual desktops; behavior on reconnect,
-   disconnect and network failure, with server/version specificity.
-4. TigerVNC/SSH or other selected VNC client's authentication prompt and
-   connection idle behavior, independently of RDP.
-5. How these limits interact with configurable per-registration, per-launch and
-   whole-plan budgets without hiding stalled, vanished or expired prompts.
+1. A configured request reserves its intended desktop/slot and records its target/request identity without credentials in config, argv, public logs or registry.
+2. Local client NLA, VNC or SSH authentication may precede creation of the persistent viewer. Such a dialog is **not** the registered desktop viewer.
+3. The genuine persistent viewer is identified by complete per-client, per-backend identity/ownership evidence and exact KWin UUID. For RDP, native Wayland and legacy X11 use their individually accepted correlation rules. Registration itself is not remote login success.
+4. **Increment 3:** the operator can explicitly release that positively registered RDP UUID to verified desktop/slot/geometry placement, without auto focus/stack or inferred remote readiness.
+5. **Increment 4:** the configured serial launch continues on a genuine terminal registration/placement result, operator cancellation or correctly classified failure; no skipped ambiguous ownership or automatic reassignment.
 
-Any future native timeout characterization requires its own maintainer-approved
-non-destructive procedure. Do not infer unlimited GDM idle life or a specific
-NLA/GDM cutoff from earlier successful sessions, and do not use automatic
-credential entry, password persistence or certificate exceptions as a workaround.
+A remote GNOME GDM screen appears *inside* the already existing persistent RDP viewer after RDP transport/session negotiation. It is distinct from the earlier local NLA dialog. VNC/SSH prompt handling must be evaluated from their own actual client contracts.
 
+## Deferred optimization options and necessary evidence
+
+Staging multiple independently identified NLA/VNC dialogs on a launch-control desktop, providing readable target labels/cascading geometry, continuing local windows around remote requests, and scheduling several pending remote authentications are **not** in the first serial implementation. Any later proposal must measure operator/launch latency; prove temporary-prompt ownership; preserve current single active broker registration/correlation transaction, per-slot reservations and launcher lock; and define pending, failed, cancelled, expired and registered semantics without silent replacement or focus stealing. See [strategy decision](step1.5c5d-increment3-strategy-decision.md).
+
+Server-specific behavior remains an external constraint to characterize in later native verification: SDL FreeRDP local NLA prompt idle behavior; GRD pre-authentication and redirection timeouts; GDM remote-login/locked-session idle behavior; and TigerVNC/SSH interactive prompts and transport failures. No unlimited server idle lifetime is asserted. Never introduce password injection, credential persistence, insecure certificate exceptions or bypass of SSH host-key policy as a workaround.
+
+This document is a recorded engineering decision, **not** new implementation/native-test authorization.

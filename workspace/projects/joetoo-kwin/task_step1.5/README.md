@@ -1,100 +1,79 @@
 # Step 1.5 — Task history, decisions and verification index
 
-This is the *historical task record*, not the current execution authority.
-For current branch/actor/approval, consult [HANDOFF](HANDOFF.md); for current
-requirements/tests, [Step 1.5c.5 scope](Step1.5c5_implementation_scope.md);
-for product design, [architecture](../ARCHITECTURE.md); and for RDP technical
-findings, [remote-desktop research](README_remote_desktop_research.md).
+This is the **historical task record**, not execution authority. For current actor/scope/approval see [HANDOFF](HANDOFF.md), for engineering requirements see [Step 1.5c.5 scope](Step1.5c5_implementation_scope.md), and for architecture see [project ARCHITECTURE](../ARCHITECTURE.md). Source, records and tests described below remain separate from authorization to act.
 
 ## Accepted increment outcomes
 
-| Increment | Accepted outcome / present limitation | Primary evidence |
+| Increment | Accepted outcome / limitation | Primary evidence |
 | --- | --- | --- |
 | 1.5a–b | Configured planning and interactive forms, preserving existing session behavior | [Project README](../README.md) and historical HANDOFF |
-| 1.5c.1–c.3 | Confirmed launch planning, safe managed registration, original local Bash/SSH continuity | [Project README](../README.md) and historical HANDOFF |
-| 1.5c.4 | Desktop capacity, local Dolphin, layers, grouped layout, initial stacking/focus and XDG discovery accepted on KWin X11/Wayland | [Native acceptance](step1.5c4-native-acceptance.md), [review](step1.5c4-review.md) |
-| 1.5c.5a | Dolphin SFTP and non-enforcing name-resolution/TCP advisories accepted; remote use and placement independently assessed | [SFTP acceptance](step1.5c5a-native-acceptance.md), [URI/security contract](step1.5c5a-dolphin-sftp-contract.md) |
-| 1.5c.5b | TigerVNC-over-authenticated-SSH accepted; positive X11/Wayland/XWayland viewer UUID placement and owned-tunnel teardown | [Project README](../README.md), historical HANDOFF |
-| 1.5c.5c | Affirmative RDP feasibility accepted; SDL3 FreeRDP chosen **first by implementation order**, not as default; TigerVNC remains an independently supported peer | [PR #28](https://github.com/JosephBrendler/joetoo-ai/pull/28), [research](README_remote_desktop_research.md) |
-| 1.5c.5d | **Increment 1 native-Wayland registration accepted**. Native X11 `auto` managed registration demonstrated without placement, including correct post-close UUID retention; 644 Python and 145 JavaScript regressions passed. Current candidate accepted for further development; Increment 2 closeout awaits the managed `software` native check. Controlled placement is the next code increment. | [Native X11 registration evidence](step1.5c5d-increment2-native-x11-registration-2026-11-08.md), [current HANDOFF](HANDOFF.md) |
+| 1.5c.1–c.3 | Confirmed launch planning, safe managed registration, original local Bash/SSH continuity | [Project README](../README.md), historical HANDOFF |
+| 1.5c.4 | Desktop capacity, local Dolphin, layers, grouping and bounded initial stack/focus accepted on native X11/Wayland | [Native acceptance](step1.5c4-native-acceptance.md), [review](step1.5c4-review.md) |
+| 1.5c.5a | Dolphin SFTP, independent connectivity advisories and safe managed placement accepted | [SFTP acceptance](step1.5c5a-native-acceptance.md) |
+| 1.5c.5b | TigerVNC over owned authenticated SSH tunnel, exact viewer UUID placement and tunnel teardown accepted | [Project README](../README.md), historical HANDOFF |
+| 1.5c.5c | Affirmative RDP feasibility; SDL3 FreeRDP chosen **first by implementation order**, not as default over TigerVNC | [PR #28](https://github.com/JosephBrendler/joetoo-ai/pull/28), [research](README_remote_desktop_research.md) |
+| 1.5c.5d / Increment 1 | **ACCEPTED**: native-Wayland SDL registration-only, no placement | [Native-Wayland evidence](step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md) |
+| 1.5c.5d / Increment 2 | **ACCEPTED (2026-11-08)**: native-KWin-X11 stock SDL registration-only with `auto` and `software`; same exact UUID retained when closed; 644 Python and 145 JavaScript regressions passed on the implementation baseline. The 500 ms X11 persistence heuristic has a known counterexample; no automatic placement or general production-RDP security acceptance. | [Native X11 registration evidence, including `software` closeout](step1.5c5d-increment2-native-x11-registration-2026-11-08.md) |
+| 1.5c.5d / Increment 3 | **NEXT IMPLEMENTATION INCREMENT**: explicit operator-controlled placement of a positively registered SDL RDP viewer; not yet implemented or natively accepted | [Active HANDOFF](HANDOFF.md), [Codex assignment](Codex-Increment3-RDP-Placement.md) |
 
-## Recent Step 1.5c.5d / Increment 2 decisions (2026-11-08)
+## Increment 2 closeout: what was actually observed
 
-Increment 1 native-Wayland SDL registration remains **ACCEPTED**. The native-X11 A2 patched-client path was abandoned. The renderer/identity decisions are now implemented for an explicit native-X11 profile: `auto` is the default renderer, `software` is an independently configurable alternative, and one user-adjustable 500 ms X11 UUID persistence selector operates in either mode. The Nov 8 diagnostic software/auto renderer comparisons are documented separately.
+The native-X11 A2 patched-FreeRDP alternative was abandoned. The current stock-client legacy X11 profile is `sdl-x11-a1c-v1`, offering child-local `rdp_x11_renderer=auto|software` (auto default) and shared configured `rdp_x11_identity_settle_ms` (tested at 500 ms). The environment-guard error caused by an OpenRC `XDG_SESSION_TYPE=tty` label was corrected without falsely claiming the desktop backend was X11; the actual SDL child/backend still must be proven.
 
-On 2026-11-08, the maintainer installed the current X11 registration candidate through the established user OpenRC workflow, ran **644 Python** and **145 JavaScript** passing tests, and demonstrated native `auto` managed-registration **without placement**. One console-captured run registered an exact KWin UUID and displayed GDM followed by a usable GNOME desktop. A second run independently showed `win-001` **present** with `placement=not_requested`, an `IDLE` placement transaction and one successful registration; after titlebar closure the *same KWin UUID* remained registered with `presence=missing`, with no adoption of a successor. See [native X11 registration evidence, including sanitized source output](step1.5c5d-increment2-native-x11-registration-2026-11-08.md).
+On `gmki91` native Plasma X11, managed `auto` registered a correlated KWin UUID, showed usable remote GNOME content and, in a second launch, retained the same `win-001`/UUID after close with `presence=missing`, no successor adoption. The maintainer reported the full project command `./tools/restart_joetoo-kwind test` PASS with **644 Python** and **145 JavaScript** tests, successful update/check and introspectable SDL D-Bus interfaces.
 
-The maintainer **accepts the current code candidate and this initial native `auto` result for forward development**, not as blanket production RDP approval. Increment 2 full closure remains pending a comparable managed-native `software` test. The next authorized Codex task is a *bounded implementation* of explicit operator-approved controlled placement of an already registered viewer, under the current [HANDOFF](HANDOFF.md) and a separate prompt. No automatic readiness inference, configured `-o -f`, upstream client patch, or native operation by Codex is authorized.
+The subsequent **managed** `software` renderer test (not merely the earlier diagnostic `software` trial) connected to `opi6plus01.brendler` on `gmki91`, registered `win-001`, child PID `2640147`, UUID `be27f183-c8a2-4772-a802-1cc5e2fb2f30` with `placement=not_requested`, live `presence=present`, `succeeded=1`, `failed=0`. After titlebar-X closure, `GetManaged` retained **the same UUID** with `presence=missing`, `RegistryStatus` synchronized, one missing managed window, idle placement transaction and no failed/ambiguous/timed-out requests. The launcher `child_exit` terminal output was not provided, so no exit-code claim is made. The maintainer accepted Increment 2 on this evidence. See the [full combined evidence record](step1.5c5d-increment2-native-x11-registration-2026-11-08.md).
+
+**Residual risk remains accepted and explicit:** a marked temporary X11 viewer surviving 600 ms can be registered at the 500 ms eligibility threshold. A replacement UUID must never be silently enrolled. X11 selection remains best effort, not proof of renderer handover. Registration proves neither TLS/NLA authenticity nor GDM/remote usability; manually repositioned test windows do not constitute broker-managed placement.
+
+## Accepted serial workflow design (2026-11-08)
+
+The maintainer selected a **straightforward, sequential, human-interactive** RDP/VNC mixed launch plan for the first complete configured `-o` implementation. One owned registration/placement result resolves before the next plan entry. An operator may take several minutes or longer to respond to NLA/VNC/SSH prompts. **Human inactivity must not by itself trip a fixed automated timeout that kills the client or owned tunnel.** Technically bounded D-Bus, UUID registration and placement, safe cancellation/cleanup and fail-closed ownership remain mandatory; actual server-side timeout remains outside our control.
+
+This choice follows the already stated architecture: **Increment 3** exact-UUID operator-controlled RDP placement; **Increment 4** configured sequential mixed `-o` integration and correct human-wait handling; **Increment 5** RDP security/native closure; **Step 1.5d** broad integrated regression and `-L`/`-l`; **Phase 2** optional throughput optimization if measurement justifies queueing, prompt staging or concurrency. This sequencing is a decided product strategy, **not proof** that Increment 3/4 code already implements it.
+
+Current RDP and VNC supervisors have pre-registration/readiness deadlines that can expire during human authentication; those are a known Increment 4 correctness gap, not a failure of Increment 2's completed registration tests. See [strategy decision](step1.5c5d-increment3-strategy-decision.md) and [interactive-authentication decision](increment2-deferred-authentication-workflow-section.md). The superseded `step1.5c5d_DRAFT_Increment_3_strategies` and `DRAFT_Codex-Next-Operator-Controlled-RDP-Placement.md` are not current task instructions.
 
 ## Historical authorization chronology
 
-Earlier SFTP, VNC and RDP-feasibility permissions were specific to their
-historical stages; they confer **no current authority**. The complete original
-approvals, restrictions, dated outcomes and agent observations remain in
-[the committed full-length HANDOFF at the migration baseline](https://github.com/JosephBrendler/joetoo-ai/blob/8f01b6859b3242333ffaa46c931629813921539b/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md).
-Its Git history retains earlier revisions. The active HANDOFF supersedes all
-prior execution instructions.
+Prior SFTP, VNC and RDP feasibility permissions were specific to those historical stages; they confer no current authority. The [committed long-form historical HANDOFF](https://github.com/JosephBrendler/joetoo-ai/blob/8f01b6859b3242333ffaa46c931629813921539b/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md) retains earlier approvals, constraints and iterations. Its historical instructions do not replace the [active HANDOFF](HANDOFF.md).
 
-- **2026-10-29–30:** Step 1.5a/b refinements and Step 1.5c planning and first
-  broker/CLI integration, verified through focused and native tests.
-- **2026-10-31–11-01:** Step 1.5c.4 graphical-layout enhancements, regression,
-  native acceptance and review. Step 1.5c.5 SFTP planned and implemented.
-- **2026-11-02–03:** TigerVNC over SSH contract, managed viewer/tunnel
-  integration and native X11/Wayland validation; installer archive/backup
-  housekeeping. RDP feasibility investigation approved and commenced.
-- **2026-11-03–05:** GNOME Remote Login interoperability; KRDC, Remmina and
-  FreeRDP comparison; SDL lifecycle evidence from X11 and native Wayland;
-  subsequent negative-path and coexistence proofs.
-- **2026-11-05–06:** RDP feasibility closed affirmatively and merged via PR #28;
-  Step 1.5c.5d planned and a native-Wayland registration-only Increment 1
-  separately authorized. See the current dispatcher for its approval boundaries.
-- **2026-11-07–08:** Increment 1 native-Wayland registration-only accepted;
-  X11 A2 source modification abandoned; A1/C scope adopted. Gate F feasibility
-  accepted and one software-renderer native A1 comparison recorded with
-  retained private archives. Default/OpenGL diagnostic comparison and
-  actual managed native-X11 `auto` registration then succeeded, including
-  after-close UUID retention; placement development was authorized separately.
+- **2026-10-29–30:** Step 1.5a/b forms and Step 1.5c broker/CLI coordination, verification and native acceptance.
+- **2026-10-31–11-01:** Step 1.5c.4 layout/layers/desktop support, regression and native closeout.
+- **2026-11-02–03:** SFTP and TigerVNC-over-SSH identity, owned tunnel, X11/Wayland placement/teardown and installer backup review.
+- **2026-11-03–05:** GNOME Remote Login interoperability; KRDC, Remmina and FreeRDP evaluation; SDL X11/native-Wayland lifecycle feasibility.
+- **2026-11-05–06:** RDP feasibility closed in PR #28; 1.5c.5d design, accepted native-Wayland registration-only Increment 1.
+- **2026-11-07–08:** X11 A2 patched client abandoned; stock-client A1/C renderer/identity implementation. Native `auto` registration success, headless full suite PASS, then managed-native `software` registration and same-UUID post-close evidence. **Increment 2 accepted.** Sequential human-interactive baseline and Increment 3/4 sequencing approved.
 
 ## Historical iteration index
 
-The former HANDOFF includes **Codex iterations 0–45** and **cloud iterations
-C1–C24** on the verified published snapshot, with extensive detailed
-transcripts. This is a compact navigation index, not a verbatim copy of each
-row; use the [original committed HANDOFF](https://github.com/JosephBrendler/joetoo-ai/blob/8f01b6859b3242333ffaa46c931629813921539b/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md#5-agent-owned-iteration-record)
-for exact row content, commands, tests, hashes and provenance. Later uncommitted
-Codex iterations must be reconciled before migration is accepted.
+The original historical HANDOFF records **Codex iterations 0–45** and **cloud iterations C1–C24**. This index is for navigation, not independent implementation authority.
 
-| Iterations | Main work thread |
+| Iterations | Primary work |
 | --- | --- |
-| 0–9, C1–C6 | 1.5a/b, forms, AAR/reporting, test review and native acceptance |
-| 10–12, C7–C14 | 1.5c broker/CLI planning, public-interface, ownership and slot reviews |
-| 13–19, C15–C22 | 1.5c.4 KWin layers, desktop groups, focus and acceptance |
-| 20–24, C23–C24 | 1.5c.5 SFTP scope, implementation, advisory and native closure |
-| 25–33 | TigerVNC-over-SSH identity, tunnel integration, installer and historical backup disposition |
-| 34–36 | RDP server/client feasibility, PKI review, GNOME Remote Login native evidence |
-| 37–40 | SDL diagnostic runner, X11 lifecycle, native-Wayland identity contract |
-| 41–44 | Native-Wayland and X11 evidence correlation, negative/coexistence cases |
-| 45 | Coordinated 1.5c.5c closeout and 1.5c.5d documentation planning |
+| 0–9, C1–C6 | 1.5a/b forms, reports, reviews and native acceptance |
+| 10–12, C7–C14 | 1.5c broker/CLI orchestration and ownership/slot contracts |
+| 13–19, C15–C22 | 1.5c.4 layers, grouping, initial stacking/focus and acceptance |
+| 20–24, C23–C24 | SFTP contract, implementation and native closeout |
+| 25–33 | TigerVNC over SSH identity, tunnel and installer/backup disposition |
+| 34–36 | RDP/GRD feasibility, PKI and native evidence |
+| 37–40 | SDL diagnostics, X11 lifecycle and Wayland identity |
+| 41–44 | Native Wayland/X11 correlations, failures and coexistence |
+| 45 | 1.5c.5c closeout and 1.5c.5d planning |
 
-## Detailed evidence index
+## Focused evidence and navigation
 
-- [2026-11-08 native X11 `auto` managed registration — two successful launches, 644 Python/145 JavaScript tests, full sanitized before/after registry transcript](step1.5c5d-increment2-native-x11-registration-2026-11-08.md)
-- [2026-11-08 default/OpenGL renderer native feasibility and observed 22 ms marked predecessor](step1.5c5d-a1-auto-renderer-native-evidence-2026-11-08.md)
-- [2026-11-08 A1 software-renderer native feasibility — complete transcript, stage timestamps, archive hashes, UUID/XID correlation](step1.5c5d-a1-software-renderer-native-evidence-2026-11-08.md)
-- [Active A1/C X11 draft design and stage gates](step1.5c5d-sdl-x11-a1c-contract-addendum-DRAFT.md)
-- [Remote Desktop research, comparison and SDL identity](README_remote_desktop_research.md)
-- [GNOME Remote Desktop original study](README_gnome_remote_desktop.md)
-- [Step 1.5c.4 native acceptance](step1.5c4-native-acceptance.md)
-- [Step 1.5c.5a SFTP native acceptance](step1.5c5a-native-acceptance.md)
-- [Step 1.5c.5a SFTP contract](step1.5c5a-dolphin-sftp-contract.md)
-- [Step 1.5c.5 implementation scope](Step1.5c5_implementation_scope.md)
-- [Historical source, all iteration rows](https://github.com/JosephBrendler/joetoo-ai/blob/8f01b6859b3242333ffaa46c931629813921539b/workspace/projects/joetoo-kwin/task_step1.5/HANDOFF.md)
+- [Increment 2 X11 `auto` + `software` full registration/lifecycle evidence](step1.5c5d-increment2-native-x11-registration-2026-11-08.md)
+- [Increment 1 native-Wayland acceptance](step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md)
+- [X11 default/OpenGL feasibility](step1.5c5d-a1-auto-renderer-native-evidence-2026-11-08.md)
+- [X11 software diagnostic feasibility](step1.5c5d-a1-software-renderer-native-evidence-2026-11-08.md)
+- [X11 A1/C draft design](step1.5c5d-sdl-x11-a1c-contract-addendum-DRAFT.md)
+- [Remote Desktop research](README_remote_desktop_research.md) and [GNOME study](README_gnome_remote_desktop.md)
+- [RDP private PKI / GRD system Remote Login evidence](step1.5c5d-gnome-remote-login-pki-evidence-2026-11-07.md)
+- [1.5c.4 native acceptance](step1.5c4-native-acceptance.md); [SFTP native acceptance](step1.5c5a-native-acceptance.md)
+- [1.5c.5 implementation scope](Step1.5c5_implementation_scope.md); [project architecture](../ARCHITECTURE.md)
+- [Accepted Increment 3/4 sequencing](step1.5c5d-increment3-strategy-decision.md)
 
-## Recording subsequent progress
+## Record policy
 
-Record only material task results, acceptance decisions, and links to precise
-review evidence. A full detailed technical report belongs in an authorized
-focused evidence record or the actor's response. The live HANDOFF retains only
-the latest actionable status, source-availability location and next actor;
-no duplicate iterative table belongs in that file. Do not present uncommitted
-work as already retrievable from GitHub.
+This README reports accepted outcomes and durable engineering decisions. HANDOFF stays short and actionable. Evidence records support observations; pending Codex work is described as planned until it has actually been implemented, tested, reviewed and accepted. No future collaborator is asked to redo already settled acceptance or strategy decisions.
