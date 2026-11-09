@@ -1,0 +1,141 @@
+I agree with both disconnects. More importantly, I think you've identified a design issue that we should resolve before sending Codex into Increment 3.
+
+My earlier recommendation was premature: I treated placement of an already registered viewer as the next isolated implementation task, without sufficiently accounting for what happens before that viewer exists, particularly during a long, mixed RDP/VNC/Konsole/Dolphin launch sequence.
+
+I've reread the newly pushed documents on branch `task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`, now at commit `24fe5cde2f322d37868a5a009671fb21bf5b6603`.
+
+## Disconnect 1: Increment 2 isn't quite finished
+
+The state is straightforward.
+
+| Increment 2 requirement                 | Status                                  |
+| --------------------------------------- | --------------------------------------- |
+| Native Wayland registration             | Accepted                                |
+| Native X11 registration with `auto`     | Successfully tested; candidate accepted |
+| Exact UUID retained after closure       | Successfully tested                     |
+| 644 Python / 145 JavaScript regressions | Passed                                  |
+| Native X11 registration with `software` | Still needs one managed test            |
+
+The earlier software-renderer experiment demonstrated feasibility, but it used the diagnostic launcher, not the new managed-registration implementation.
+
+My recommendation is to finish this one remaining native test and formally accept Increment 2 before moving on. There is no need for another Codex implementation round to do that.
+
+Use the same successful launch procedure, change only the renderer option to `software`, and choose a free desktop/slot. Capture `GetManaged` and `RegistryStatus` while the viewer is present and after closing it. Also record the foreground launcher's final result.
+
+If it passes, I'd support closing Increment 2 with the existing documented qualification that the 500 ms selector is a best-effort heuristic, not an infallible viewer-role detector.
+
+## Disconnect 2: Increment 3 needs a broader design
+
+This is the more consequential issue.
+
+The current HANDOFF authorizes Codex to implement operator-confirmed placement of an already registered viewer.
+
+But the existing `increment2-deferred-authentication-workflow-section.md` correctly identifies an upstream problem: the authentication dialog may exist before the persistent viewer is created, and an interactive prompt can interrupt a long launch plan.
+
+You're now proposing a more complete workflow. I think that's the right direction.
+
+### Think of a remote viewer launch as a lifecycle
+
+Configured launch request
+
+Reserve intended desktop and slot; associate target and request
+
+Authentication pending
+
+Show an identifiable NLA/VNC prompt on the launch-control desktop, if independently verifiable
+
+Authentication completed
+
+The client progresses toward opening its persistent viewer
+
+Viewer positively registered
+
+Broker establishes exact UUID; no substitution or inferred remote-login success
+
+Viewer placement
+
+Move the same UUID to its reserved desktop/slot under the agreed release policy
+
+This lifecycle naturally separates three things that our current draft tends to conflate: authentication prompt management, positive viewer registration, and eventual viewer placement.
+
+It also raises a fourth issue: what happens to the remaining launch plan while authentication is pending?
+
+That's a fundamental orchestration question, not a cosmetic placement detail.
+
+## Your proposed launch-control desktop
+
+I favor exploring your idea of a dedicated location for outstanding authentication prompts.
+
+Imagine a configured plan involving 40 windows, with several RDP and VNC sessions interspersed among ordinary local launches.
+
+One promising strategy is:
+
+- Every remote launch receives a stable request identity and reserved destination.
+- Authentication prompts, when they exist as independently identifiable local windows, are staged on a designated control desktop, potentially with cascading geometry and a readable target association.
+- The remaining launch plan can continue instead of waiting indefinitely for each password.
+- When authentication completes and the persistent viewer is positively registered, that viewer becomes eligible for placement at its reserved destination.
+- Failed, abandoned and timed-out connections remain explicit pending/failed entries, rather than silently disappearing or falsely succeeding.
+
+The important detail is how we identify and label authentication prompts safely.
+
+We cannot simply assume an SDL FreeRDP NLA dialog or TigerVNC password prompt always exposes a separately manageable KWin window, or that its title can safely be replaced. Those are implementation facts we need to establish from the existing code and observed behavior.
+
+If a native dialog's title cannot be safely controlled, a companion status interface bearing the target's identity could provide that association instead.
+
+Also, GNOME's GDM greeter is remote content inside the RDP viewer. It should not be confused with the earlier local NLA dialog.
+
+## Three strategies worth comparing
+
+| Strategy                                              | Benefit                                                       | Trade-off                                                     |
+| ----------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
+| Sequential authentication                             | Simple, existing behavior is easier to preserve               | A single unattended password prompt can block an entire plan  |
+| Launch everything, stage pending prompts              | Supports many outstanding connections and continued launching | Requires concurrency, prompt identity and lifetime control    |
+| Queue remote launches while continuing local launches | Better bounded concurrency; simpler initial implementation    | Remote sessions may become available later than local windows |
+
+I currently favor the third as an initial engineering step, evolving toward the second where justified.
+
+That is a recommendation, not an accepted architecture decision.
+
+The current broker has constraints around active registration transactions. We cannot assume that several simultaneous RDP authentication windows can be launched and supervised safely simply because we want them to coexist. The launch-plan state machine and broker ownership rules must account for that.
+
+The question of whether the viewer should move immediately upon verified registration, or wait for an operator's explicit release, is another decision we should settle within this larger design.
+
+## What should happen next?
+
+I'd change our sequence:
+
+1. You finish Increment 2 with the managed `software` renderer test, then formally accept it if the results support acceptance.
+2. We refine Increment 3's requirements, considering RDP and VNC together: prompt staging, target labeling, launch-control desktop, eventual viewer placement, and which operations may continue while authentication is pending.
+3. We then issue a revised Codex implementation prompt, scoped to a useful first vertical slice of the accepted workflow—not merely an isolated manual placement command.
+
+The current `DRAFT_Codex-Next-Operator-Controlled-RDP-Placement.md` should remain a draft. We should not issue it as written.
+
+Likewise, the active HANDOFF's paragraph authorizing that specific Increment 3 implementation should be revised after we settle the approach. Its permission is broader than the design agreement we've actually reached.
+
+This is not an argument for weeks of new documentation. It's about preventing Codex from implementing a placement API that we'll immediately need to reshape for authentication staging and multiwindow scheduling.
+
+## Continuing in a new conversation
+
+I recommend a new conversation in the same ChatGPT Project, rather than branching this very long one near its end. Your committed HANDOFF and evidence already provide an excellent continuity mechanism.
+
+Here is the opening message I would use:
+
+Continue our `joetoo-kwin` development from the latest pushed branch:
+
+`task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`
+
+Latest documented checkpoint: `24fe5cde2f322d37868a5a009671fb21bf5b6603`. Verify the actual current HEAD.
+
+Read the applicable `AGENTS.md` hierarchy, `task_step1.5/HANDOFF.md`, `README.md`, `Step1.5c5_implementation_scope.md`, `increment2-deferred-authentication-workflow-section.md`, and the latest native X11 registration evidence.
+
+**Immediate priority:** Finish Increment 2 acceptance. Native X11 managed registration with the `auto` renderer succeeded, with 644 Python and 145 JavaScript tests passing and correct post-close UUID retention. The comparable managed-native `software` renderer test remains to be performed by the maintainer.
+
+**Next planning priority:** Reconsider Increment 3 as an RDP/VNC launch-lifecycle problem. We need to address identification and placement of interactive authentication prompts on a launch-control desktop, subsequent persistent-viewer registration and placement, and continuation of long mixed launch plans while remote authentication is pending.
+
+The saved `DRAFT_Codex-Next-Operator-Controlled-RDP-Placement.md` has **not** been approved for execution. The HANDOFF's existing Increment 3 authorization should be reconciled with the revised design before a new Codex task is issued.
+
+Use plain language, avoid further nested gate terminology, preserve the accepted code, and follow the root `AGENTS.md` terminal-copy safety convention.
+
+Let's begin with the remaining Increment 2 test and then settle the Increment 3 workflow and its first Codex implementation scope.
+
+This seems like a good stopping point for this conversation: we have working RDP registration software, one narrowly defined acceptance test remaining, and a more coherent direction for the next implementation increment.
