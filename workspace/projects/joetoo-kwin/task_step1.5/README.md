@@ -14,7 +14,7 @@ This is the **historical task record**, not execution authority. For current act
 | 1.5c.5c | Affirmative RDP feasibility; SDL3 FreeRDP chosen **first by implementation order**, not as default over TigerVNC | [PR #28](https://github.com/JosephBrendler/joetoo-ai/pull/28), [research](README_remote_desktop_research.md) |
 | 1.5c.5d / Increment 1 | **ACCEPTED**: native-Wayland SDL registration-only, no placement | [Native-Wayland evidence](step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md) |
 | 1.5c.5d / Increment 2 | **ACCEPTED (2026-11-08)**: native-KWin-X11 stock SDL registration-only with `auto` and `software`; same exact UUID retained when closed; 644 Python and 145 JavaScript regressions passed on the implementation baseline. The 500 ms X11 persistence heuristic has a known counterexample; no automatic placement or general production-RDP security acceptance. | [Native X11 registration evidence, including `software` closeout](step1.5c5d-increment2-native-x11-registration-2026-11-08.md) |
-| 1.5c.5d / Increment 3 | **IMPLEMENTED; PARTIAL NATIVE VALIDATION (2026-11-09)**: 191 focused / 676 full Python and 158 JS tests passed. Native X11 `software` and `auto` exact-UUID operator placement/closure passed; sequential registration after prior terminal `OK` is blocked by a stale launcher guard; requested 800×600 frame later appears as 1032×804; native Wayland placement still pending. **NOT YET ACCEPTED.** | [Increment 3 native X11 evidence](step1.5c5d-increment3-native-x11-placement-2026-11-09.md), [active HANDOFF](HANDOFF.md) |
+| 1.5c.5d / Increment 3 | **X11 PLACEMENT AND SERIAL REGISTRATION NATIVE PASSED (2026-11-09)**: original exact-UUID `software`/`auto` placement and closure passed. Sequential false-`Busy` corrected in `5a2e152`, after which 691 Python / 158 JavaScript tests and two-viewer same-broker X11 A/B registration passed. **Overall increment OPEN**: Wayland placement untested; 800×600 requested size later observed as 1032×804. | [Sequential native closeout](step1.5c5d-increment3-native-x11-sequential-registration-closeout-2026-11-09.md), [initial X11 placement evidence](step1.5c5d-increment3-native-x11-placement-2026-11-09.md) |
 
 ## Increment 2 closeout: what was actually observed
 
@@ -32,7 +32,9 @@ The maintainer pushed the five-file Codex placement candidate as [`e7f63ce`](htt
 
 Native X11 `software` placement to `(0,0)` and `auto` placement to `(120,90)` succeeded against `opi6plus01.brendler`, each with stable exact UUID across placement, `presence=missing` after titlebar closure, and no successor adoption; placing a closed viewer was rejected with `InvalidRequest`. The original viewer remained separate from remote-GDM login status (`remote_session=unverified`). Both tests requested 800×600 but later observed **1032×804** frames, so stable specified size is **not established**. An attempted next registration was refused as `Broker is busy` solely because the standalone launcher insists on placement transaction `IDLE` after an earlier terminal `OK`; a temporary broker restart allowed the `auto` test. This is a **confirmed sequential-reuse defect**, not a different-slot conflict.
 
-**Increment 3 remains open**, pending a small guarded registration-launcher correction and regression, a focused SDL/KWin frame-size investigation, and a native-Wayland operator-placement/closure test on `q552u01`. Complete commands, exact UUIDs, JSON observations, failure evidence, code links and bounded follow-up are in the [2026-11-09 Increment 3 native placement evidence](step1.5c5d-increment3-native-x11-placement-2026-11-09.md). See [active HANDOFF](HANDOFF.md) for current next engineering work.
+**Subsequent resolution, 2026-11-09:** The maintainer reviewed, signed and pushed the focused three-file terminal-`OK` launcher fix as [`5a2e152`](https://github.com/JosephBrendler/joetoo-ai/commit/5a2e152ab4f22e21be14c0df2f2cee17e9a6dd8c). Reinstallation/restart and independent 691 Python / 158 JavaScript full regression passed. Native A (`software`, `win-001`, placed and closed) was followed by B (`auto`, `win-002`, registered and closed) **without restarting the same broker**, while A's previous terminal `OK` placement and original UUID were preserved. Final state: two distinct managed records, both `missing`, two successful registrations and no failures. **Sequential-registration defect CLOSED / ACCEPTED**; details and exact broker output in [native sequential closeout](step1.5c5d-increment3-native-x11-sequential-registration-closeout-2026-11-09.md). The previous `Broker is busy` transcript is pre-fix history, not an open issue.
+
+**Increment 3 still requires** native-Wayland *placement* validation on `q552u01` and separate investigation/disposition of the observed size discrepancy; it is **not yet accepted overall**. See [HANDOFF](HANDOFF.md) for conservative Git synchronization and test instructions.
 
 ## Accepted serial workflow design (2026-11-08)
 
@@ -52,7 +54,7 @@ Prior SFTP, VNC and RDP feasibility permissions were specific to those historica
 - **2026-11-03–05:** GNOME Remote Login interoperability; KRDC, Remmina and FreeRDP evaluation; SDL X11/native-Wayland lifecycle feasibility.
 - **2026-11-05–06:** RDP feasibility closed in PR #28; 1.5c.5d design, accepted native-Wayland registration-only Increment 1.
 - **2026-11-07–08:** X11 A2 patched client abandoned; stock-client A1/C renderer/identity implementation. Native `auto` registration success, headless full suite PASS, then managed-native `software` registration and same-UUID post-close evidence. **Increment 2 accepted.** Sequential human-interactive baseline and Increment 3/4 sequencing approved.
-- **2026-11-09:** Five-file Increment 3 placement candidate pushed; 191 focused / 676 full Python and 158 JavaScript headless tests passed. Native X11 `software` and `auto` UUID-specific placement/closeout passed; terminal-`OK` blocking and frame-size discrepancy remain open; native Wayland placement outstanding.
+- **2026-11-09:** Increment 3 placement candidate, 191 focused / 676 full Python / 158 JS tests, native X11 `software` and `auto` placement/closeout PASS. Terminal-`OK` launcher bug fixed in `5a2e152`; subsequent 691 Python / 158 JS PASS and native two-viewer same-broker A/B X11 acceptance CLOSED the sequential defect. Requested/actual frame sizing and Wayland placement remain open.
 
 ## Historical iteration index
 
@@ -72,7 +74,8 @@ The original historical HANDOFF records **Codex iterations 0–45** and **cloud 
 
 ## Focused evidence and navigation
 
-- [Increment 3 native X11 `software` + `auto` controlled placement, post-close lifecycle and defects](step1.5c5d-increment3-native-x11-placement-2026-11-09.md)
+- [Increment 3 native X11 sequential A/B registration correction and acceptance evidence](step1.5c5d-increment3-native-x11-sequential-registration-closeout-2026-11-09.md)
+- [Increment 3 native X11 `software` + `auto` controlled placement and historical pre-fix findings](step1.5c5d-increment3-native-x11-placement-2026-11-09.md)
 - [Increment 2 X11 `auto` + `software` full registration/lifecycle evidence](step1.5c5d-increment2-native-x11-registration-2026-11-08.md)
 - [Increment 1 native-Wayland acceptance](step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md)
 - [X11 default/OpenGL feasibility](step1.5c5d-a1-auto-renderer-native-evidence-2026-11-08.md)
