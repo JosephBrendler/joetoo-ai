@@ -795,6 +795,8 @@ class Broker(dbus.service.Object):
             return dict(frame_available=True, geometry=frame, desktops=list(desktops),
                 on_all_desktops=bool(window["on_all_desktops"]),
                 geometry_match=frame == trace["target"],
+                position_match=all(frame[k] == trace["target"][k] for k in ("x", "y")),
+                size_match=all(frame[k] == trace["target"][k] for k in ("width", "height")),
                 desktop_match=desktops == [trace["desktop"]] and not window["on_all_desktops"])
         except Exception:
             return {"frame_available": False}
@@ -863,21 +865,28 @@ class Broker(dbus.service.Object):
         return record
 
     def _sdl_placement_valid(self, c):
+        c["guard_failed"] = True
         try:
             c["diagnostic_stage"] = "guard_record"
             self._sdl_placement_record(c["meta"])
-            # Keep the original short-circuit order; labels contain no identity
-            # data and are only emitted if the pre-submit authentication fails.
+            # Validate live placement ownership and process continuity.
+            # Fixed diagnostic stages contain no private identity data.
+            # Mechanical deadline enforcement belongs to the shared request.
+            # Option C: timeouts now belong to the shared request. Retained
+            # process handles protect continuity without reconstructing them.
             for stage, check in (
-                    ("guard_deadline", lambda: time.monotonic() < c["deadline"]),
                     ("guard_operator", lambda: c["operator"].alive()),
-                    ("guard_launcher", lambda: c["launch_owner"].alive()),
                     ("guard_kwin", lambda: c["kwin_identity"].alive()),
                     ("guard_child", lambda: c["child"].poll() is None),
                     ("guard_bus", lambda: c["bus"].get_is_connected())):
                 c["diagnostic_stage"] = stage
                 if not check():
+                    # ChildIdentity.poll already checks its pinned caller. Do
+                    # not repeat that read on every successful advancement.
+                    if stage == "guard_child" and not c["launch_owner"].alive():
+                        c["diagnostic_stage"] = "guard_launcher"
                     return False
+            c["guard_failed"] = False
             return True
         except Exception:
             return False
@@ -892,7 +901,7 @@ class Broker(dbus.service.Object):
             # Preserve the preceding phase and guard before generic ERROR wins.
             self._sdl_trace(trace, "terminal_begin", phase=phase, guard=c.get("diagnostic_stage", "unknown"),
                 deadline_expired=time.monotonic() >= c["deadline"], requested_outcome=state,
-                guard_failed=reason == "Placement identity/source/owner lost or expired",
+                guard_failed=bool(c.get("guard_failed")),
                 source_match=self.observation_synced and self.observation_source == trace["source"],
                 identity_continuity=not c["meta"]["invalid"],
                 **self._sdl_trace_frame(trace, self.observed_windows.get(trace["uuid"])))
@@ -931,23 +940,21 @@ class Broker(dbus.service.Object):
             trace["retain_until"] = trace["post_until"]
             self._sdl_trace(trace, "terminal", phase=phase, outcome=state,
                 guard=c.get("diagnostic_stage", "unknown"), deadline_expired=time.monotonic() >= c["deadline"],
-                guard_failed=reason == "Placement identity/source/owner lost or expired",
+                guard_failed=bool(c.get("guard_failed")),
                 cleanup_uncertain=bool(c.get("cleanup_uncertain")),
                 **self._sdl_trace_frame(trace, self.observed_windows.get(trace["uuid"])))
         callback = c.pop("reply", None)
         if callback:
             callback(json.dumps(c["terminal"], sort_keys=True))
 
-    def _sdl_placement_check(self):
+    def _sdl_finalize_placement(self):
+        """Project a shared terminal state through cleanup, without another guard/clock."""
         c = self._sdl_placement
         if not c or c.get("terminal"):
             return False
-        if not self._sdl_placement_valid(c):
-            self._sdl_placement_finish(c, "failed", "Placement identity/source/owner lost or expired")
-            return False
         r = self.request
         if r and r.get("id") == c["id"] and r["state"] in ("OK", "ERROR"):
-            self._sdl_placement_finish(c, "succeeded" if r["state"] == "OK" else "failed", "verified" if r["state"] == "OK" else "resident refused placement")
+            self._sdl_placement_finish(c, "succeeded" if r["state"] == "OK" else "failed", "verified" if r["state"] == "OK" else r.get("placement_error", r["detail"]))
             return False
         return True
 
@@ -955,7 +962,7 @@ class Broker(dbus.service.Object):
                          async_callbacks=("reply", "error"))
     def SubmitSdlPlacement(self, payload, sender=None, reply=None, error=None):
         """Authenticate a separate same-user operator; never accept a raw UUID."""
-        from joetoo_kwin_rdp_launch import CallerIdentity, ChildIdentity, _proc_info, _inode
+        from joetoo_kwin_rdp_launch import CallerIdentity, ChildIdentity, _inode
         try:
             def unique(pairs):
                 result = {}
@@ -1013,7 +1020,7 @@ class Broker(dbus.service.Object):
         self._sdl_traces.append(trace)
         self._sdl_traces = self._sdl_traces[-self.registry._completed_limit:]
         meta["actions"].add(data["action_id"])
-        def fail(*args, stage=None):
+        def fail(*args, stage=None, reason="Placement authentication/source unavailable"):
             if self._sdl_placement is c and not c.get("terminal"):
                 # One fixed stage label per failed attempt, using the daemon's
                 # existing stderr convention. Never log exception arguments,
@@ -1025,7 +1032,7 @@ class Broker(dbus.service.Object):
                           c["diagnostic_stage"], file=sys.stderr, flush=True)
                 except Exception:
                     pass  # An unavailable diagnostic sink cannot bypass cleanup.
-                self._sdl_placement_finish(c, "failed", "Placement authentication/source unavailable")
+                self._sdl_placement_finish(c, "failed", reason)
         def remaining():
             value = c["deadline"] - time.monotonic()
             if value <= 0 or c.get("terminal"): raise ValueError("expired")
@@ -1058,10 +1065,6 @@ class Broker(dbus.service.Object):
                 if c["launch_owner"].pid != meta["owner_pid"]: raise ValueError("owner/source changed")
                 c["diagnostic_stage"] = "launcher_start_recheck"
                 if c["launch_owner"].start != meta["owner_start"]: raise ValueError("owner/source changed")
-                c["diagnostic_stage"] = "child_proc"
-                info = _proc_info(meta["pid"])
-                c["diagnostic_stage"] = "child_start"
-                if info["start"] != meta["start"]: raise ValueError("PID reused")
                 # Nonblocking open cannot wait on a substituted pipe; verify the
                 # owned regular inode before constructing the existing validator.
                 c["diagnostic_stage"] = "stdout_open"
@@ -1071,6 +1074,8 @@ class Broker(dbus.service.Object):
                 c["diagnostic_stage"] = "stdout_inode"
                 if _inode('/proc/' + str(meta["pid"]) + '/fd/1') != meta["log_inode"]:
                     raise ValueError("stdout replaced")
+                # ChildIdentity validates start/executable/parent/stdout; the
+                # following equality binds its snapshot to registration.
                 c["diagnostic_stage"] = "child_identity"
                 c["child"] = ChildIdentity(c["launch_owner"], meta["pid"], fd, meta["start"],
                     meta["executable"], meta["bounds"]["rdp_backend_log_byte_limit"],
@@ -1089,7 +1094,7 @@ class Broker(dbus.service.Object):
                 self._submit("sdl", *(data[k] for k in ("desktop", "x", "y", "width", "height")))
                 c["diagnostic_stage"] = "request_bind"
                 self.request.update(id=c["id"], placement_uuid=meta["uuid"], move_source=meta["source"],
-                    registration_request_id=meta["registration_id"], preserve_desktop=False,
+                    registration_request_id=meta["registration_id"], placement_deadline=c["deadline"], preserve_desktop=False,
                     preserve_position=False, preserve_size=False)
                 c["diagnostic_stage"] = "registry_pending"
                 self.registry.set_placement(meta["uuid"], "pending")
@@ -1115,7 +1120,8 @@ class Broker(dbus.service.Object):
                     error_handler=lambda *unused: fail(stage="kwin_owner_reply"), timeout=remaining())
             except Exception: fail()
         def lost(name, old, new):
-            if str(name) in (sender, meta["owner_name"], "org.kde.KWin") and old and old != new: fail(stage="owner_changed")
+            if str(name) in (sender, meta["owner_name"], "org.kde.KWin") and old and old != new:
+                fail(stage="owner_changed", reason="Placement bus owner changed")
         try:
             c["diagnostic_stage"] = "bus_proxy"
             daemon = dbus.Interface(bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus", introspect=False), "org.freedesktop.DBus")
@@ -1125,10 +1131,11 @@ class Broker(dbus.service.Object):
             def tick():
                 if c.get("terminal"): return GLib.SOURCE_REMOVE
                 if not c.get("child"):
-                    if time.monotonic() >= c["deadline"]: fail(stage="auth_deadline")
+                    if time.monotonic() >= c["deadline"]:
+                        fail(stage="auth_deadline", reason="Placement authentication deadline expired")
                     return not bool(c.get("terminal"))
                 self._advance_placement()
-                return self._sdl_placement_check()
+                return not bool(c.get("terminal"))
             c["diagnostic_stage"] = "watchdog_setup"
             c["timer"] = GLib.timeout_add(meta["bounds"]["rdp_registration_poll_ms"], tick)
             if not c["timer"]: raise ValueError("timer")
@@ -1160,9 +1167,10 @@ class Broker(dbus.service.Object):
         c, r = self._sdl_placement, self.request
         if not c or sender != c.get("kwin_name"):
             raise self._sdl_error("org.freedesktop.DBus.Error.AccessDenied")
+        self._advance_placement()
         if (c.get("terminal") or not r or r["id"] != c["id"] or r["state"] != "PENDING"):
             return ""
-        if source != c["meta"]["source"] or not self._sdl_placement_valid(c):
+        if source != c["meta"]["source"]:
             self._sdl_placement_finish(c, "failed", "Placement claim rejected")
             return ""
         r["state"] = "RUNNING"
@@ -1178,7 +1186,6 @@ class Broker(dbus.service.Object):
         c = self._sdl_placement_authorize(request_id, sender)
         if not c.get("terminal"):
             self._advance_placement()
-            self._sdl_placement_check()
         return json.dumps(c.get("terminal") or dict(protocol=1, request_id=c["id"],
             managed_id=c["meta"]["managed_id"], window_uuid=c["meta"]["uuid"],
             registration="registered", placement="pending", remote_session="unverified"), sort_keys=True)
@@ -1336,7 +1343,7 @@ class Broker(dbus.service.Object):
         # omitted fields, never replace explicit intent or the captured UUID.
         if (identifier != r["placement_uuid"] or payload["source"] != r["move_source"]
                 or self.observation_source != r["move_source"]
-                or time.monotonic() >= r["created"] + 15):
+                or time.monotonic() >= r.get("placement_deadline", r["created"] + 15)):
             raise ValueError("stale or mismatched move resolution")
         before = self._move_snapshot(payload["captured"])
         resolved = self._move_snapshot(payload["resolved"])
@@ -1414,10 +1421,40 @@ class Broker(dbus.service.Object):
         """
         r = self.request
         if r and r["kind"] == "sdl":
-            self._sdl_track_registered(None, None)
             c = self._sdl_placement
-            if c and not c.get("terminal") and not self._sdl_placement_valid(c):
-                self._sdl_placement_finish(c, "failed", "Placement identity/source/owner lost or expired")
+            # The adapter owns authorization/resources, not a second state
+            # machine. A terminal request cannot be revived by observations.
+            if r["state"] in ("OK", "ERROR"):
+                if c and c["id"] == r["id"] and not c.get("terminal"):
+                    self._sdl_finalize_placement()
+                return
+            if c and c.get("terminal"):
+                return
+            if not c or c["id"] != r["id"]:
+                r.update(state="ERROR", detail="Placement authorization unavailable")
+                return
+            self._sdl_track_registered(None, None)
+            if not self._sdl_placement_valid(c):
+                stage = c.get("diagnostic_stage")
+                if not self.observation_synced or self.observation_source != c["meta"]["source"]:
+                    reason = "Placement observation source lost"
+                else:
+                    reason = {"guard_record": "Placement registered identity/history lost",
+                              "guard_operator": "Placement operator lost",
+                              "guard_launcher": "Placement launcher lost",
+                              "guard_kwin": "Placement KWin owner lost",
+                              "guard_child": "Placement child identity lost",
+                              "guard_bus": "Placement bus disconnected"}.get(stage, "Placement identity lost")
+                self._sdl_placement_finish(c, "failed", reason)
+                return
+            elif r["state"] in ("PENDING", "RUNNING", "VERIFYING") and time.monotonic() >= r["placement_deadline"]:
+                phase = r["state"]
+                c["diagnostic_stage"] = "placement_deadline"
+                reason = {"PENDING": "Placement claim deadline expired",
+                          "RUNNING": "Placement completion deadline expired",
+                          "VERIFYING": "Placement geometry confirmation timed out"}[phase]
+                # Preserve the preceding phase for the bounded diagnostic.
+                self._sdl_placement_finish(c, "failed", reason)
                 return
         if (r and r["kind"] == "viewer" and r["state"] in ("RUNNING", "VERIFYING")
                 and time.monotonic() >= r["viewer_placement_deadline"]):
@@ -1460,7 +1497,7 @@ class Broker(dbus.service.Object):
                                    f'tiled={str(r["placement_tiled"]).lower()} '
                                    f'fullscreen={str(r["placement_fullscreen"]).lower()}')
             if (r["state"] == "VERIFYING" and
-                    time.monotonic() >= r["created"] + 15.0):
+                    time.monotonic() >= r.get("placement_deadline", r["created"] + 15.0)):
                 observed = self.observed_windows.get(identifier)
                 actual = "window not observed"
                 if observed is not None:
@@ -1470,6 +1507,8 @@ class Broker(dbus.service.Object):
                 r["detail"] = "placement confirmation timed out: " + actual
         if r["state"] in ("OK", "ERROR"):
             self._sync_managed_placement()
+            if r["kind"] == "sdl":
+                self._sdl_finalize_placement()
 
     @dbus.service.method(IFACE, in_signature="sss", out_signature="", sender_keyword="sender")
     def Complete(self, request_id, result, detail, sender=None):
@@ -1514,8 +1553,8 @@ class Broker(dbus.service.Object):
             c = self._sdl_placement
             if not c or sender != c.get("kwin_name"):
                 raise self._sdl_error("org.freedesktop.DBus.Error.AccessDenied")
-            if not self._sdl_placement_valid(c):
-                self._sdl_placement_finish(c, "failed", "Placement identity/source/owner lost or expired")
+            self._advance_placement()
+            if c.get("terminal"):
                 return
             if result == "OK":
                 raise self._sdl_error(IFACE + ".BadArguments")
@@ -1577,13 +1616,14 @@ class Broker(dbus.service.Object):
             r["state"] = result
             r["detail"] = str(detail)[:1024]
             if r["kind"] == "sdl":
+                r["placement_error"] = "Placement resident reported ERROR"
                 trace = self._sdl_placement.get("trace")
                 if trace:
                     trace["accepted"] = trace.get("accepted", 0) + 1
                 self._sdl_trace(trace, "complete_accepted", result=result)
         self._sync_managed_placement()
         if r["kind"] == "sdl":
-            self._sdl_placement_check()
+            self._sdl_finalize_placement()
 
     @dbus.service.method(IFACE, in_signature="s", out_signature="s")
     def Status(self, request_id):

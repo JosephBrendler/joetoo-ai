@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Real broker/registry/process/FD validation; fake local bus/KWin, no GUI/network."""
 import importlib.util
+import io
+from contextlib import redirect_stderr
 import json
 import subprocess
 import sys
@@ -17,6 +19,11 @@ from test_step1_3a import observation, WINDOW_ID
 
 class PlacementTests(unittest.TestCase):
     def setUp(self):
+        # Capture through cleanup too; production diagnostics remain enabled.
+        self.log = io.StringIO()
+        capture = redirect_stderr(self.log)
+        capture.__enter__()
+        self.addCleanup(capture.__exit__, None, None, None)
         self.f = broker_tests.SdlInterfaceTests()
         self.f.setUp()
         # The borrowed fixture guards registration-only behavior. Its final
@@ -469,12 +476,7 @@ class PlacementDiagnosticTests(unittest.TestCase):
     observe = PlacementTests.observe
 
     def setUp(self):
-        import io
-        from contextlib import redirect_stderr
         PlacementTests.setUp(self)
-        self.log = io.StringIO()
-        capture = redirect_stderr(self.log)
-        capture.__enter__(); self.addCleanup(capture.__exit__, None, None, None)
 
     def inject(self, fault):
         def private_error(*args, **kw): raise PermissionError('PRIVATE-DO-NOT-LOG')
@@ -553,7 +555,6 @@ class PlacementDiagnosticTests(unittest.TestCase):
             def valid(c):
                 key = fault[6:]
                 if key == 'record': c['meta']['invalid'] = True
-                elif key == 'deadline': c['deadline'] = self.f.clock
                 elif key == 'bus': self.f.bus.connected = False
                 elif key == 'child': c['child'].poll = lambda: 1
                 else: c[key].alive = lambda: False
@@ -569,7 +570,9 @@ class PlacementDiagnosticTests(unittest.TestCase):
         c = self.b._sdl_placement
         result = dict(c['terminal'])
         self.assertEqual(result['placement'], 'failed')
-        self.assertEqual(result['reason'], 'Placement authentication/source unavailable')
+        reason = {'auth_deadline': 'Placement authentication deadline expired',
+                  'owner_changed': 'Placement bus owner changed'}.get(stage, 'Placement authentication/source unavailable')
+        self.assertEqual(result['reason'], reason)
         legacy = [line for line in self.log.getvalue().splitlines() if line.startswith('joetoo-kwind: SDL placement preflight failed stage=')]
         self.assertEqual(legacy, ['joetoo-kwind: SDL placement preflight failed stage=' + stage])
         self.assertIsNone(self.b.request)
@@ -646,14 +649,15 @@ class LatePlacementTraceTests(unittest.TestCase):
         self.f.clock += 1
         self.f.loop.tick()
         result = self.poll()
-        self.assertEqual(result['reason'], 'Placement identity/source/owner lost or expired')
+        self.assertIn(result['reason'], ('Placement claim deadline expired',
+            'Placement completion deadline expired', 'Placement geometry confirmation timed out'))
         return result
 
     def test_unclaimed_pending_phase_and_deadline_are_preserved(self):
         self.submit(); result = self.expire()
         row = self.stage('terminal')[0]
         self.assertEqual(row['phase'], 'PENDING')
-        self.assertEqual(row['guard'], 'guard_deadline')
+        self.assertEqual(row['guard'], 'placement_deadline')
         self.assertTrue(row['deadline_expired'])
         self.assertEqual(row['receipt_elapsed_ms'], 1000)
         self.assertEqual(self.stage('take_accepted'), [])
@@ -665,13 +669,13 @@ class LatePlacementTraceTests(unittest.TestCase):
         self.assertEqual(len(self.stage('take_accepted')), 1)
         self.assertEqual(self.stage('complete_received'), [])
 
-    def test_verifying_nonconvergence_retains_misleading_public_result(self):
+    def test_verifying_nonconvergence_reports_geometry_timeout(self):
         self.submit(); request = self.claim(); self.complete(request)
         self.assertEqual(self.b.request['state'], 'VERIFYING')
         self.expire()
         row = self.stage('terminal_begin')[0]
         self.assertEqual(row['phase'], 'VERIFYING')
-        self.assertEqual(row['guard'], 'guard_deadline')
+        self.assertEqual(row['guard'], 'placement_deadline')
         self.assertFalse(row['geometry_match'])
         self.assertTrue(row['desktop_match'])
         self.assertEqual(len(self.stage('complete_accepted')), 1)
@@ -728,7 +732,7 @@ class LatePlacementTraceTests(unittest.TestCase):
         with patch.object(self.b, '_sdl_placement_finish', inspect_detail):
             self.b.Complete(request['id'], 'ERROR', json.dumps(dict(sdl_diagnostic=['PRIVATE stage'], detail=original)), sender=':1.kwin')
         self.assertEqual(seen, [original])
-        self.assertEqual(self.poll()['reason'], 'resident refused placement')
+        self.assertEqual(self.poll()['reason'], 'Placement resident reported ERROR')
         self.assertEqual(self.stage('complete_accepted')[0]['result'], 'ERROR')
         self.assertNotIn('PRIVATE', self.log.getvalue())
 
@@ -847,16 +851,156 @@ for _fault, _stage in (
         ('revision', 'revision_recheck'), ('record', 'record_recheck'),
         ('owner_name', 'kwin_owner_name'), ('owner_request', 'kwin_owner_request'), ('owner_reply', 'kwin_owner_reply'),
         ('owner_pid', 'launcher_pid_recheck'), ('owner_start', 'launcher_start_recheck'),
-        ('child_proc', 'child_proc'), ('child_start', 'child_start'),
+        ('child_proc', 'child_identity'), ('child_start', 'child_snapshot'),
         ('stdout_open', 'stdout_open'), ('stdout_stat', 'stdout_stat'), ('stdout_inode', 'stdout_inode'),
         ('log_mode', 'child_identity'), ('log_budget', 'child_identity'),
         ('child_snapshot', 'child_snapshot'), ('deadline', 'deadline_recheck'),
         ('bus_proxy', 'bus_proxy'), ('owner_watch', 'owner_watch'), ('watchdog', 'watchdog_setup'), ('submit', 'submit')):
     setattr(PlacementDiagnosticTests, 'test_stage_' + _fault, placement_diagnostic_case(_fault, _stage))
-for _key in ('record', 'deadline', 'operator', 'launch_owner', 'kwin_identity', 'child', 'bus'):
+for _key in ('record', 'operator', 'launch_owner', 'kwin_identity', 'child', 'bus'):
     # Log names describe public roles; dictionary keys retain existing names.
     _stage = {'launch_owner': 'launcher', 'kwin_identity': 'kwin'}.get(_key, _key)
     setattr(PlacementDiagnosticTests, 'test_guard_' + _key, placement_diagnostic_case('guard_' + _key, 'guard_' + _stage))
+
+
+class ConsolidatedPlacementTests(unittest.TestCase):
+    """Real broker/registry and Linux identity checks; simulated bus/time only."""
+    setUp = PlacementTests.setUp
+    cleanup = PlacementTests.cleanup
+    submit = PlacementTests.submit
+    claim = PlacementTests.claim
+    poll = PlacementTests.poll
+    observe = PlacementTests.observe
+    verification = PlacementTests.verification
+    complete = PlacementTests.complete
+
+    def test_authentication_claim_and_verify_share_original_deadline(self):
+        started = self.f.clock
+        credentials = self.f.bus.GetConnectionCredentials
+        def delayed(*args, **kwargs):
+            self.f.clock += .125
+            return credentials(*args, **kwargs)
+        with patch.object(self.f.bus, 'GetConnectionCredentials', delayed):
+            self.submit()
+        r = self.b.request
+        self.assertGreater(r['created'], started)
+        self.assertEqual(r['placement_deadline'], started + 1)
+        self.assertEqual(r['placement_deadline'], self.b._sdl_placement['deadline'])
+        request = self.claim(); self.complete(request)
+        self.f.clock = started + .999
+        self.assertEqual(self.poll()['placement'], 'pending')
+        self.f.clock = started + 1
+        result = self.poll()
+        self.assertEqual(result['reason'], 'Placement geometry confirmation timed out')
+        self.assertNotIn('identity', result['reason'])
+        self.assertEqual(self.b.request['state'], 'ERROR')
+        self.assertEqual(self.poll(), result)
+
+    def test_one_runtime_guard_pass_per_poll_without_provenance_reconstruction(self):
+        self.submit()
+        c = self.b._sdl_placement
+        with patch.object(c['child'], 'poll', wraps=c['child'].poll) as child, \
+             patch.object(c['launch_owner'], 'alive', wraps=c['launch_owner'].alive) as owner, \
+             patch.object(self.f.adapter, 'ChildIdentity', side_effect=AssertionError('reconstruction')):
+            self.assertEqual(self.poll()['placement'], 'pending')
+        self.assertEqual(child.call_count, 1)
+        self.assertEqual(owner.call_count, 1)  # Checked inside ChildIdentity.poll.
+
+    def test_deadline_at_claim_is_terminal_without_geometry_authorization(self):
+        self.submit(); self.f.clock += 1
+        self.assertEqual(self.b.TakeSdlPlacement('source', sender=':1.kwin'), '')
+        self.assertEqual(self.poll()['reason'], 'Placement claim deadline expired')
+
+    def test_complete_at_deadline_cannot_open_a_new_verification_budget(self):
+        self.submit(); request = self.claim()
+        self.f.clock += 1
+        self.complete(request)
+        self.assertEqual(self.poll()['reason'], 'Placement completion deadline expired')
+        self.assertEqual(self.b.request['state'], 'ERROR')
+
+    def test_exact_frame_after_deadline_does_not_turn_timeout_into_success(self):
+        self.submit(); request = self.claim(); self.complete(request)
+        self.f.clock += 1
+        # Even if the observation callback runs before the watchdog callback.
+        self.observe(geometry=dict(x=25, y=35, width=800, height=600), desktops=[3])
+        result = self.poll()
+        self.assertEqual(result['reason'], 'Placement geometry confirmation timed out')
+        self.assertEqual(result['placement'], 'failed')
+        self.f.loop.tick()
+        self.assertEqual(self.poll(), result)
+
+    def test_position_only_match_is_never_full_frame_success(self):
+        self.submit(); request = self.claim(); self.complete(request)
+        self.observe(geometry=dict(x=25, y=35, width=1024, height=796), desktops=[3])
+        self.assertEqual(self.poll()['placement'], 'pending')
+        self.f.clock += 1
+        self.assertEqual(self.poll()['reason'], 'Placement geometry confirmation timed out')
+        rows = [json.loads(line.split('diagnostic ', 1)[1]) for line in self.log.getvalue().splitlines()
+                if 'SDL placement diagnostic ' in line]
+        terminal = next(row for row in rows if row['stage'] == 'terminal')
+        self.assertTrue(terminal['position_match'])
+        self.assertTrue(terminal['desktop_match'])
+        self.assertFalse(terminal['size_match'])
+        self.assertFalse(terminal['geometry_match'])
+        self.assertFalse(terminal['guard_failed'])
+
+    def test_late_old_completion_and_frame_cannot_complete_new_unclaimed_request(self):
+        self.submit(); first = self.claim(); self.complete(first)
+        self.f.clock += 1
+        old = self.poll()
+        self.submit(action_id='b' * 32, x=300, y=160)
+        second = self.b.request
+        self.assertEqual(second['state'], 'PENDING')
+        self.observe(geometry=dict(x=25, y=35, width=800, height=600), desktops=[3])
+        with self.assertRaises(Exception): self.complete(first)
+        self.assertIs(self.b.request, second)
+        self.assertEqual(second['state'], 'PENDING')
+        self.assertEqual(old['placement'], 'failed')
+        request = self.claim(); self.complete(request)
+        self.assertEqual(self.poll()['placement'], 'pending')
+        self.observe(geometry=dict(x=300, y=160, width=800, height=600), desktops=[3])
+        self.assertEqual(self.poll()['placement'], 'succeeded')
+
+    def test_terminal_ok_history_survives_next_submit_and_is_not_reauthorized(self):
+        self.submit(); request = self.claim(); self.complete(request)
+        self.observe(geometry=dict(x=25, y=35, width=800, height=600), desktops=[3])
+        self.assertEqual(self.poll()['placement'], 'succeeded')
+        previous = self.b.request
+        accepted = self.submit(action_id='b' * 32, revision=self.f.revision)
+        self.assertEqual(accepted['placement'], 'pending')
+        self.assertFalse(self.errors)
+        self.assertEqual(previous['state'], 'OK')
+        self.assertEqual(previous['detail'].split(':', 1)[0], 'sdl')
+        self.assertNotEqual(self.b.request['id'], previous['id'])
+
+    def test_verified_geometry_with_uncertain_cleanup_is_failed_and_blocks_reuse(self):
+        self.submit(); request = self.claim(); self.complete(request)
+        c = self.b._sdl_placement
+        match = c['match']
+        remove = match.remove
+        with patch.object(match, 'remove', side_effect=OSError('PRIVATE cleanup')):
+            self.observe(geometry=dict(x=25, y=35, width=800, height=600), desktops=[3])
+        self.assertEqual(self.poll()['reason'], 'Placement cleanup incomplete')
+        self.assertTrue(c['cleanup_uncertain'])
+        self.assertEqual(c['unreleased'], [('match', match)])
+        self.assertEqual(self.b.request['state'], 'ERROR')
+        self.assertEqual(self.b.registry.get_window(self.mid).placement, 'failed')
+        self.assertIsNone(self.submit(action_id='b' * 32))
+        self.assertTrue(self.errors)
+        self.assertNotIn('PRIVATE', self.log.getvalue())
+        remove()  # Fixture releases its deliberately faulted resource.
+
+    def test_identity_loss_has_distinct_reason_and_original_request_phase(self):
+        self.submit(); self.claim()
+        c = self.b._sdl_placement
+        with patch.object(c['operator'], 'alive', return_value=False):
+            self.assertEqual(self.poll()['reason'], 'Placement operator lost')
+        rows = [json.loads(line.split('diagnostic ', 1)[1]) for line in self.log.getvalue().splitlines()
+                if 'SDL placement diagnostic ' in line]
+        terminal = next(row for row in rows if row['stage'] == 'terminal')
+        self.assertEqual(terminal['phase'], 'RUNNING')
+        self.assertTrue(terminal['guard_failed'])
+        self.assertFalse(terminal['deadline_expired'])
 
 
 class X11PlacementTests(unittest.TestCase):
@@ -887,6 +1031,9 @@ class SoftwarePlacementTests(X11PlacementTests):
 
 class OperatorClientTests(unittest.TestCase):
     def setUp(self):
+        capture = redirect_stderr(io.StringIO())
+        capture.__enter__()
+        self.addCleanup(capture.__exit__, None, None, None)
         spec = importlib.util.spec_from_file_location('sdl_release_test',
             Path(__file__).resolve().parents[1] / 'tools/joetoo-sdl-release-placement.py')
         self.client = importlib.util.module_from_spec(spec); spec.loader.exec_module(self.client)
@@ -942,6 +1089,29 @@ class OperatorClientTests(unittest.TestCase):
         self.assertEqual(json.loads(self.output[-1])['window_uuid'], WINDOW_ID)
         self.assertTrue(self.bus.closed)
         self.assertFalse(any(name == 'CancelSdlPlacement' for name, _ in self.calls))
+
+    def test_delayed_shortcut_fetches_broker_terminal_result_before_local_watchdog(self):
+        self.mode = 'timeout'
+        self.result.update(placement='failed', reason='Placement completion deadline expired')
+        api_type = self.client.connection.Connection
+        original_call = api_type.call
+        def call(api, name, *args):
+            result = original_call(api, name, *args)
+            if name == 'SubmitSdlPlacement': result['placement'] = 'pending'
+            return result
+        original_object = self.bus.get_object
+        def get_object(*args, **kwargs):
+            proxy = original_object(*args, **kwargs)
+            def invoke(key, **unused):
+                self.shortcuts.append(key)
+                self.clock += 1.1  # Simulated bus delay, no sleep/native action.
+            proxy.invokeShortcut = invoke
+            return proxy
+        with patch.object(api_type, 'call', call), patch.object(self.bus, 'get_object', get_object):
+            self.assertEqual(self.run_client(), 1)
+        self.assertEqual(json.loads(self.output[-1])['reason'], 'Placement completion deadline expired')
+        self.assertFalse(any(name == 'CancelSdlPlacement' for name, _ in self.calls))
+        self.assertTrue(self.bus.closed)
 
     def test_dispatch_trace_is_redacted_monotonic_and_separate_from_result(self):
         import io

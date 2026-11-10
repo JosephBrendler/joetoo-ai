@@ -45,7 +45,6 @@ def release(bus, interface, managed_id, desktop, slot, geometry, *, confirmed,
         payload = dict(protocol=1, confirmed=True, managed_id=managed_id,
             action_id=uuid.uuid4().hex, desktop=desktop, slot=slot, **geometry,
             source=before['observation']['source'], revision=before['observation']['revision'], timeout_ms=timeout_ms)
-        deadline = clock() + timeout_ms / 1000
         result = api.call('SubmitSdlPlacement', json.dumps(payload))
         rid = result['request_id']
         expected_uuid = result['window_uuid']
@@ -58,6 +57,9 @@ def release(bus, interface, managed_id, desktop, slot, geometry, *, confirmed,
                 and value.get('placement') in ('pending', 'succeeded', 'failed'),
                 'Placement identity/result mismatch')
         valid(result)
+        # Broker owns the mechanical deadline, including its authentication.
+        # This later local bound only detects an unresponsive/stuck broker.
+        deadline = clock() + timeout_ms / 1000
         if result['placement'] == 'pending':
             # Invoke the dedicated action; never an active-window move shortcut.
             accel = str(api.daemon.GetNameOwner('org.kde.kglobalaccel', timeout=call_timeout_ms / 1000))
@@ -67,10 +69,11 @@ def release(bus, interface, managed_id, desktop, slot, geometry, *, confirmed,
                 'joetoo_bridge_sdl_placement', timeout=call_timeout_ms / 1000)
             diagnostic('shortcut_returned', result)
         while result['placement'] == 'pending':
-            connection.require(clock() < deadline, 'Mechanical placement deadline expired')
             sleep(min(poll_ms / 1000, max(0, deadline - clock())))
             result = api.call('PollSdlPlacement', rid)
             valid(result)
+            connection.require(result['placement'] != 'pending' or clock() < deadline,
+                               'Placement broker response deadline expired')
         terminal = True
         emit(json.dumps(result, sort_keys=True))
         return 0 if result['placement'] == 'succeeded' else 1
