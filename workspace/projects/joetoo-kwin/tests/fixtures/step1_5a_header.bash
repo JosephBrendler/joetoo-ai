@@ -18,9 +18,22 @@ isint() { [[ $1 =~ ^-?[0-9]+$ ]]; }
 handle_result() { return "${REPORT_RC:-0}"; }
 decode_right_status() { printf 'DECODE:%s\n' "$1"; }
 show_config() {
-    local name
+    local entry name value
     printf 'CONFIG\n'
-    for name in $varlist; do printf '%s=%s\n' "$name" "${!name}"; done
+    for entry in $varlist; do
+        if [[ $entry == bool.* ]]; then
+            name=${entry#bool.}
+            case ${!name} in
+                "$TRUE") value=True ;;
+                "$FALSE") value=False ;;
+                *) value=INVALID ;;
+            esac
+        else
+            name=$entry
+            value=${!name}
+        fi
+        printf '%s=%s\n' "$name" "$value"
+    done
 }
 
 # Model the documented verbosity bounds without reading system installations.

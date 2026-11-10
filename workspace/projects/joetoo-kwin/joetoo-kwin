@@ -30,6 +30,7 @@ iface=org.joetoo.KWinBridge
 
 usage() {
     j_msg "-${notice}" -p 'Configured recipes include dolphin|sftp|sftp://[USER@]HOST[:PORT][/ABSOLUTE/PATH][|LAYER]; inspect authentication/listing in Dolphin'
+    j_msg "-${notice}" -p 'RDP Stage 1 dry-run only: sdl-freerdp|rdp|rdp://USER@HOST[:PORT][|LAYER]; configured launch is not yet implemented'
     j_msg "-${notice}" -p 'TigerVNC recipe: vncviewer|ssh|ssh://[USER@]HOST[:SSH_PORT]/display/N (or /port/P); both forwarded endpoints use loopback'
     j_msg "-${notice}" -p "Usage: ${PN} [-v|-q ...] -c [-f CONFIG]  (dry run; trusted Bash config)"
     j_msg "-${notice}" -p "       CONFIG: XDG user configuration, then /etc/joetoo-kwin/joetoo-kwin.conf; set screen_width/screen_height explicitly"
@@ -159,6 +160,7 @@ check_plan() {
     varlist+=" dt_win_limit min_window_exposure_px"
     varlist+=" initial_focus_timeout_ms initial_focus_poll_interval_ms"
     varlist+=" sftp_capability_timeout_ms"
+    varlist+=" rdp_remote_width rdp_remote_height bool.RDP_SMART_SIZING rdp_initial_client_width rdp_initial_client_height rdp_windowing_backend"
     varlist+=" vnc_ssh_start_timeout_ms vnc_viewer_ready_timeout_ms vnc_supervisor_poll_interval_ms vnc_cleanup_timeout_ms vnc_local_port_attempts vnc_identity_event_limit vnc_identity_settle_ms vnc_dbus_timeout_ms vnc_placement_timeout_ms vnc_identity_start_timeout_ms"
     varlist+=" sftp_advisory_enabled sftp_advisory_timeout_ms sftp_advisory_ssh_port"
     varlist+=" terminal_width_percent terminal_gap_percent terminal_height_percent"

@@ -115,6 +115,8 @@ with legacy four-field entries. Supported values are `under`, `panel`, `over`.
 An explicit `panel` entry is different from an implicit panel for ordinary
 layout-budget accounting where the current policy distinguishes them.
 
+**(rdp is Increment 4 proposed)**
+
 ```bash
 desktop_session_list=(
     "2|konsole|ssh|nuthuvia"
@@ -123,6 +125,7 @@ desktop_session_list=(
     "4|dolphin|local|Documents|panel"
     "4|dolphin|sftp|sftp://joe@nuthuvia.brendler/etc|panel"
     "4|vncviewer|ssh|ssh://joe@yorsqui/display/2|panel"
+    "5|sdl-freerdp|rdp|rdp://joe@opi6plus01:3389|under"
 )
 # End of configuration
 ```

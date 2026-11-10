@@ -27,6 +27,13 @@ plan_defaults() {
     vnc_dbus_timeout_ms=3000
     vnc_identity_start_timeout_ms=1000
     vnc_placement_timeout_ms=15000
+    # Offline configured RDP intent; runtime dispatch belongs to Stage 2.
+    rdp_remote_width=1024
+    rdp_remote_height=768
+    RDP_SMART_SIZING=$TRUE
+    rdp_initial_client_width=800
+    rdp_initial_client_height=600
+    rdp_windowing_backend=auto
     sftp_advisory_enabled=$TRUE
     sftp_advisory_timeout_ms=2000
     sftp_advisory_ssh_port=22
@@ -90,11 +97,13 @@ validate_layout_geometry() {
 
 validate_plan() {
     local _vp_name _vp_value _vp_record _vp_delimiters _vp_declaration
-    local _vp_desktop _vp_program _vp_mode _vp_target _vp_layer _vp_explicit _vp_total _vp_sftp_dir _vp_uri
+    local _vp_desktop _vp_program _vp_mode _vp_target _vp_layer _vp_explicit _vp_total _vp_sftp_dir _vp_uri _vp_rdp_target
     # Reset all derived state so rebuilding a plan cannot accumulate old entries.
     declare -ga planned_desktop=() planned_slot=() planned_program=() planned_mode=() planned_target=()
     declare -ga planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
     declare -ga planned_explicit=() desktop_groups=()
+    declare -ga planned_rdp_target=()
+    declare -g rdp_settings="" # Validated nonsecret sizing/backend JSON, not a runtime launch.
     declare -g vnc_bounds="" # Validated JSON consumed by the configured VNC launcher.
     # shellcheck disable=SC2034
     declare -ga planned_sftp_uri=()
@@ -138,11 +147,25 @@ validate_plan() {
         if [[ ! $_vp_program =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.+-]*$ ]]; then
             plan_error "program must be an executable basename: [${_vp_program}]"; return 2
         fi
+        if [[ $_vp_program == sdl-freerdp && $_vp_mode != rdp ]]; then
+            plan_error 'sdl-freerdp requires rdp mode'; return 2
+        fi
         case $_vp_mode in
             ssh|swr|via-ssh|local|direct) ;;
+            rdp) [[ $_vp_program == sdl-freerdp ]] || { plan_error 'rdp mode requires sdl-freerdp'; return 2; } ;;
             sftp) [[ $_vp_program == dolphin ]] || { plan_error 'sftp mode requires Dolphin'; return 2; } ;;
             *) plan_error "unsupported mode [${_vp_mode}]"; return 2 ;;
         esac
+        _vp_rdp_target=""
+        if [[ $_vp_mode == rdp ]]; then
+            _vp_sftp_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 2
+            _vp_rdp_target=$(printf '%s' "$_vp_target" | python3 "$_vp_sftp_dir/joetoo_kwin_rdp_target.py" --target) || return 2
+            if [[ -z $rdp_settings ]]; then
+                rdp_settings=$(python3 "$_vp_sftp_dir/joetoo_kwin_rdp_target.py" --settings \
+                    "$rdp_remote_width" "$rdp_remote_height" "$RDP_SMART_SIZING" \
+                    "$rdp_initial_client_width" "$rdp_initial_client_height" "$rdp_windowing_backend") || return 2
+            fi
+        fi
         _vp_uri=""
         if [[ $_vp_mode == sftp ]]; then
             _vp_sftp_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 2
@@ -177,6 +200,7 @@ validate_plan() {
         planned_mode+=("$_vp_mode")
         planned_target+=("$_vp_target")
         planned_sftp_uri+=("$_vp_uri")
+        planned_rdp_target+=("$_vp_rdp_target")
     done
     for _vp_desktop in "${desktop_groups[@]}"; do
         _vp_total=${total_counts[$_vp_desktop]}

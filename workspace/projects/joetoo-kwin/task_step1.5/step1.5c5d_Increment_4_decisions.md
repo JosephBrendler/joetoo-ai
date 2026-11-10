@@ -37,7 +37,7 @@ The three current `tools/joetoo-sdl-*.py` registration, placement and immediate-
 | Recipe | `DESKTOP\|sdl-freerdp\|rdp\|rdp://USER@HOST[:PORT][\|LAYER]`; username explicit, RDP port default 3389 |
 | Endpoint ports | Optional `[:PORT]` in URL targets; application-specific parser translates port to invocation. Konsole SSH currently has **no explicit recipe-port syntax**; its TCP reachability check uses 22 (separate limitation). |
 | Windowing backend | User-facing `rdp_windowing_backend` (not RDP client selection); verified `auto` if straightforward, else `wayland`/`x11` explicit. Retain SDL's actual `SDL_VIDEO_DRIVER` contract internally, without global variable refactor. |
-| Initial sizing | User-configurable `rdp_remote_width=1024`, `rdp_remote_height=768`, `rdp_smart_sizing=$TRUE`, `rdp_initial_client_width=800`, `rdp_initial_client_height=600` as proven initial defaults; validate offline. |
+| Initial sizing | User-configurable `rdp_remote_width=1024`, `rdp_remote_height=768`, `RDP_SMART_SIZING=$TRUE`, `rdp_initial_client_width=800`, `rdp_initial_client_height=600` as proven initial defaults; validate offline. |
 | Final local geometry | Existing planner exclusively owns desired KWin **outer frame**; no hard-coded window-decoration subtraction. |
 | Authentication/viewer wait | `rdp_registration_timeout_ms=300000` and `vnc_viewer_ready_timeout_ms=300000` proposed defaults; these bound viewer identification, **not** demonstrated credential state. Preserve finite identity/history budgets and bounded mechanical operations. |
 | Known-clean timeout/failure | Cancel pending broker request, terminate only owned pre-registration client/tunnel, confirm terminal result/cleanup, report failed recipe, advance through the existing serial plan. |
