@@ -1,0 +1,56 @@
+# Selected sanitized maintainer-supplied terminal excerpts, native q552u01 Wayland.
+# Historical observations, not a contiguous instrumented trace. Output line wraps normalized;
+# local hostname, remote endpoint, raw auth/certificate details and screenshot content omitted.
+
+=== PRE-SMART-SIZING: DIRECT KWIN RESIZE-ONLY PROBE ===
+js: PROBE: Starting resize-only assignment
+js: PROBE: Assignment returned; immediate frame={"x":300,"y":160,"width":1024,"height":796}
+# Later broker polling showed (300,160) 1024x796 for over two minutes.
+
+=== PRE-SMART-SIZING: DIRECT KWIN COMBINED PROBE ===
+Script ID: 1
+Executed at 23:25:20
+0s  {"height":796,"width":1024,"x":1,"y":1}
+1s  {"height":796,"width":1024,"x":1,"y":1}
+15s {"height":796,"width":1024,"x":1,"y":1}
+75s {"height":796,"width":1024,"x":1,"y":1}
+js: PROBE: Starting combined move-resize assignment
+js: PROBE: Assignment returned; immediate frame={"x":300,"y":160,"width":1024,"height":796}
+# Position changed by first poll; width/height did not change. Immediate KWin readback was stale.
+
+=== STANDALONE SDL FreeRDP: /size:1024x768 /smart-sizing:800x600 ===
+js: SIZE_QUERY: matching windows=1
+js: SIZE_QUERY: {"uuid":"{55f6e98a-327d-4faa-a448-a493d0664b78}","pid":2032437,"frame":{"x":563.1003609614224,"y":133.47896159537308,"width":914,"height":647},"client":{"x":563.1003609614224,"y":161.47896159537308,"width":914,"height":619},"buffer":{"x":563.1003609614224,"y":161.47896159537308,"width":914,"height":619},"resizeable":true,"fullscreen":false}
+js: MOVE_RESIZE: BEFORE {"x":563.1003609614224,"y":133.47896159537308,"width":1063,"height":814}
+js: MOVE_RESIZE: TARGET {"x":100,"y":100,"width":800,"height":628}
+js: MOVE_RESIZE: IMMEDIATE {"x":563.1003609614224,"y":133.47896159537308,"width":1063,"height":814}
+js: SIZE_QUERY: matching windows=1
+js: SIZE_QUERY: {"uuid":"{55f6e98a-327d-4faa-a448-a493d0664b78}","pid":2032437,"frame":{"x":100,"y":100,"width":800,"height":628},"client":{"x":100,"y":128,"width":800,"height":600},"buffer":{"x":100,"y":128,"width":800,"height":600},"resizeable":true,"fullscreen":false}
+
+=== FIRST MANAGED SMART-SIZING PLACEMENT ATTEMPT: STILL FAILED ===
+# Actual child cmdline: /size:1024x768 ; /smart-sizing:800x600
+# Broker observation: UUID e9fa7d6c-933d-4ba7-a0b3-66aae101d503 ; (448,119) 1024x796 ; placement failed
+{"managed_id":"win-001","placement":"failed","protocol":1,"reason":"Placement geometry confirmation timed out","registration":"registered","remote_session":"unverified","request_id":"210eb3d19f2544b4be6d0702bd47795b","window_uuid":"e9fa7d6c-933d-4ba7-a0b3-66aae101d503"}
+# Viewer private log included FreeRDP server redirection PDU and ERRCONNECT_CONNECT_TRANSPORT_FAILED;
+# that is insufficient to establish the transport failure's causal role in geometry nonconvergence.
+# Broker PID 2036338 stderr was /dev/null. Older diagnostic file mtime 2026-11-09 23:08.
+
+=== FOLLOWING GNOME SERVER REBOOT / FRESH LAUNCH: MANUAL PLACEMENT VERIFIED ===
+# Maintainer manually resized initially black viewer, then requested (100,100) 800x628.
+{"managed_id":"win-001","placement":"succeeded","protocol":1,"reason":"verified","registration":"registered","remote_session":"unverified","request_id":"9c6ae2a951564dfd9aaac04ca26e47b2","window_uuid":"1d9ec009-59db-4fe9-8d38-8b208908612f"}
+# A later manually requested (1,1) 800x628 placement also verified.
+# The viewer could move while black; GDM appeared later at its new position.
+
+=== SAME-SLOT RETENTION BLOCKED FIRST IMMEDIATE HARNESS ATTEMPT ===
+# After close, ListManaged: count 1; win-001 intended desktop=1 slot=1; presence=missing; placement=succeeded.
+# Harness first attempt printed an evidence_directory record then:
+SDL immediate-placement experiment FAILED: RuntimeError
+# No child_pid was reported. A later clean-registry test succeeded.
+
+=== BROKER RESTART / D-BUS AVAILABILITY ===
+# Immediately after rc-service -U joetoo-kwind restart reported [ok]:
+Service 'org.joetoo.KWinBridge' does not exist.
+Service 'org.joetoo.KWinBridge' does not exist.
+# A later read-only RegistryStatus returned:
+{"managed_count":0,"observation":{"observed_count":5,"revision":38,"synchronized":true},"placement_transaction":{"id":null,"state":"IDLE"},"presence_counts":{"missing":0,"present":0,"uncertain":0},"request_count":0,"viewer_cleanup_uncertain":false}
+# The later synchronized state is observed; exact transient startup duration was not measured.
