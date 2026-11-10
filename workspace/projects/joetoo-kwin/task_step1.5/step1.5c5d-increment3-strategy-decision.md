@@ -1,6 +1,6 @@
 # Step 1.5c.5d — Increment 3/4 launch strategy decision (2026-11-08)
 
-**Status: MAINTAINER DECISION ACCEPTED.** This record supersedes the exploratory `step1.5c5d_DRAFT_Increment_3_strategies`. It records choices already made, not a request for a later collaborator to make them again. Product contracts are maintained in `Step1.5c5_implementation_scope.md` and `../ARCHITECTURE.md`; this is the focused decision rationale.
+**Status: HISTORICAL — SUPERSEDED for Increment 4 (2026-11-10).** This 2026-11-08 strategy record is retained below as originally decided; it is no longer authoritative for current implementation, particularly its former open-ended human-authentication wait policy or task-dispatch references. The [Increment 4 maintainer decisions](step1.5c5d_Increment_4_decisions.md) carry forward the applicable strategy and establish finite, configurable five-minute RDP/VNC viewer-readiness defaults. Consult the [active HANDOFF](HANDOFF.md) for the current task and authorization.
 
 ## Decision
 

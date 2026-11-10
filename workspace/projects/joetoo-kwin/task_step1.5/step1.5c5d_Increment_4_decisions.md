@@ -49,3 +49,40 @@ The three current `tools/joetoo-sdl-*.py` registration, placement and immediate-
 | Version 2 | Mission-scoped ownership across authentication windows/viewers; async and out-of-order completion; cancel versus bad-password retry policy research; VNC/RDP lifecycle normalization. |
 
 **Staged Increment 4 review:** (1) offline target/settings/backend validation; (2) one production RDP frontend/worker integrated into `-o`, with first-class registration/placement/cohort result; (3) finite five-minute RDP/VNC wait defaults, known-clean failure continuation, and optionally narrow verified slot release. Preserve prior working X11/Wayland, Konsole, Dolphin and VNC behavior. No source implementation or publication approval is granted by this document.
+
+## Carried-forward strategy from the superseded Increment 3/4 record
+
+This section incorporates earlier **still-applicable** decisions from the
+[2026-11-08 strategy record](step1.5c5d-increment3-strategy-decision.md).
+Where the earlier record permitted open-ended human waits, the finite
+five-minute viewer-readiness policy above **supersedes** it.
+
+| Strategy | Rationale / limitation | Current decision |
+| --- | --- | --- |
+| Sequential interactive launches | Reuse established serialized ownership and placement; a pending credential dialog delays later entries | **SELECTED for Increment 4**, with the configurable finite readiness deadline and known-clean failure continuation above |
+| Launch all remote clients and stage prompts on a control desktop | Would permit concurrent human authentication, but needs independently proven prompt ownership, source/slot association and safe cancellation | **DEFER to Version 2 / Option D** |
+| Queue remote authentication while continuing local launches | Could improve throughput, but adds scheduling, reservation, transaction and invocation-lock complexity | **DEFER to Version 2 / Option D**, after latency/usability evidence |
+
+- **Identity timing is not human waiting.** The accepted 500 ms native-X11
+  persistent-viewer identity-settling interval starts when a UUID begins
+  qualifying as a viewer. It is **not** a connection/authentication timeout
+  and must never substitute for the separately configured viewer-readiness
+  deadline. Preserve the known temporary-X11-viewer counterexample.
+- **Different windows and outcomes remain separate.** SDL NLA dialogs and
+  VNC/SSH prompts may precede a persistent managed viewer; none may be
+  enrolled merely by shared PID, class or caption. A remote GNOME GDM greeter
+  is content *inside* the RDP viewer, not a separate local KWin window.
+  Authentication, registration, placement and remote usability are
+  independent outcomes and may be reported only to the extent verified.
+- **Security and external constraints remain intact.** Do not inject or save
+  credentials, weaken certificate/SSH host-key verification, or assume a
+  remote server will maintain an idle authentication session indefinitely.
+- **Milestone sequencing remains:** Increment 4 configured serial `-o`;
+  Increment 5 and Step 1.5d security/native integration and broader
+  acceptance; Version 2 / Option D optional prompt staging, readable target
+  labels, cascading prompt geometry, queuing and out-of-order completion
+  after measured need and separately approved design. Earlier Increment 2/3
+  evidence is historical, not permission to reimplement it.
+
+This record states product decisions only; implementation, native testing,
+commits, publication and merge require separate authorization.

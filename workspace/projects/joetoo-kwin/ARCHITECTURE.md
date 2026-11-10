@@ -573,10 +573,17 @@ confirmed placement test remain distinct development contracts. Preserve
 client-specific RDP transport/security handling and independent remote-session
 outcomes. This phase processes one unresolved interactive launch at a time;
 that serial policy must not be confused with an identity requirement that
-human authentication complete in launch order. Human credential waits must
-not be terminated solely by arbitrary automation deadlines; mechanical
-identity, placement and cleanup operations remain bounded and fail closed.
-The existing TigerVNC implementation is unchanged in Option C.
+human authentication complete in launch order. The later accepted Increment 4
+policy uses finite, independently configurable **five-minute (300000 ms)**
+defaults for RDP viewer registration and TigerVNC viewer readiness. These
+limits bound identification of a persistent viewer, not a verified password-
+entry state. At timeout, cancel the pending registration, terminate only owned
+pre-registration resources, and continue serially after verified terminal
+cleanup; Busy, unresolved ownership or an active transaction still blocks
+subsequent launches. Mechanical identity, placement, and cleanup remain
+separately bounded and fail closed. TigerVNC was unchanged by Option C;
+Increment 4 may align its viewer-readiness default without a general VNC
+refactor. See [authoritative Increment 4 decisions](task_step1.5/step1.5c5d_Increment_4_decisions.md).
 
 **Option D — later, separately authorized lifecycle objective.** Extend broker
 bookkeeping to support multiple independently keyed pending remote launches,

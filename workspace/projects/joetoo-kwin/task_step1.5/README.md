@@ -48,13 +48,13 @@ At Codex harness revision `599f7f3`, the maintainer's `q552u01` installation/che
 
 The successful harness lacked an attached broker-stderr trace (`diagnostic_log_not_supplied`). A prior closed viewer's `presence=missing` record continued reserving its intended desktop/slot, so the first same-slot harness attempt failed before child spawn with a generic `RuntimeError`; a broker restart cleared the in-memory record, but OpenRC initially reported started before the D-Bus service was queried successfully. These are open testing/lifecycle ergonomics issues, not proof of placement failure. The development harness continues foreground supervision but does not claim remote-session authentication (`remote_session=unverified`). Single-run native success is **not** multi-run acceptance, X11 regression or configured RDP `-o` integration. Full timings, constraints and transcript: [new native evidence](step1.5c5d-increment3-native-wayland-smart-sizing-immediate-placement-2026-11-10.md) and [normalized output](step1.5c5d-increment3-immediate-placement-transcript-2026-11-10.log).
 
-## Accepted serial workflow design (2026-11-08)
+## Accepted serial workflow design (updated 2026-11-10)
 
-The maintainer selected a **straightforward, sequential, human-interactive** RDP/VNC mixed launch plan for the first complete configured `-o` implementation. One owned registration/placement result resolves before the next plan entry. An operator may take several minutes or longer to respond to NLA/VNC/SSH prompts. **Human inactivity must not by itself trip a fixed automated timeout that kills the client or owned tunnel.** Technically bounded D-Bus, UUID registration and placement, safe cancellation/cleanup and fail-closed ownership remain mandatory; actual server-side timeout remains outside our control.
+The maintainer selected a **straightforward, sequential, human-interactive** RDP/VNC mixed launch plan for the first complete configured `-o` implementation. One owned registration/placement result resolves before the next plan entry. The **2026-11-10 Increment 4 decision supersedes the previous unlimited human-wait intent**: RDP registration and TigerVNC viewer readiness have user-configurable **five-minute (300000 ms) defaults**. These bounds measure positive viewer identification, not a proven password-entry state. A known-clean timeout/failure cancels and terminates only owned pending work, reports the failed recipe and permits serial continuation; Busy, unknown ownership or unresolved cleanup remain stop conditions. D-Bus, post-registration verification, placement and cleanup retain separate bounded checks; server-side inactivity limits are outside our control.
 
 This choice follows the already stated architecture: **Increment 3** exact-UUID operator-controlled RDP placement; **Increment 4** configured sequential mixed `-o` integration and correct human-wait handling; **Increment 5** RDP security/native closure; **Step 1.5d** broad integrated regression and `-L`/`-l`; **Phase 2** optional throughput optimization if measurement justifies queueing, prompt staging or concurrency. This sequencing is a decided product strategy, **not proof** that Increment 3/4 code already implements it.
 
-Current RDP and VNC supervisors have pre-registration/readiness deadlines that can expire during human authentication; those are a known Increment 4 correctness gap, not a failure of Increment 2's completed registration tests. See [strategy decision](step1.5c5d-increment3-strategy-decision.md) and [interactive-authentication decision](increment2-deferred-authentication-workflow-section.md). The superseded `step1.5c5d_DRAFT_Increment_3_strategies` and `DRAFT_Codex-Next-Operator-Controlled-RDP-Placement.md` are not current task instructions.
+The current RDP/VNC development defaults are still 120 seconds; raising them to the approved 300 seconds and implementing safe failure/continuation remains **Increment 4 Stage 3 work, not an already delivered behavior**. See [authoritative Increment 4 decisions](step1.5c5d_Increment_4_decisions.md). The [earlier strategy](step1.5c5d-increment3-strategy-decision.md) and [authentication-workflow discussion](increment2-deferred-authentication-workflow-section.md) remain historical; their prior open-ended-wait language is superseded. Old exploratory drafts are not current task instructions.
 
 ## Historical authorization chronology
 
@@ -101,7 +101,7 @@ The original historical HANDOFF records **Codex iterations 0–45** and **cloud 
 - [RDP private PKI / GRD system Remote Login evidence](step1.5c5d-gnome-remote-login-pki-evidence-2026-11-07.md)
 - [1.5c.4 native acceptance](step1.5c4-native-acceptance.md); [SFTP native acceptance](step1.5c5a-native-acceptance.md)
 - [1.5c.5 implementation scope](Step1.5c5_implementation_scope.md); [project architecture](../ARCHITECTURE.md)
-- [Accepted Increment 3/4 sequencing](step1.5c5d-increment3-strategy-decision.md)
+- [Authoritative Increment 4 maintainer decisions](step1.5c5d_Increment_4_decisions.md); [superseded historical strategy](step1.5c5d-increment3-strategy-decision.md)
 
 ## Record policy
 

@@ -1,6 +1,6 @@
-# Interactive authentication, placement and multiwindow scheduling — decided baseline
+# Interactive authentication, placement and multiwindow scheduling — historical baseline
 
-**Status:** The **initial orchestration strategy is ACCEPTED** by the maintainer as of 2026-11-08; advanced prompt staging and concurrent/queued scheduling remain deliberately **deferred**. The historical filename reflects where the question originated in Increment 2, not its present decision status. See [decision rationale](step1.5c5d-increment3-strategy-decision.md) and [scope](Step1.5c5_implementation_scope.md).
+**Status: HISTORICAL — SUPERSEDED for Increment 4 (2026-11-10).** This discussion preserves the earlier open-ended human-wait rationale, **not** the current implementation requirement. The [authoritative Increment 4 maintainer decisions](step1.5c5d_Increment_4_decisions.md) establish finite, configurable five-minute RDP/VNC viewer-readiness defaults and keep parallel/queued prompting deferred to Version 2. The older analysis below remains unchanged as historical context.
 
 ## Accepted baseline: serialized, human-interactive launch
 
