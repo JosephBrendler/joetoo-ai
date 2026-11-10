@@ -89,7 +89,11 @@ def development_argv(host, port, username, marker):
     if not isinstance(marker, str) or not re.fullmatch(r'joetoo-rdp-[0-9a-f]{64}', marker):
         raise ValueError('Invalid broker launch marker')
     return ['sdl-freerdp', '/v:' + host + ':' + str(port), '/u:' + username,
-            '/t:' + marker, '/log-level:INFO', '/log-filters:com.freerdp.client.SDL:DEBUG']
+            '/t:' + marker,
+            '/size:1024x768',
+            '/smart-sizing:800x600',
+            '/log-level:INFO',
+            '/log-filters:com.freerdp.client.SDL:DEBUG']
 
 
 def development_environment(environment, profile=None, bounds=None):

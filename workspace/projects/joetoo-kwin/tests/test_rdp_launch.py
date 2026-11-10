@@ -125,6 +125,8 @@ class LaunchAdapterTests(unittest.TestCase):
         marker = 'joetoo-rdp-' + 'a' * 64
         args = adapter.development_argv('example.invalid', 3389, 'tester', marker)
         self.assertEqual(args[:4], ['sdl-freerdp', '/v:example.invalid:3389', '/u:tester', '/t:' + marker])
+        self.assertIn('/size:1024x768', args)
+        self.assertIn('/smart-sizing:800x600', args)
         self.assertFalse(any(a.startswith(('/p:', '/cert:', '/sec:')) for a in args))
         self.assertIn('/v:[::1]:3390', adapter.development_argv('::1', 3390, 'tester', marker))
 
