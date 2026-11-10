@@ -265,7 +265,7 @@ class PlacementTests(unittest.TestCase):
             input=json.dumps(request), text=True, capture_output=True, timeout=5)
         self.assertEqual(run.returncode, 0, run.stderr)
         result = json.loads(run.stdout)
-        self.b.Complete(request['id'], result['state'], json.dumps(result['detail']), sender=':1.kwin')
+        self.b.Complete(request['id'], result['state'], result.get('wire_detail', json.dumps(result['detail'])), sender=':1.kwin')
         self.observe(geometry=result['geometry'], desktops=result['desktops'])
         self.assertEqual(self.poll()['placement'], 'succeeded')
         self.assertEqual(result['uuid'], WINDOW_ID)
@@ -570,7 +570,8 @@ class PlacementDiagnosticTests(unittest.TestCase):
         result = dict(c['terminal'])
         self.assertEqual(result['placement'], 'failed')
         self.assertEqual(result['reason'], 'Placement authentication/source unavailable')
-        self.assertEqual(self.log.getvalue(), 'joetoo-kwind: SDL placement preflight failed stage=' + stage + '\n')
+        legacy = [line for line in self.log.getvalue().splitlines() if line.startswith('joetoo-kwind: SDL placement preflight failed stage=')]
+        self.assertEqual(legacy, ['joetoo-kwind: SDL placement preflight failed stage=' + stage])
         self.assertIsNone(self.b.request)
         self.assertIsNone(self.f.child.poll())
         self.assertEqual(self.b.registry.get_window(self.mid).placement, 'not_requested')
@@ -594,7 +595,7 @@ class PlacementDiagnosticTests(unittest.TestCase):
         self.assertEqual(result['placement'], 'succeeded')
         self.assertEqual(result['window_uuid'], WINDOW_ID)
         self.assertEqual(self.denied_exe_lookups, [])
-        self.assertEqual(self.log.getvalue(), '')
+        self.assertNotIn('preflight failed', self.log.getvalue())
 
     def test_missing_auth_callback_expires_and_late_fd_is_discarded(self):
         self.f.bus.auto = False
@@ -614,7 +615,7 @@ class PlacementDiagnosticTests(unittest.TestCase):
         self.submit(managed_id='win-999')
         self.assertTrue(self.errors); self.assertEqual(self.log.getvalue(), '')
         self.assertEqual(self.submit()['placement'], 'pending')
-        self.assertEqual(self.log.getvalue(), '')
+        self.assertNotIn('preflight failed', self.log.getvalue())
 
     def test_diagnostic_sink_failure_cannot_bypass_terminal_cleanup(self):
         self.f.bus.process_fd = False
@@ -623,6 +624,213 @@ class PlacementDiagnosticTests(unittest.TestCase):
         self.assertIsNone(self.b.request)
         self.assertEqual(self.f.loop.callbacks, {})
         self.assertFalse(self.b._sdl_placement.get('cleanup_uncertain'))
+
+
+class LatePlacementTraceTests(unittest.TestCase):
+    setUp = PlacementDiagnosticTests.setUp
+    cleanup = PlacementTests.cleanup
+    submit = PlacementTests.submit
+    claim = PlacementTests.claim
+    poll = PlacementTests.poll
+    observe = PlacementTests.observe
+    verification = PlacementTests.verification
+    complete = PlacementTests.complete
+
+    def rows(self):
+        prefix = 'joetoo-kwind: SDL placement diagnostic '
+        return [json.loads(line[len(prefix):]) for line in self.log.getvalue().splitlines() if line.startswith(prefix)]
+
+    def stage(self, name): return [r for r in self.rows() if r['stage'] == name]
+
+    def expire(self):
+        self.f.clock += 1
+        self.f.loop.tick()
+        result = self.poll()
+        self.assertEqual(result['reason'], 'Placement identity/source/owner lost or expired')
+        return result
+
+    def test_unclaimed_pending_phase_and_deadline_are_preserved(self):
+        self.submit(); result = self.expire()
+        row = self.stage('terminal')[0]
+        self.assertEqual(row['phase'], 'PENDING')
+        self.assertEqual(row['guard'], 'guard_deadline')
+        self.assertTrue(row['deadline_expired'])
+        self.assertEqual(row['receipt_elapsed_ms'], 1000)
+        self.assertEqual(self.stage('take_accepted'), [])
+        self.assertEqual(self.poll(), result)
+
+    def test_claimed_uncompleted_running_is_distinct(self):
+        self.submit(); self.claim(); self.expire()
+        self.assertEqual(self.stage('terminal')[0]['phase'], 'RUNNING')
+        self.assertEqual(len(self.stage('take_accepted')), 1)
+        self.assertEqual(self.stage('complete_received'), [])
+
+    def test_verifying_nonconvergence_retains_misleading_public_result(self):
+        self.submit(); request = self.claim(); self.complete(request)
+        self.assertEqual(self.b.request['state'], 'VERIFYING')
+        self.expire()
+        row = self.stage('terminal_begin')[0]
+        self.assertEqual(row['phase'], 'VERIFYING')
+        self.assertEqual(row['guard'], 'guard_deadline')
+        self.assertFalse(row['geometry_match'])
+        self.assertTrue(row['desktop_match'])
+        self.assertEqual(len(self.stage('complete_accepted')), 1)
+        self.assertEqual(len(self.stage('verifying_entered')), 1)
+
+    def test_observation_after_failure_is_passive_and_not_a_success(self):
+        self.submit(); request = self.claim(); self.complete(request)
+        result = self.expire()
+        self.f.clock += .25
+        self.observe(geometry=dict(x=25, y=35, width=800, height=600), desktops=[3])
+        late = self.stage('post_observation')[-1]
+        self.assertTrue(late['geometry_match']); self.assertTrue(late['after_terminal'])
+        self.assertEqual(late['causality'], 'unproven')
+        self.assertEqual(late['receipt_elapsed_ms'], 1250)
+        self.assertEqual(late['window_uuid'], WINDOW_ID)
+        self.assertEqual(self.poll(), result)
+        self.assertEqual(self.b.request['state'], 'ERROR')
+        self.assertEqual(self.b.registry.get_window(self.mid).placement, 'failed')
+
+    def test_success_reports_actual_frame_and_no_repair_after_manual_move(self):
+        self.submit(); request = self.claim(); self.complete(request)
+        self.observe(geometry=dict(x=25, y=35, width=800, height=600), desktops=[3])
+        result = self.poll()
+        self.assertEqual(result['placement'], 'succeeded')
+        self.assertTrue(self.stage('terminal')[0]['geometry_match'])
+        self.observe(geometry=dict(x=400, y=90, width=800, height=600))
+        self.assertEqual(self.poll(), result)
+        self.assertFalse(self.stage('post_observation')[-1]['geometry_match'])
+        self.assertEqual(self.b.observed_windows[WINDOW_ID]['geometry']['x'], 400)
+
+    def test_wrong_sender_and_wrong_uuid_completions_are_rejected(self):
+        self.submit(); request = self.claim()
+        with self.assertRaises(Exception): self.b.TakeSdlPlacement('source', sender='foreign-private')
+        with self.assertRaises(Exception):
+            self.b.Complete(request['id'], 'VERIFY', 'private exception data', sender='foreign-private')
+        with self.assertRaises(Exception):
+            self.complete(request, self.verification(request, OTHER))
+        self.assertTrue(self.stage('take_rejected'))
+        self.assertTrue(self.stage('complete_rejected'))
+        self.assertEqual([r['sender_matches'] for r in self.stage('complete_received')], [False, True])
+        self.assertEqual(self.b.request['state'], 'RUNNING')
+        self.assertEqual(self.stage('complete_accepted'), [])
+        self.assertNotIn('foreign-private', self.log.getvalue())
+        self.assertNotIn('private exception data', self.log.getvalue())
+
+    def test_wrapped_error_preserves_exact_original_detail_and_redacts_stages(self):
+        self.submit(); request = self.claim()
+        original = 'PRIVATE caption destination arguments'
+        finish = self.b._sdl_placement_finish
+        seen = []
+        def inspect_detail(*args):
+            seen.append(self.b.request['detail'])
+            return finish(*args)
+        with patch.object(self.b, '_sdl_placement_finish', inspect_detail):
+            self.b.Complete(request['id'], 'ERROR', json.dumps(dict(sdl_diagnostic=['PRIVATE stage'], detail=original)), sender=':1.kwin')
+        self.assertEqual(seen, [original])
+        self.assertEqual(self.poll()['reason'], 'resident refused placement')
+        self.assertEqual(self.stage('complete_accepted')[0]['result'], 'ERROR')
+        self.assertNotIn('PRIVATE', self.log.getvalue())
+
+    def test_late_resident_report_cannot_revive_or_prove_late_assignment(self):
+        self.submit(); request = self.claim(); result = self.expire()
+        detail = json.dumps(dict(sdl_diagnostic=['uuid_selected', 'assignment_attempt', 'assignment_returned'],
+                                 detail=json.dumps(self.verification(request))))
+        self.f.clock += .25
+        self.b.Complete(request['id'], 'VERIFY', detail, sender=':1.kwin')
+        self.assertTrue(self.stage('resident_assignment_attempt')[0]['after_terminal'])
+        self.assertEqual(self.stage('resident_assignment_attempt')[0]['receipt_elapsed_ms'], 1250)
+        self.assertTrue(self.stage('complete_rejected'))
+        self.assertEqual(self.poll(), result)
+        self.assertEqual(self.b.request['state'], 'ERROR')
+
+    def test_real_resident_code_can_be_replayed_after_simulated_broker_failure_without_revival(self):
+        self.submit(); request = self.claim(); result = self.expire()
+        # Deliberately independent fake clocks: replay a previously issued Take
+        # reply in the real resident VM after the simulated broker has failed.
+        # This demonstrates trace handling, not real Qt scheduling or clock skew.
+        run = subprocess.run(['node', str(Path(__file__).with_suffix('.js')), '--fixture'],
+            input=json.dumps(request), text=True, capture_output=True, timeout=5)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        resident = json.loads(run.stdout)
+        self.b.Complete(request['id'], resident['state'], resident['wire_detail'], sender=':1.kwin')
+        self.observe(geometry=resident['geometry'], desktops=resident['desktops'])
+        self.assertTrue(self.stage('resident_assignment_attempt')[0]['after_terminal'])
+        self.assertTrue(self.stage('post_observation')[0]['geometry_match'])
+        self.assertEqual(self.poll(), result)
+        self.assertEqual(resident['unrelated_mutations'], 0)
+
+    def test_late_report_for_old_request_never_changes_a_new_request(self):
+        self.submit(); first = self.claim(); self.expire()
+        self.data['action_id'] = 'b' * 32
+        self.submit(); second = self.b.request
+        with self.assertRaises(Exception): self.complete(first)
+        self.assertIs(self.b.request, second)
+        self.assertEqual(second['state'], 'PENDING')
+        late = self.stage('complete_received')[-1]
+        self.assertEqual(late['request_id'], first['id'])
+        self.assertTrue(late['after_terminal'])
+
+    def test_post_capture_count_time_and_unrelated_uuid_bounds(self):
+        self.b._sdl_registered[self.mid]['bounds']['rdp_registration_window_limit'] = 2
+        self.submit(); self.expire()
+        self.observe('added', OTHER, pid=999, caption='PRIVATE unrelated')
+        self.assertEqual(self.stage('post_observation'), [])
+        for x in range(5): self.observe(geometry=dict(x=x, y=0, width=800, height=600))
+        self.assertEqual(len(self.stage('post_observation')), 2)
+        self.assertEqual(len(self.stage('post_observation_limit')), 1)
+        before = self.log.getvalue()
+        self.f.clock += 121
+        self.observe(geometry=dict(x=90, y=0, width=800, height=600))
+        self.assertEqual(self.log.getvalue(), before)
+        self.assertNotIn('PRIVATE', before)
+
+    def test_post_capture_horizon_is_independent_of_placement_deadline(self):
+        self.submit(); self.expire()
+        self.f.clock += 121
+        self.observe(geometry=dict(x=90, y=0, width=800, height=600))
+        self.assertEqual(self.stage('post_observation'), [])
+        self.assertEqual(self.b.request['state'], 'ERROR')
+
+    def test_post_source_replacement_stops_old_uuid_capture(self):
+        self.submit(); result = self.expire()
+        self.b.SyncInventory(json.dumps(dict(source='new', revision=1,
+            windows=[self.b.observed_windows[WINDOW_ID]])))
+        self.assertEqual(len(self.stage('post_source_changed')), 1)
+        self.assertEqual(self.stage('post_observation'), [])
+        self.assertEqual(self.poll(), result)
+
+    def test_owner_loss_is_not_misreported_as_deadline_in_trace(self):
+        self.submit(); self.claim(); self.f.bus.lost()
+        row = self.stage('terminal')[0]
+        self.assertEqual(row['guard'], 'owner_changed')
+        self.assertFalse(row['deadline_expired'])
+        self.assertEqual(row['phase'], 'RUNNING')
+
+    def test_source_loss_has_guard_record_and_keeps_public_outcome(self):
+        self.submit(); self.claim()
+        self.b.SyncInventory(json.dumps(dict(source='replaced', revision=1, windows=[])))
+        self.assertEqual(self.poll()['placement'], 'failed')
+        self.assertEqual(self.stage('terminal')[0]['guard'], 'guard_record')
+        self.assertFalse(self.stage('terminal')[0]['deadline_expired'])
+
+    def test_child_exit_has_guard_child_without_reviving_registration(self):
+        self.submit(); self.claim()
+        self.f.child.stdin.close(); self.f.child.wait(timeout=5)
+        self.f.loop.tick()
+        self.assertEqual(self.poll()['placement'], 'failed')
+        self.assertEqual(self.stage('terminal')[0]['guard'], 'guard_child')
+        self.assertEqual(self.f.poll(), self.registered)
+
+    def test_trace_budget_is_bounded_but_terminal_is_always_retained(self):
+        self.submit(); trace = self.b._sdl_placement['trace']; trace['limit'] = 16
+        for i in range(100): self.b._sdl_trace(trace, 'post_observation', present=True)
+        self.assertEqual(len(self.stage('trace_limit')), 1)
+        self.expire()
+        self.assertEqual(len(self.stage('terminal')), 1)
+        self.assertLessEqual(len(self.rows()), 18)
+        self.assertLess(len(self.log.getvalue()), 20000)
+
 
 
 def placement_diagnostic_case(fault, stage):
@@ -734,6 +942,26 @@ class OperatorClientTests(unittest.TestCase):
         self.assertEqual(json.loads(self.output[-1])['window_uuid'], WINDOW_ID)
         self.assertTrue(self.bus.closed)
         self.assertFalse(any(name == 'CancelSdlPlacement' for name, _ in self.calls))
+
+    def test_dispatch_trace_is_redacted_monotonic_and_separate_from_result(self):
+        import io
+        from contextlib import redirect_stderr
+        stream = io.StringIO()
+        with redirect_stderr(stream): self.assertEqual(self.run_client(), 0)
+        prefix = 'joetoo-kwin SDL operator diagnostic '
+        rows = [json.loads(line[len(prefix):]) for line in stream.getvalue().splitlines()]
+        self.assertEqual([r['stage'] for r in rows], ['shortcut_dispatch', 'shortcut_returned'])
+        self.assertTrue(all(r['request_id'] == self.result['request_id'] and r['window_uuid'] == WINDOW_ID for r in rows))
+        self.assertEqual([r['elapsed_ms'] for r in rows], sorted(r['elapsed_ms'] for r in rows))
+        self.assertNotIn('caption', stream.getvalue())
+        self.assertEqual(len(self.output), 1)
+
+    def test_dispatch_diagnostic_sink_failure_does_not_change_operation(self):
+        # inject the sink only, not the public result emitter
+        with patch('sys.stderr.write', side_effect=OSError('sink failure')):
+            self.assertEqual(self.run_client(), 0)
+        self.assertTrue(self.bus.closed)
+        self.assertEqual(len(self.output), 1)
 
     def test_absent_confirmation_never_submits(self):
         with self.assertRaises(RuntimeError): self.run_client(confirmed=False)

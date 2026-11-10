@@ -22,21 +22,28 @@ function harness() {
     const ctx = vm.createContext({workspace, observerSource: 'source', BRIDGE: 'bridge', PATH: '/bridge',
         Date: {now: () => now}, console,
         windowUUID: w => w?.internalId || '', geometryText: () => 'before',
-        finish: (r, state, detail) => outcomes.push({state, detail: state === 'VERIFY' ? JSON.parse(detail) : detail}),
         registerShortcut: (name, _label, _key, fn) => shortcuts.set(name, fn),
-        callDBus: (_bus, _path, _iface, method, _source, cb) => {
-            assert.equal(method, 'TakeSdlPlacement'); callback = cb;
+        callDBus: (_bus, _path, _iface, method, ...args) => {
+            if (method === 'TakeSdlPlacement') {callback = args[1]; return;}
+            assert.equal(method, 'Complete');
+            const [_id, state, wire] = args;
+            let parsed; try {parsed = JSON.parse(wire);} catch (_) {parsed = {};}
+            const wrapped = parsed.sdl_diagnostic !== undefined;
+            const detail = wrapped ? parsed.detail : wire;
+            outcomes.push({state, detail: state === 'VERIFY' ? JSON.parse(detail) : detail,
+                wire_detail: wire, diagnostic: wrapped ? parsed.sdl_diagnostic : []});
         }}, {codeGeneration: {strings: false, wasm: false}});
     const optional = source.slice(source.indexOf('function placeOptionalWindow('), source.indexOf('registerShortcut("joetoo_bridge_move_optional"'));
     const sdl = source.slice(source.indexOf('function sdlPlacementFromBroker('), source.indexOf('// New-window path:'));
-    vm.runInContext(optional + '\n' + sdl, ctx, {timeout: 1000});
+    const finish = source.slice(source.indexOf('function finish('), source.indexOf('// Return a display-friendly'));
+    vm.runInContext(finish + '\n' + optional + '\n' + sdl, ctx, {timeout: 1000});
     return {win, workspace, outcomes, shortcuts, start: () => ctx.sdlPlacementFromBroker(),
         reply: r => callback(JSON.stringify(r)), advance: ms => {now += ms;}, mutations: () => mutationCount};
 }
 const request = extra => ({id: 'placement', source: 'source', window_uuid: uuid,
     pid: 42, resource_class: 'com.freerdp.client.sdl3', title_marker: 'marker', remaining_ms: 1000,
     desktop: 3, x: 25, y: 35, width: 800, height: 600,
-    preserve_desktop: false, preserve_position: false, preserve_size: false, ...extra});
+    preserve_desktop: false, preserve_position: false, preserve_size: false, sdl_diagnostic: 1, ...extra});
 
 if (process.argv.includes('--fixture')) {
     const r = JSON.parse(fs.readFileSync(0, 'utf8'));
@@ -57,6 +64,23 @@ if (process.argv.includes('--fixture')) {
         assert.equal(h.outcomes[0].detail.window_uuid.toLowerCase().replace(/[{}]/g, ''), uuid);
         assert.equal(h.win.frameGeometry.x, 25); assert.equal(h.win.desktops[0].x11DesktopNumber, 3);
         assert.equal(h.mutations(), 0);
+    });
+    test('real finish transports only fixed diagnostic stages beside the original detail', () => {
+        const h = harness(); h.start(); h.reply(request());
+        assert.deepEqual(h.outcomes[0].diagnostic, ['uuid_selected', 'assignment_attempt', 'assignment_returned']);
+        assert.equal(h.outcomes[0].detail.window_uuid.toLowerCase().replace(/[{}]/g, ''), uuid);
+    });
+    test('desktop assignment failure does not falsely report geometry assignment attempted', () => {
+        const h = harness(), original = h.win.desktops;
+        Object.defineProperty(h.win, 'desktops', {get: () => original, set: () => {throw Error('desktop rejected');}});
+        h.start(); h.reply(request());
+        assert.equal(h.outcomes[0].state, 'ERROR');
+        assert.deepEqual(h.outcomes[0].diagnostic, ['uuid_selected']);
+    });
+    test('new resident remains compatible with an older broker without diagnostic opt-in', () => {
+        const h = harness(); h.start(); h.reply(request({sdl_diagnostic: undefined}));
+        assert.deepEqual(h.outcomes[0].diagnostic, []);
+        assert.equal(JSON.parse(h.outcomes[0].wire_detail).source, 'source');
     });
     for (const fault of ['uuid', 'pid', 'marker', 'class', 'removed', 'non_normal', 'source', 'expiry', 'fullscreen', 'maximized', 'tile', 'desktop']) {
         test('resident refuses ' + fault + ' before any assignment', () => {

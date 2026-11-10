@@ -155,6 +155,7 @@ class Broker(dbus.service.Object):
         self._sdl_pending_auth = None
         self._sdl_registered = {}  # Metadata only: registration still closes its FDs.
         self._sdl_placement = None
+        self._sdl_traces = []  # Diagnostic snapshots only; never transaction authority.
 
     def _sdl_bus_connection(self):
         address = os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")
@@ -618,6 +619,7 @@ class Broker(dbus.service.Object):
             self._rdp_finish(c, "ambiguous", "Competing RDP viewer UUIDs")
 
     def _rdp_observation(self, event=None, details=None):
+        self._sdl_trace_observation(event, details)
         self._sdl_track_registered(event, details)
         c = self._rdp_registration
         if not c or c["state"] != "PENDING" or not self._rdp_guard(c):
@@ -756,6 +758,78 @@ class Broker(dbus.service.Object):
                     self._rdp_finish(c, "failed", "RDP client exited before registration")
         return self._rdp_report(request_id)
 
+    def _sdl_trace(self, trace, stage, **fields):
+        """Bounded sanitized receipt-time diagnostics; never change an outcome."""
+        if not trace:
+            return
+        try:
+            key = (stage, fields.get("phase"), fields.get("result"), fields.get("guard"),
+                   fields.get("sender_matches"), fields.get("after_terminal"))
+            if stage != "post_observation" and key in trace["seen"]:
+                return
+            if trace["count"] >= trace["limit"] and stage != "terminal":
+                if trace.get("limited"):
+                    return
+                trace["limited"] = True
+                stage, fields = "trace_limit", {}
+            trace["seen"].add(key)
+            trace["count"] += 1
+            row = dict(stage=stage, request_id=trace["id"], window_uuid=trace["uuid"],
+                       receipt_elapsed_ms=max(0, int((time.monotonic() - trace["started"]) * 1000)))
+            row.update(fields)
+            print("joetoo-kwind: SDL placement diagnostic " + json.dumps(row, sort_keys=True),
+                  file=sys.stderr, flush=True)
+        except Exception:
+            pass  # Diagnostic sink failure must not change placement or cleanup.
+
+    def _sdl_trace_frame(self, trace, window):
+        """Copy only bounded numerical frame/membership data, never captions."""
+        try:
+            geometry = window["geometry"]
+            frame = {k: geometry[k] for k in ("x", "y", "width", "height")}
+            if any(type(v) not in (int, float) or not math.isfinite(v) or abs(v) > 32768 for v in frame.values()):
+                return {"frame_available": False}
+            desktops = window["desktops"]
+            if len(desktops) > 256 or any(type(d) is not int or not 1 <= d <= 256 for d in desktops):
+                return {"frame_available": False}
+            return dict(frame_available=True, geometry=frame, desktops=list(desktops),
+                on_all_desktops=bool(window["on_all_desktops"]),
+                geometry_match=frame == trace["target"],
+                desktop_match=desktops == [trace["desktop"]] and not window["on_all_desktops"])
+        except Exception:
+            return {"frame_available": False}
+
+    def _sdl_trace_phase(self, c):
+        r = self.request
+        return r["state"] if r and r["id"] == c["id"] else "UNARMED"
+
+    def _sdl_trace_observation(self, event, details):
+        # Passive use of accepted existing observations. No timer, subscription,
+        # movement, transaction revival or ownership transfer is introduced.
+        now = time.monotonic()
+        for trace in self._sdl_traces:
+            if not trace.get("ended") or now >= trace["post_until"] or trace["post_count"] >= trace["post_limit"]:
+                continue
+            if not self.observation_synced or self.observation_source != trace["source"]:
+                self._sdl_trace(trace, "post_source_changed")
+                trace["post_until"] = now
+                continue
+            window = details if details and details["uuid"] == trace["uuid"] else None
+            if details is not None and window is None:
+                continue
+            if details is None:
+                window = self.observed_windows.get(trace["uuid"])
+            frame = self._sdl_trace_frame(trace, window)
+            present = window is not None and event != "removed"
+            signature = (json.dumps(frame, sort_keys=True), present)
+            if signature == trace.get("last_frame"):
+                continue
+            trace["last_frame"] = signature
+            trace["post_count"] += 1
+            self._sdl_trace(trace, "post_observation", present=present, after_terminal=True, causality="unproven", **frame)
+            if trace["post_count"] == trace["post_limit"]:
+                self._sdl_trace(trace, "post_observation_limit")
+
     def _sdl_track_registered(self, event, details):
         """Retain identity continuity using existing observations, without new observers."""
         for meta in self._sdl_registered.values():
@@ -812,6 +886,16 @@ class Broker(dbus.service.Object):
         if c.get("terminal"):
             return
         r = self.request
+        trace = c.get("trace")
+        phase = self._sdl_trace_phase(c)
+        if trace:
+            # Preserve the preceding phase and guard before generic ERROR wins.
+            self._sdl_trace(trace, "terminal_begin", phase=phase, guard=c.get("diagnostic_stage", "unknown"),
+                deadline_expired=time.monotonic() >= c["deadline"], requested_outcome=state,
+                guard_failed=reason == "Placement identity/source/owner lost or expired",
+                source_match=self.observation_synced and self.observation_source == trace["source"],
+                identity_continuity=not c["meta"]["invalid"],
+                **self._sdl_trace_frame(trace, self.observed_windows.get(trace["uuid"])))
         if r and r.get("id") == c["id"]:
             if state != "succeeded":
                 r.update(state="ERROR", detail=reason)
@@ -841,6 +925,15 @@ class Broker(dbus.service.Object):
         c["terminal"] = dict(protocol=1, request_id=c["id"], managed_id=c["meta"]["managed_id"],
             window_uuid=c["meta"]["uuid"], registration="registered", remote_session="unverified",
             placement=state, reason=reason)
+        if trace:
+            trace["ended"] = True
+            trace["post_until"] = time.monotonic() + trace["post_ms"] / 1000
+            trace["retain_until"] = trace["post_until"]
+            self._sdl_trace(trace, "terminal", phase=phase, outcome=state,
+                guard=c.get("diagnostic_stage", "unknown"), deadline_expired=time.monotonic() >= c["deadline"],
+                guard_failed=reason == "Placement identity/source/owner lost or expired",
+                cleanup_uncertain=bool(c.get("cleanup_uncertain")),
+                **self._sdl_trace_frame(trace, self.observed_windows.get(trace["uuid"])))
         callback = c.pop("reply", None)
         if callback:
             callback(json.dumps(c["terminal"], sort_keys=True))
@@ -906,6 +999,19 @@ class Broker(dbus.service.Object):
         c = dict(id=uuid.uuid4().hex, meta=meta, sender=sender, bus=bus, reply=reply,
                  deadline=time.monotonic() + limits["vnc_placement_timeout_ms"] / 1000, terminal=None)
         self._sdl_placement = c
+        for previous in self._sdl_traces:
+            if previous["uuid"] == meta["uuid"] and previous.get("ended"):
+                self._sdl_trace(previous, "post_superseded")
+                previous["post_until"] = time.monotonic()
+        trace = dict(id=c["id"], uuid=meta["uuid"], source=meta["source"], started=time.monotonic(),
+            target={k: data[k] for k in ("x", "y", "width", "height")}, desktop=data["desktop"],
+            count=0, limit=meta["bounds"]["rdp_registration_event_limit"], seen=set(), ended=False,
+            post_count=0, post_limit=meta["bounds"]["rdp_registration_window_limit"],
+            post_ms=meta["bounds"]["rdp_registration_timeout_ms"], post_until=0, retain_until=0)
+        c["trace"] = trace
+        self._sdl_traces = [t for t in self._sdl_traces if not t.get("ended") or time.monotonic() < t["retain_until"]]
+        self._sdl_traces.append(trace)
+        self._sdl_traces = self._sdl_traces[-self.registry._completed_limit:]
         meta["actions"].add(data["action_id"])
         def fail(*args, stage=None):
             if self._sdl_placement is c and not c.get("terminal"):
@@ -975,6 +1081,9 @@ class Broker(dbus.service.Object):
                 c["diagnostic_stage"] = "deadline_recheck"
                 remaining()
                 if not self._sdl_placement_valid(c): raise ValueError("placement authority lost")
+                trace["kwin_name"] = c["kwin_name"]
+                self._sdl_trace(trace, "operator_authenticated", phase="UNARMED")
+                self._sdl_trace(trace, "initial_frame", **self._sdl_trace_frame(trace, self.observed_windows.get(meta["uuid"])))
                 c["arming"] = True
                 c["diagnostic_stage"] = "submit"
                 self._submit("sdl", *(data[k] for k in ("desktop", "x", "y", "width", "height")))
@@ -985,6 +1094,7 @@ class Broker(dbus.service.Object):
                 c["diagnostic_stage"] = "registry_pending"
                 self.registry.set_placement(meta["uuid"], "pending")
                 c.pop("arming", None)
+                self._sdl_trace(trace, "armed", phase=self.request["state"])
                 c["diagnostic_stage"] = "reply"
                 cb = c.pop("reply")
                 cb(json.dumps(dict(protocol=1, request_id=c["id"], managed_id=meta["managed_id"],
@@ -1035,6 +1145,18 @@ class Broker(dbus.service.Object):
 
     @dbus.service.method(IFACE, in_signature="s", out_signature="s", sender_keyword="sender")
     def TakeSdlPlacement(self, source, sender=None):
+        c = self._sdl_placement
+        trace = c.get("trace") if c else None
+        self._sdl_trace(trace, "take_received", phase=self._sdl_trace_phase(c) if c else "UNARMED")
+        try:
+            answer = self._take_sdl_placement(source, sender)
+        except Exception:
+            self._sdl_trace(trace, "take_rejected")
+            raise
+        self._sdl_trace(trace, "take_accepted" if answer else "take_rejected", phase=self._sdl_trace_phase(c) if c else "UNARMED")
+        return answer
+
+    def _take_sdl_placement(self, source, sender=None):
         c, r = self._sdl_placement, self.request
         if not c or sender != c.get("kwin_name"):
             raise self._sdl_error("org.freedesktop.DBus.Error.AccessDenied")
@@ -1048,7 +1170,7 @@ class Broker(dbus.service.Object):
             "preserve_desktop", "preserve_position", "preserve_size")}
         out.update(source=source, window_uuid=c["meta"]["uuid"], pid=c["meta"]["pid"],
                    resource_class="com.freerdp.client.sdl3", title_marker=c["meta"]["marker"],
-                   remaining_ms=max(0, int((c["deadline"] - time.monotonic()) * 1000)))
+                   remaining_ms=max(0, int((c["deadline"] - time.monotonic()) * 1000)), sdl_diagnostic=1)
         return json.dumps(out)
 
     @dbus.service.method(IFACE, in_signature="s", out_signature="s", sender_keyword="sender")
@@ -1351,6 +1473,37 @@ class Broker(dbus.service.Object):
 
     @dbus.service.method(IFACE, in_signature="sss", out_signature="", sender_keyword="sender")
     def Complete(self, request_id, result, detail, sender=None):
+        trace = next((t for t in reversed(self._sdl_traces) if t["id"] == request_id), None)
+        kind = result if result in ("VERIFY", "ERROR", "OK") else "INVALID"
+        c = self._sdl_placement
+        trusted = bool(trace and trace.get("kwin_name") and sender == trace["kwin_name"])
+        self._sdl_trace(trace, "complete_received", result=kind, phase=self._sdl_trace_phase(c) if c and c["id"] == request_id else "RETAINED", sender_matches=trusted, after_terminal=bool(trace and trace["ended"]))
+        # Only bounded, fixed resident stage names are logged. Keep the actual
+        # original VERIFY/ERROR detail byte-for-byte for the existing handler.
+        if trace and trusted and isinstance(detail, str) and len(detail) <= 8192:
+            try:
+                wrapped = json.loads(detail)
+                if (isinstance(wrapped, dict) and set(wrapped) == {"sdl_diagnostic", "detail"}
+                        and isinstance(wrapped["detail"], str)):
+                    detail = wrapped["detail"]
+                    stages = wrapped["sdl_diagnostic"]
+                    allowed = {"uuid_selected", "uuid_rejected", "callback_rejected", "assignment_attempt", "assignment_returned"}
+                    if trusted and isinstance(stages, list) and len(stages) <= len(allowed) and all(type(v) is str and v in allowed for v in stages):
+                        for stage in stages:
+                            self._sdl_trace(trace, "resident_" + stage, after_terminal=bool(trace and trace["ended"]))
+            except (ValueError, TypeError):
+                pass
+        before = trace.get("accepted", 0) if trace else 0
+        try:
+            answer = self._complete_placement(request_id, result, detail, sender)
+        except Exception:
+            self._sdl_trace(trace, "complete_rejected", result=kind)
+            raise
+        if trace and trace.get("accepted", 0) == before:
+            self._sdl_trace(trace, "complete_rejected", result=kind)
+        return answer
+
+    def _complete_placement(self, request_id, result, detail, sender=None):
         """KWin reports accepted assignment; broker confirms observed state.
 
         Preserve existing OK/ERROR messages for legacy callers and tests.
@@ -1408,6 +1561,12 @@ class Broker(dbus.service.Object):
                     r["expected_desktops"] = resolved_desktops
                     r["expected_sticky"] = resolved_sticky
                 r["state"] = "VERIFYING"
+                if r["kind"] == "sdl":
+                    trace = self._sdl_placement.get("trace")
+                    if trace:
+                        trace["accepted"] = trace.get("accepted", 0) + 1
+                    self._sdl_trace(trace, "complete_accepted", result="VERIFY")
+                    self._sdl_trace(trace, "verifying_entered", phase="VERIFYING")
                 r["placement_uuid"] = identifier
                 r["placement_before"] = before
                 r["placement_tiled"] = payload["tiled"]
@@ -1417,6 +1576,11 @@ class Broker(dbus.service.Object):
         else:
             r["state"] = result
             r["detail"] = str(detail)[:1024]
+            if r["kind"] == "sdl":
+                trace = self._sdl_placement.get("trace")
+                if trace:
+                    trace["accepted"] = trace.get("accepted", 0) + 1
+                self._sdl_trace(trace, "complete_accepted", result=result)
         self._sync_managed_placement()
         if r["kind"] == "sdl":
             self._sdl_placement_check()

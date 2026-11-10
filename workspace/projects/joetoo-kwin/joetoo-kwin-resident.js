@@ -20,8 +20,14 @@ const PATH = "/org/joetoo/KWinBridge";
 // callDBus sends a message asynchronously; it does not block waiting for a
 // completion reply here.
 function finish(request, result, detail) {
-    callDBus(BRIDGE, PATH, BRIDGE, "Complete",
-             request.id, result, String(detail));
+    let sent = String(detail);
+    if (request.sdlDiagnostic) {
+        // No additional D-Bus round trip or clock: these are ordered local
+        // stages, timestamped as receipts by the broker's monotonic clock.
+        const wrapped = JSON.stringify({sdl_diagnostic: request.sdlDiagnostic, detail: sent});
+        if (wrapped.length <= 8192) sent = wrapped;
+    }
+    callDBus(BRIDGE, PATH, BRIDGE, "Complete", request.id, result, sent);
 }
 
 // Return a display-friendly virtual desktop number for a KWin window.
@@ -175,7 +181,11 @@ function placeOptionalWindow(win, request) {
         // Resolve all omitted fields immediately before assignment, without
         // an intervening D-Bus round trip or a second active-window lookup.
         if (!request.preserve_desktop) win.desktops = [desktop];
-        if (changesGeometry) win.frameGeometry = resolved.geometry;
+        if (changesGeometry) {
+            if (request.sdlDiagnostic) request.sdlDiagnostic.push("assignment_attempt");
+            win.frameGeometry = resolved.geometry;
+        }
+        if (request.sdlDiagnostic) request.sdlDiagnostic.push("assignment_returned");
         finish(request, "VERIFY", JSON.stringify({
             window_uuid: uuid, source: observerSource, before: before,
             tiled: tiled, fullscreen: fullscreen, captured: captured, resolved: resolved
@@ -196,8 +206,10 @@ function sdlPlacementFromBroker() {
         if (!payload) return;
         let r;
         try { r = JSON.parse(payload); } catch (error) { return; }
+        if (r.sdl_diagnostic === 1) r.sdlDiagnostic = [];
         const elapsed = Date.now() - started;
         if (r.source !== observerSource || !Number.isFinite(r.remaining_ms) || elapsed < 0 || elapsed >= r.remaining_ms) {
+            if (r.sdlDiagnostic) r.sdlDiagnostic.push("callback_rejected");
             finish(r, "ERROR", "SDL placement callback expired/source changed"); return;
         }
         const canonical = value => String(value).replace(/[{}]/g, "").toLowerCase();
@@ -207,8 +219,10 @@ function sdlPlacementFromBroker() {
                 String(win.resourceClass || "").toLowerCase() !== r.resource_class ||
                 String(win.caption || "") !== r.title_marker || r.preserve_desktop !== false ||
                 r.preserve_position !== false || r.preserve_size !== false) {
+            if (r.sdlDiagnostic) r.sdlDiagnostic.push("uuid_rejected");
             finish(r, "ERROR", "Registered SDL viewer identity unavailable"); return;
         }
+        if (r.sdlDiagnostic) r.sdlDiagnostic.push("uuid_selected");
         placeOptionalWindow(win, r);
     });
 }

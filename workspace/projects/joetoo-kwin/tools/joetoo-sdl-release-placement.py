@@ -30,6 +30,14 @@ def release(bus, interface, managed_id, desktop, slot, geometry, *, confirmed,
     api = None
     rid = None
     terminal = False
+    started = clock()
+    def diagnostic(stage, result):
+        try:
+            print("joetoo-kwin SDL operator diagnostic " + json.dumps(dict(stage=stage,
+                request_id=rid, window_uuid=result['window_uuid'],
+                elapsed_ms=max(0, int((clock() - started) * 1000))), sort_keys=True), file=sys.stderr, flush=True)
+        except Exception:
+            pass
     try:
         api = connection.Connection(bus, interface, call_timeout_ms / 1000)
         # No raw UUID is submitted. The broker owns the managed-ID resolution.
@@ -54,8 +62,10 @@ def release(bus, interface, managed_id, desktop, slot, geometry, *, confirmed,
             # Invoke the dedicated action; never an active-window move shortcut.
             accel = str(api.daemon.GetNameOwner('org.kde.kglobalaccel', timeout=call_timeout_ms / 1000))
             proxy = bus.get_object(accel, '/component/kwin', introspect=False)
+            diagnostic('shortcut_dispatch', result)
             interface(proxy, 'org.kde.kglobalaccel.Component').invokeShortcut(
                 'joetoo_bridge_sdl_placement', timeout=call_timeout_ms / 1000)
+            diagnostic('shortcut_returned', result)
         while result['placement'] == 'pending':
             connection.require(clock() < deadline, 'Mechanical placement deadline expired')
             sleep(min(poll_ms / 1000, max(0, deadline - clock())))
