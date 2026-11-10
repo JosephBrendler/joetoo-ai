@@ -25,7 +25,8 @@ spec.loader.exec_module(connection)
 
 
 def release(bus, interface, managed_id, desktop, slot, geometry, *, confirmed,
-            timeout_ms, poll_ms, call_timeout_ms, emit=print, sleep=time.sleep, clock=time.monotonic):
+            timeout_ms, poll_ms, call_timeout_ms, emit=print, sleep=time.sleep, clock=time.monotonic,
+            expected_window_uuid=None, cancelled=lambda: False, observe=None):
     connection.require(confirmed is True, 'Explicit --confirm required')
     api = None
     rid = None
@@ -38,13 +39,21 @@ def release(bus, interface, managed_id, desktop, slot, geometry, *, confirmed,
                 elapsed_ms=max(0, int((clock() - started) * 1000))), sort_keys=True), file=sys.stderr, flush=True)
         except Exception:
             pass
+    def notify(stage, value=None):
+        # Optional diagnostic consumers cannot change authorization or cleanup.
+        if observe is not None:
+            try: observe(stage, value, api)
+            except Exception: pass
     try:
+        connection.require(not cancelled(), 'Operator cancellation')
         api = connection.Connection(bus, interface, call_timeout_ms / 1000)
         # No raw UUID is submitted. The broker owns the managed-ID resolution.
         before = api.call('RegistryStatus')
         payload = dict(protocol=1, confirmed=True, managed_id=managed_id,
             action_id=uuid.uuid4().hex, desktop=desktop, slot=slot, **geometry,
             source=before['observation']['source'], revision=before['observation']['revision'], timeout_ms=timeout_ms)
+        connection.require(not cancelled(), 'Operator cancellation')
+        notify('submission')
         result = api.call('SubmitSdlPlacement', json.dumps(payload))
         rid = result['request_id']
         expected_uuid = result['window_uuid']
@@ -57,10 +66,14 @@ def release(bus, interface, managed_id, desktop, slot, geometry, *, confirmed,
                 and value.get('placement') in ('pending', 'succeeded', 'failed'),
                 'Placement identity/result mismatch')
         valid(result)
+        connection.require(expected_window_uuid is None or expected_uuid == expected_window_uuid,
+                           'Registered/placement UUID mismatch')
+        notify('submitted', result)
         # Broker owns the mechanical deadline, including its authentication.
         # This later local bound only detects an unresponsive/stuck broker.
         deadline = clock() + timeout_ms / 1000
         if result['placement'] == 'pending':
+            connection.require(not cancelled(), 'Operator cancellation')
             # Invoke the dedicated action; never an active-window move shortcut.
             accel = str(api.daemon.GetNameOwner('org.kde.kglobalaccel', timeout=call_timeout_ms / 1000))
             proxy = bus.get_object(accel, '/component/kwin', introspect=False)
@@ -69,12 +82,15 @@ def release(bus, interface, managed_id, desktop, slot, geometry, *, confirmed,
                 'joetoo_bridge_sdl_placement', timeout=call_timeout_ms / 1000)
             diagnostic('shortcut_returned', result)
         while result['placement'] == 'pending':
+            connection.require(not cancelled(), 'Operator cancellation')
             sleep(min(poll_ms / 1000, max(0, deadline - clock())))
+            connection.require(not cancelled(), 'Operator cancellation')
             result = api.call('PollSdlPlacement', rid)
             valid(result)
             connection.require(result['placement'] != 'pending' or clock() < deadline,
                                'Placement broker response deadline expired')
         terminal = True
+        notify('terminal', result)
         emit(json.dumps(result, sort_keys=True))
         return 0 if result['placement'] == 'succeeded' else 1
     finally:

@@ -123,7 +123,7 @@ def placement_available(status):
 
 def launch(bus, interface, unix_fd, adapter, host, port, username, desktop, slot,
            bounds, call_timeout=3., emit=print, spawn=subprocess.Popen,
-           sleep=time.sleep, clock=time.monotonic, cancelled=lambda: False, profile=None):
+           sleep=time.sleep, clock=time.monotonic, cancelled=lambda: False, profile=None, on_registered=None):
     """Injectable orchestration; real broker enforces all identity/ownership rules.
 
     Registration is reported promptly, then supervision continues until child
@@ -201,10 +201,15 @@ def launch(bus, interface, unix_fd, adapter, host, port, username, desktop, slot
                     'Private log integrity/budget lost')
             if not registered:
                 if result['state'] != 'pending':
+                    if result['state'] == 'registered':
+                        registered = True
+                        # Opt-in notification precedes output/supervision waits;
+                        # the ordinary launcher still requests no placement.
+                        if on_registered is not None:
+                            on_registered(dict(result), cancelled)
                     emit(json.dumps(result, sort_keys=True))
                     if result['state'] != 'registered':
                         return 1
-                    registered = True
                 else:
                     require(child.poll() is None, 'Child exited before registration')
                     require(clock() < deadline, 'Local registration deadline expired')
@@ -256,7 +261,7 @@ def launch(bus, interface, unix_fd, adapter, host, port, username, desktop, slot
                     log.close()
 
 
-def main():
+def main(argv=None, *, emit=print, on_registered=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('host')
     parser.add_argument('username')
@@ -283,7 +288,7 @@ def main():
                         help='X11 child-only renderer policy (default: auto); requires --profile')
     parser.add_argument('--rdp-x11-identity-settle-ms', type=int,
                         help='X11 UUID dwell, 1..30000 ms below registration timeout (default: 500)')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     limits = {name: getattr(args, name) for name in adapter.DEFAULTS}
     for name in adapter.X11_DEFAULTS:
         if getattr(args, name) is not None:
@@ -303,7 +308,8 @@ def main():
     signal.signal(signal.SIGTERM, cancel)
     return launch(dbus.bus.BusConnection(address), dbus.Interface, UnixFd, adapter,
                   args.host, args.port, args.username, args.desktop, args.slot,
-                  limits, args.call_timeout_ms / 1000, cancelled=lambda: interrupted[0], profile=args.profile)
+                  limits, args.call_timeout_ms / 1000, cancelled=lambda: interrupted[0], profile=args.profile,
+                  emit=emit, on_registered=on_registered)
 
 
 if __name__ == '__main__':
