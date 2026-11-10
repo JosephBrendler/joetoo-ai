@@ -416,7 +416,7 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.5a** | Dolphin SFTP integration | Accepted and closed; managed X11/Wayland launches and remote browsing demonstrated; optional post-confirmation NSS/TCP advisories remain non-enforcing diagnostics |
 | **1.5c.5b** | TigerVNC viewer over authenticated SSH | Accepted and retained as a peer-level managed graphical remote-access option; native X11 and Wayland/XWayland identity, placement, SSH tunnel and teardown demonstrated |
 | **1.5c.5c** | Comparative RDP feasibility and decision | **Closed:** affirmative feasibility accepted; SDL3 FreeRDP selected for first RDP implementation, not as a preferred/default client |
-| **1.5c.5d** | Managed RDP implementation, beginning with SDL3 FreeRDP | **Planned, incrementally gated:** native-Wayland registration first, then X11 identity, placement release, configured integration and security/native acceptance; no runtime tranche yet authorized |
+| **1.5c.5d** | Managed RDP, beginning with SDL FreeRDP | **In progress, incrementally gated:** native-Wayland and X11 registration accepted; X11 placement demonstrated; Wayland placement/timing and size acceptance remain open; configured serial launch and security acceptance remain future work |
 | **1.5d** | add -L, -l; conduct integrated native X11/Wayland regression of completed Step 1.5 capabilities | Cross-feature ownership, Busy, focus, desktop membership, failures and completeness; not an implicit feature-development gate |
 | **1.6** | Managed `-a`, `-d`, `-x` | Selective safe close, never unrelated windows |
 | **1.7** | Runtime JSON checkpoint and same-session reconciliation | Broker restart and exact source/UUID reconciliation |
@@ -513,25 +513,71 @@ production registration, placement or certificate-trust acceptance. Fresh-client
 connection does not establish in-process reconnect or remote-session identity.
 See the [Step 1.5 HANDOFF](task_step1.5/HANDOFF.md) for evidence and limitations.
 
-**Peer-capability policy.** Managed TigerVNC-over-SSH, the planned SDL3
-FreeRDP client and any later authorized RDP clients are independent,
-user-selectable peers; their implementation order confers no primary,
-secondary, default or fallback status. Retain TigerVNC functionality.
-Each client needs its own validated invocation, endpoint/security and
-window-role contract, layered on shared KWin UUID ownership and placement
-invariants. Do not impose SDL-specific identity assumptions on other clients
-or introduce a speculative general-purpose client plugin framework.
+**Peer-capability policy.** Managed TigerVNC-over-SSH, SDL FreeRDP
+(the first RDP client), and any later authorized RDP clients are independent,
+user-selectable peers. Implementation order confers no preference or default.
+RDP is the capability; SDL FreeRDP is one client implementation, and Remmina
+may be evaluated separately. Each client retains its own invocation,
+transport/security and positive viewer-role identification contract. Once a
+viewer is positively registered, its exact KWin UUID, reserved desktop/slot,
+placement, geometry verification, and eventual stacking/focus belong to
+shared managed-window infrastructure. Do not impose SDL-specific identity
+assumptions on VNC or other RDP clients or introduce a speculative plugin
+framework. Preserve the accepted TigerVNC behavior.
 
-**1.5c.5d — Managed RDP implementation (next, separately gated).** Implement
-SDL3 FreeRDP first. Begin with native-Wayland broker-owned, registration-only
-identity (launch claim, PID, application identity, exact generated title
-marker, complete new-window lifecycle and exact KWin UUID). Reject ambiguous,
-missing or stale evidence; never silently adopt a replacement UUID. Add X11
-viewer-role discrimination separately, then controlled placement release,
-configured `desktop_session_list` integration and full security/native
-acceptance. Registration must not by itself place a viewer or imply GDM login,
-remote usability or validated server identity. Each increment requires its
-own HANDOFF authorization; the first source tranche is **not yet authorized**.
+**1.5c.5d — Managed RDP implementation (phased).** SDL FreeRDP is the first
+RDP client. Its native-Wayland and native-X11 registration selectors are
+implemented and have separate native acceptance evidence; they distinguish
+credential/authentication windows from the persistent viewer and establish
+positive launch/PID/lifecycle/marker/exact-UUID ownership. Controlled placement
+was demonstrated on X11; Wayland placement, timing and exact frame sizing
+remain open. Registration-only tooling must not move a window or claim a
+remote login, remote usability or validated server identity.
+
+**Immediate diagnostic gate.** On native Wayland a registered viewer remained
+present, and the placement request reported an identity/source/owner/expiry
+failure after about 15 seconds. The maintainer subsequently observed window
+movement after that terminal failure. Whether the resident claimed the request,
+when assignment occurred, and why geometry did not converge are not yet
+established. First capture bounded, sanitized claim/completion/guard/deadline
+transitions and pre-request plus post-terminal geometry observations. Do not
+infer a specific cause or simply lengthen timeouts; late effects after a
+terminal result require explicit characterization.
+
+**Option C — current serial-consolidation objective (after diagnosis).** Keep
+the proven RDP viewer selectors and per-launch reservation/identity evidence.
+Use one authoritative, bounded managed placement transaction for a positively
+identified exact UUID; consolidate overlapping SDL-specific guard evaluations,
+placement deadlines and terminal finalization without weakening genuine
+ownership/source/process-loss protections. For confirmed configured `-o`
+launches, reservation expresses the operator's placement intent: the correct
+viewer is placed when it becomes identifiable, without a second manual
+confirmation. The standalone registration-only POC and its separately
+confirmed placement test remain distinct development contracts. Preserve
+client-specific RDP transport/security handling and independent remote-session
+outcomes. This phase processes one unresolved interactive launch at a time;
+that serial policy must not be confused with an identity requirement that
+human authentication complete in launch order. Human credential waits must
+not be terminated solely by arbitrary automation deadlines; mechanical
+identity, placement and cleanup operations remain bounded and fail closed.
+The existing TigerVNC implementation is unchanged in Option C.
+
+**Option D — later, separately authorized lifecycle objective.** Extend broker
+bookkeeping to support multiple independently keyed pending remote launches,
+so human NLA/VNC authentication can finish out of reservation order while
+each final viewer still maps to its originating recipe and exact UUID. Unify
+RDP and TigerVNC viewer-readiness and placement lifecycle management while
+retaining their different positive role selectors and transport policies.
+Analyze any future Remmina selector independently; a shared PID or caption
+alone is not sufficient ownership. Option D, VNC migration and concurrent
+launch orchestration are not authorized by Option C or by this architecture
+update. Maintain the working serial VNC path until separate validation.
+
+**Gates:** (1) diagnostic-only late-placement trace; (2) separately reviewed
+Option C implementation and native X11/Wayland acceptance; (3) later Option D
+concurrency and RDP/VNC lifecycle design/authorization. Documentation here
+expresses requirements and roadmap, not permission for code, deployment,
+publication or native testing.
 
 **Implementation scope:** The [Step 1.5c.5 implementation scope](task_step1.5/Step1.5c5_implementation_scope.md) elaborates the proposed remote-access increments and their acceptance gates. It does not supersede this architecture or independently authorize implementation; current task permissions are controlled by the separately approved `HANDOFF.md`.
 
