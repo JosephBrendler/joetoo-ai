@@ -139,6 +139,22 @@ within each group. Each desktop group finalizes its initial-layout transaction
 before the next group begins. The planner assigns slot numbers before any
 layer-based stacking reordering; moving a window never changes its slot.
 
+### `TARGET` grammar
+
+`TARGET` is interpreted together with the exact `PROGRAM|MODE` pair. It is **not** a generic executable argument string. Square brackets below indicate optional syntax, except brackets around an IPv6 literal (`[IPv6]`) are literal URI syntax. `[:PORT]` is a per-recipe decimal TCP port (1..65535), not a new pipe-delimited field. Ports not explicitly provided follow the selected application's documented default or its permitted transport configuration.
+
+| `PROGRAM\|MODE` | `TARGET` syntax | Port and interpretation |
+| --- | --- | --- |
+| `konsole\|local` | `EXECUTABLE` | Executable **basename** on `PATH`, for example `btop`; no command arguments or port. |
+| `konsole\|ssh` | `[USER@]HOST` | Hostname, SSH alias or user-qualified host. **No explicit `[:PORT]` syntax is currently supported.** Existing precheck probes TCP 22, even where SSH configuration could choose a different port; fix that mismatch separately. |
+| `dolphin\|local` | `[DIRECTORY]` | Empty means home; absolute directories are literal; relative directories resolve against home. No port. |
+| `dolphin\|sftp` | `sftp://[USER@]HOST[:PORT][/ABSOLUTE/PATH]` | Optional SFTP endpoint port; omitted uses Dolphin/KIO/SSH configuration (ordinarily SSH port 22). Missing path requests login directory; `/` requests remote root. |
+| `vncviewer\|ssh` | `ssh://[USER@]HOST[:SSH_PORT]/display/N` or `ssh://[USER@]HOST[:SSH_PORT]/port/P` | `[:SSH_PORT]` selects the **SSH** port, not VNC. `/display/N` reaches remote VNC TCP `5900+N`; `/port/P` names remote VNC TCP `P`. The worker allocates the local loopback forwarding port, never the recipe. |
+| `sdl-freerdp\|rdp` **(Increment 4 proposed)** | `rdp://USER@HOST[:PORT]` | Explicit username required; omitted port means RDP TCP 3389. No password, query, fragment, path or arbitrary client switches. This pair is **not yet implemented** in configured `-o`. |
+
+URI parsers validate hosts (including bracketed IPv6 literals where supported), port ranges, user information and path rules **before** launch. They must reject embedded passwords and avoid reflecting untrusted targets or credentials in error messages. SFTP path encoding and VNC forwarding behavior remain client-specific. A `TARGET` URI does not supply the desktop, derived slot, layer or final geometry; those remain common planner responsibilities.
+
+
 ### Layer, focus and one-shot layout semantics
 
 Initial bottom-to-top stacking is **`under → panel → over`**, with
