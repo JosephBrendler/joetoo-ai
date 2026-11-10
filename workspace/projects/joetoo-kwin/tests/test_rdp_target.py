@@ -112,6 +112,7 @@ class RdpPlannerTests(PlannerHarness, unittest.TestCase):
     def setUp(self):
         super().setUp()
         shutil.copyfile(ROOT / 'libexec/joetoo_kwin_rdp_target.py', self.folder / 'libexec/joetoo_kwin_rdp_target.py')
+        shutil.copyfile(ROOT / 'libexec/joetoo_kwin_rdp_launch.py', self.folder / 'libexec/joetoo_kwin_rdp_launch.py')
         # Every GUI/network entry point is an error/trace spy, never executed.
         for program in ('sdl-freerdp', 'dolphin', 'nc', 'getent', 'curl', 'wget'):
             path = self.folder / program
@@ -127,7 +128,7 @@ class RdpPlannerTests(PlannerHarness, unittest.TestCase):
             self.assertIn(field, output)
         self.assertEqual(self.rows(output)[0][:2], ['1', '1'])
 
-    def test_mixed_rdp_dry_run_passes_but_open_refuses_before_confirmation_or_launch(self):
+    def test_mixed_rdp_dry_run_passes_but_missing_runtime_refuses_before_confirmation_or_launch(self):
         # Exercise the actual CLI/preflight, with a valid Konsole entry first:
         # validation of the whole plan must precede launching even that entry.
         self.write_config(['1|konsole|local|btop',
@@ -135,6 +136,9 @@ class RdpPlannerTests(PlannerHarness, unittest.TestCase):
         self.assertEqual(len(self.rows(self.plan())), 2)
         for helper in ('joetoo-kwin-launch-functions', 'joetoo-kwin-session.bashrc'):
             shutil.copyfile(ROOT / 'libexec' / helper, self.folder / 'libexec' / helper)
+        shutil.copyfile(self.folder / 'libexec/joetoo_kwin_rdp_launch.py', self.folder / 'libexec/rdp_contract.py')
+        (self.folder / 'libexec/joetoo_kwin_rdp_launch.py').write_text(
+            "from rdp_contract import settings, DEFAULTS, X11_DEFAULTS, X11_PROFILE\nif __name__ == '__main__': raise SystemExit(2)\n")
         runtime = self.folder / 'runtime'
         runtime.mkdir(mode=0o700)
         self.env['XDG_RUNTIME_DIR'] = str(runtime)
@@ -146,7 +150,7 @@ confirm_continue_or_exit() { printf 'confirm\n' >> "$TRACE"; return 99; }
 launch_managed_window() { printf 'application-launch\n' >> "$TRACE"; return 99; }
 #-----[ main script ]''', 1))
         output = self.run_cli('-o', '-f', str(self.config), expected=2)
-        self.assertIn('unsupported executable recipe [sdl-freerdp:rdp]', output)
+        self.assertIn('RDP preflight refused', output)
         # run_cli also rejects any trace from qdbus6 (including a broker launch
         # transaction), executable spies, confirmation or the resource fixture.
         self.assertFalse(self.calls.exists())
@@ -176,7 +180,8 @@ launch_managed_window() { printf 'application-launch\n' >> "$TRACE"; return 99; 
             self.assertIn('RDP_SMART_SIZING=False', output)
         for assignment in ('rdp_remote_width=0', 'rdp_remote_height=8193', 'rdp_initial_client_width=63',
                            'rdp_initial_client_height=01024', 'RDP_SMART_SIZING=1',
-                           'RDP_SMART_SIZING=true', 'rdp_windowing_backend=tty'):
+                           'RDP_SMART_SIZING=true', 'rdp_windowing_backend=tty', 'rdp_registration_timeout_ms=0',
+                           'rdp_registration_poll_ms=2000', 'rdp_x11_identity_settle_ms=120000'):
             self.write_config(record, extra=assignment)
             self.plan(expected=2)
 

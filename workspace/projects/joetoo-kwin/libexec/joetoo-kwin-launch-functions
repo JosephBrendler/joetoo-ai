@@ -25,8 +25,38 @@ sftp_launch_advisory() {
     return 0
 }
 
+# Encode a validated recipe and existing budgets; targets never become shell code.
+rdp_configured_job() {
+    printf '%s' "${planned_target[$_op_i]}" | jq -Rs \
+        --argjson settings "$rdp_settings" \
+        --argjson bounds "$rdp_bounds" --arg call "$vnc_dbus_timeout_ms" \
+        --arg placement "$vnc_placement_timeout_ms" \
+        --argjson desktop "${planned_desktop[$_op_i]}" --argjson slot "${planned_slot[$_op_i]}" \
+        --argjson x "${planned_x[$_op_i]}" --argjson y "${planned_y[$_op_i]}" \
+        --argjson width "${planned_width[$_op_i]}" --argjson height "${planned_height[$_op_i]}" '
+        {target:.,settings:$settings,desktop:$desktop,slot:$slot,x:$x,y:$y,width:$width,height:$height,
+         bounds:$bounds,
+         mechanical:{call_timeout_ms:$call,placement_timeout_ms:$placement}}'
+}
+
+launch_configured_rdp() {
+    local _rl_job _rl_rc
+    launch_registration_id=""; launch_placement_id=""; launch_rdp_result=""
+    _rl_job=$(rdp_configured_job) || return 2
+    j_msg "-${notice}" -p 'Starting owned SDL RDP viewer; remote authentication remains unverified'
+    # Job data uses FD 3, preserving stdin for the original interactive session.
+    # The frontend/worker must never inherit this configured invocation's lock.
+    if launch_rdp_result=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_rdp_launch.py" \
+        --job-fd 3 3<<< "$_rl_job" 9>&-); then _rl_rc=0; else _rl_rc=$?; fi
+    j_msg "-${info}" -m "RDP local outcome (remote login unverified): $launch_rdp_result"
+    launch_registration_id=$(jq -er '.registration.request_id' <<< "$launch_rdp_result") || return 2
+    launch_placement_id=$(jq -er '.placement.request_id' <<< "$launch_rdp_result") || return 2
+    return "$_rl_rc"
+}
+
 # Same configured orchestration; VNC alone uses the deferred viewer-role path.
 launch_configured_window() {
+    if [[ $1 == sdl-freerdp ]]; then launch_configured_rdp; return $?; fi
     if [[ $1 != vncviewer ]]; then launch_managed_window "$@"; return $?; fi
     local _vl_job _vl_result _vl_rc _vl_dir
     launch_registration_id=""; launch_placement_id=""
@@ -49,7 +79,7 @@ launch_configured_window() {
 }
 
 launch_preflight() {
-    local _lp_status _lp_managed _lp_observed _lp_i _lp_conflicts
+    local _lp_status _lp_managed _lp_observed _lp_i _lp_conflicts _op_i _lp_job
     for _lp_i in bash jq qdbus6 python3; do
         command -v "$_lp_i" >/dev/null || { plan_error "missing executable [$_lp_i]"; return 2; }
     done
@@ -63,6 +93,16 @@ launch_preflight() {
                 command -v dolphin >/dev/null || { plan_error 'missing executable [dolphin]'; return 2; }
                 _lp_status=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_sftp_capability.py" "$sftp_capability_timeout_ms") || return 2
                 planned_remote_uri[_lp_i]=$(jq -er 'select(type == "string")' <<< "${planned_sftp_uri[$_lp_i]}") || return 2 ;;
+            sdl-freerdp:rdp)
+                # Completed entries already own their reservations in this invocation.
+                # Keep the global health checks below and preflight every unlaunched entry.
+                [[ ! ${launch_finished[${planned_desktop[$_lp_i]}]:-} && ! ${launch_done_entry[$_lp_i]:-} ]] || continue
+                _op_i=$_lp_i
+                _lp_job=$(rdp_configured_job) || return 2
+                if ! _lp_status=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_rdp_launch.py" \
+                    --preflight --job-fd 3 3<<< "$_lp_job" 9>&-); then
+                    plan_error 'RDP preflight refused; check explicit backend, prerequisites and broker state'; return 2
+                fi ;;
             vncviewer:ssh)
                 if ! _lp_status=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_vnc_launch.py" --preflight); then
                     plan_error 'TigerVNC supervisor prerequisites unavailable'; return 2
@@ -185,6 +225,8 @@ open_plan() {
             else
                 _op_argv=(dolphin --new-window -- "${planned_local_path[$_op_i]}")
             fi
+        elif [[ $_op_class == sdl-freerdp ]]; then
+            _op_argv=() # RDP consumes its structured job, never a Konsole command.
         else
             _op_argv=(env JOETOO_SESSION_MODE="${planned_mode[$_op_i]}" JOETOO_SESSION_TARGET="${planned_target[$_op_i]}"
                 konsole --separate -e bash --rcfile "$launch_session_file" -i)
@@ -203,10 +245,25 @@ open_plan() {
             j_msg "-${err}" -p 'VNC launch cancelled or finalization unresolved; stopping subsequent launches'; return 1
         fi
         [[ -n $launch_registration_id && -n $launch_placement_id ]] || return 1
+        if [[ $_op_class == sdl-freerdp ]]; then
+            # Stage 2 conservatively stops on every unsuccessful RDP result;
+            # generalized known-clean continuation belongs to Stage 3.
+            (( _op_rc == 0 )) || return 1
+            jq -e '.state == "completed" and .registration.state == "registered"
+                and .placement.placement == "succeeded" and .remote_session == "unverified"
+                and .registration.window_uuid == .placement.window_uuid
+                and .registration.managed_id == .placement.managed_id' <<< "$launch_rdp_result" >/dev/null || return 1
+            _op_state=$(qdbus6 "$bus" "$path" "$iface.GetManaged" \
+                "$(jq -er '.registration.managed_id' <<< "$launch_rdp_result")") || return 1
+            jq -e --argjson result "$launch_rdp_result" '.state == "FOUND" and .window.presence == "present"
+                and .window.placement == "succeeded" and .window.window_uuid == $result.registration.window_uuid
+                and .window.request_id == $result.registration.request_id' <<< "$_op_state" >/dev/null || return 1
+        else
         _op_state=$(qdbus6 "$bus" "$path" "$iface.PollManagedLaunch" "$launch_registration_id") || return 1
         jq -e --arg class "$_op_class" '.state == "registered" or .state == "failed" or ($class == "vncviewer" and (.state == "timeout" or .state == "ambiguous"))' <<< "$_op_state" >/dev/null || return 1
         _op_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$launch_placement_id") || return 1
         case $_op_status in OK*|ERROR*) ;; *) j_msg "-${err}" -p 'Unresolved placement; stopping incomplete layout'; return 1 ;; esac
+        fi
         launch_done_entry[$_op_i]=$TRUE
         if (( _op_rc == 0 )); then
             _op_entries+=("$(jq -cn --arg id "$launch_registration_id" --arg layer "${planned_layer[$_op_i]}" \

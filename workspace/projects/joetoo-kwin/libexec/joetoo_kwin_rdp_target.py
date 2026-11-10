@@ -90,17 +90,30 @@ def sizing_arguments(data):
              if s['RDP_SMART_SIZING'] else '/smart-sizing:off')]
 
 
+def registration_bounds(data, backend):
+    """Offline delegation to the existing import-safe identity budget validator."""
+    from joetoo_kwin_rdp_launch import settings as bounds_settings, DEFAULTS as bounds_defaults, X11_PROFILE
+    if backend not in ('auto', 'wayland', 'x11'):
+        raise ValueError('Invalid backend intent')
+    result = bounds_settings(data, X11_PROFILE)
+    return {k: v for k, v in result.items() if backend != 'wayland' or k in bounds_defaults}
+
+
 def main():
     try:
         if sys.argv[1:] == ['--target']:
             value = target(sys.stdin.read(TARGET_BYTE_LIMIT + 1))
+        elif sys.argv[1:2] == ['--bounds'] and len(sys.argv[2:]) == 8:
+            from joetoo_kwin_rdp_launch import DEFAULTS as bounds_defaults, X11_DEFAULTS
+            names = list(bounds_defaults) + list(X11_DEFAULTS)
+            value = registration_bounds(dict(zip(names, sys.argv[3:])), sys.argv[2])
         elif sys.argv[1:2] == ['--settings'] and len(sys.argv[2:]) == len(DEFAULTS):
             value = settings(dict(zip(DEFAULTS, sys.argv[2:])))
         else:
             raise ValueError('Invalid RDP validator invocation')
         print(json.dumps(value, sort_keys=True))
         return 0
-    except (ValueError, TypeError, UnicodeError):
+    except (ValueError, TypeError, UnicodeError, ImportError):
         # Fixed error also covers malformed configuration, never argv/input text.
         print('Invalid RDP target/settings (redacted)', file=sys.stderr)
         return 2

@@ -168,6 +168,75 @@ class LauncherTests(unittest.TestCase):
             'testuser', 3, 1, bounds or {}, emit=self.output.append, spawn=self.spawn,
             sleep=self.wait, clock=lambda: self.f.clock, cancelled=lambda: self.cancelled, profile=profile)
 
+    def registered_failure(self, failure, cancel=False):
+        # Actual disposable child plus the real broker/registry identity path.
+        self.mode = 'stay'
+        seen = []
+        snapshots = []
+        original_output = self.output
+        outer = self
+        class Reports(list):
+            def append(self, line):
+                value = json.loads(line)
+                if failure == 'reporting' and value.get('state') == 'registered':
+                    raise OSError('simulated private reporting failure')
+                original_output.append(line)
+                if value.get('supervision') == 'degraded' and not seen:
+                    seen.append(value)
+                    record = outer.f.b.registry.get_window(value['managed_id'])
+                    # Assert outside the production reporting callback, whose
+                    # deliberate error isolation must not swallow test failures.
+                    snapshots.append((outer.child.poll(), outer.f.bus.get_is_connected(),
+                        record.window_uuid, record.presence, record.placement))
+                    if cancel:
+                        outer.cancelled = True
+                    else:
+                        # Only this test's deliberate closure ends the real child.
+                        outer.child.stdin.close()
+                        outer.child.wait(timeout=3)
+        self.output = Reports()
+        def wait(duration):
+            self.f.clock += duration
+            path = next(Path(self.folder.name).glob('*/stdout.log'))
+            if failure == 'budget':
+                with path.open('ab') as stream: stream.write(b'x' * 65537)
+            elif failure == 'integrity':
+                path.chmod(0o640)
+            elif failure == 'wait':
+                raise OSError('simulated private wait failure')
+        self.wait = wait
+        with patch.object(self.client._runtime, 'stop_child', wraps=self.client._runtime.stop_child) as stop:
+            if cancel:
+                with self.assertRaisesRegex(RuntimeError, 'Operator cancellation'):
+                    self.run_launcher()
+                self.assertEqual(stop.call_count, 1)
+            else:
+                self.assertEqual(self.run_launcher(), 1)
+                stop.assert_not_called()
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(snapshots, [(None, True, seen[0]['window_uuid'], 'present', 'not_requested')])
+        self.assertEqual(seen[0]['state'], 'unresolved')
+        self.assertEqual(seen[0]['registration'], 'registered')
+        self.assertEqual(seen[0]['remote_session'], 'unverified')
+        self.assertNotIn('simulated private', json.dumps(original_output))
+        self.assertNotIn('cancel', self.events)  # Enrollment is never cancelled/replaced.
+        return seen[0]
+
+    def test_registered_real_child_survives_log_budget_failure_until_own_exit(self):
+        self.assertEqual(self.registered_failure('budget')['reason'], 'private_log_integrity_or_budget')
+
+    def test_registered_real_child_survives_log_integrity_failure(self):
+        self.assertEqual(self.registered_failure('integrity')['reason'], 'private_log_integrity_or_budget')
+
+    def test_registered_real_child_survives_reporting_failure(self):
+        self.assertEqual(self.registered_failure('reporting')['reason'], 'registration_notification')
+
+    def test_registered_real_child_survives_supervision_wait_failure(self):
+        self.assertEqual(self.registered_failure('wait')['reason'], 'supervision_wait')
+
+    def test_explicit_owned_cancellation_still_stops_degraded_registered_child(self):
+        self.registered_failure('budget', cancel=True)
+
     def test_explicit_x11_auto_full_launcher_public_broker_and_real_child(self):
         with patch.dict(os.environ, XDG_SESSION_TYPE='tty', SDL_RENDER_DRIVER='opengl',
                         SDL_FRAMEBUFFER_ACCELERATION='1'):

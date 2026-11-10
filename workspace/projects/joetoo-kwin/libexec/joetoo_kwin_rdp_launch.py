@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # Copyright 2025-2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Private SDL development adapter; no CLI, D-Bus API or configured recipe.
+"""Import-safe SDL identity helpers and configured serial frontend/worker.
 
 The development launcher arms the broker before spawning, then binds its
 actual direct child and private stdout descriptor through the existing API.
-This module neither selects production security flags nor launches a connection.
+Executable paths add configured supervision; importing the module never launches
+a connection or chooses authentication/certificate exceptions.
 """
 import fcntl
 import ipaddress
@@ -14,6 +15,16 @@ import re
 import stat
 import select
 import time
+import argparse
+import json
+import secrets
+import uuid
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import tempfile
+import xml.etree.ElementTree as ET
 
 DEFAULTS = dict(rdp_registration_timeout_ms=120000, rdp_registration_poll_ms=100,
                 rdp_registration_event_limit=4096, rdp_registration_window_limit=64,
@@ -348,3 +359,795 @@ class ChildIdentity:
         if self.fd is not None:
             fd, self.fd = self.fd, None
             os.close(fd)
+
+
+# Shared import-safe client routines; D-Bus is imported only by executable paths.
+BUS = 'org.joetoo.KWinBridge'
+PATH = '/org/joetoo/KWinBridge'
+DEFAULT_CALL_TIMEOUT_MS = 3000  # Also bounds each TERM/KILL reap wait.
+
+
+def require(condition, reason):
+    if not condition:
+        raise RuntimeError(reason)
+
+
+def dbus_error_name(error):
+    """Expose only known error identifiers, never remote exception messages."""
+    try:
+        getter = getattr(error, 'get_dbus_name', None)
+        name = getter() if callable(getter) else getattr(error, 'name', None)
+    except Exception:
+        return None
+    allowed = {BUS + '.' + suffix for suffix in ('BadArguments', 'InvalidRequest', 'Busy', 'UnknownRequest')}
+    allowed.update('org.freedesktop.DBus.Error.' + suffix for suffix in (
+        'AccessDenied', 'NotSupported', 'Timeout', 'NoReply', 'Disconnected',
+        'ServiceUnknown', 'NameHasNoOwner', 'UnknownMethod', 'InvalidArgs'))
+    return name if isinstance(name, str) and name in allowed else None
+
+
+class Connection:
+    """One authenticated connection, pinned destination; no owner substitution."""
+    def __init__(self, bus, interface, timeout):
+        self.bus, self.timeout = bus, timeout
+        self.daemon = interface(bus.get_object('org.freedesktop.DBus',
+                                '/org/freedesktop/DBus', introspect=False), 'org.freedesktop.DBus')
+        self.owner = str(self.daemon.GetNameOwner(BUS, timeout=timeout))
+        proxy = bus.get_object(self.owner, PATH, introspect=False)
+        self.api = interface(proxy, BUS)
+        tree = ET.fromstring(interface(proxy, 'org.freedesktop.DBus.Introspectable').Introspect(timeout=timeout))
+        methods = {m.get('name'): m for i in tree.findall('interface') if i.get('name') == BUS
+                   for m in i.findall('method')}
+        self.methods = methods
+        for name, sig in dict(BeginSdlRegistration='s', BindSdlRegistration='sih',
+                              PollSdlRegistration='s', CancelSdlRegistration='s').items():
+            args = methods[name].findall('arg') if name in methods else []
+            require(''.join(a.get('type') for a in args if a.get('direction', 'in') == 'in') == sig
+                    and ''.join(a.get('type') for a in args if a.get('direction') == 'out') == 's',
+                    'SDL interface mismatch')
+
+    def pinned(self):
+        require(self.bus.get_is_connected(), 'Caller connection lost')
+        require(str(self.daemon.GetNameOwner(BUS, timeout=self.timeout)) == self.owner,
+                'Broker owner changed')
+
+    def call(self, name, *args):
+        try:
+            self.pinned()
+            return json.loads(getattr(self.api, name)(*args, timeout=self.timeout))
+        except Exception as error:
+            code = dbus_error_name(error)
+            if code is not None:
+                raise RuntimeError(name + ' failed: ' + code) from None
+            raise
+
+    def result(self, result, rid):
+        require(result.get('protocol') == 1 and result.get('request_id') == rid
+                and result.get('placement') == 'not_requested'
+                and result.get('remote_session') == 'unverified'
+                and result.get('state') in ('pending', 'registered', 'failed', 'ambiguous', 'timeout'),
+                'Invalid SDL transaction reply')
+        if result['state'] == 'registered':
+            require(result.get('reason') == 'registered' and isinstance(result.get('managed_id'), str)
+                    and re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}',
+                                     result.get('window_uuid', '')), 'Invalid registered UUID reply')
+        return result
+
+
+def stop_child(child, pidfd, timeout):
+    """Use the retained lifetime descriptor, never signal a recycled numeric PID."""
+    if child.poll() is None:
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                signal.pidfd_send_signal(pidfd, sig)
+            except ProcessLookupError:
+                pass
+            try:
+                child.wait(timeout=timeout)
+                return
+            except subprocess.TimeoutExpired:
+                continue
+        raise RuntimeError('Owned child cleanup incomplete')
+    child.wait(timeout=timeout)
+
+
+def placement_available(status):
+    """Retained OK/ERROR IDs are history, not active placement work.
+
+    This snapshot does not certify SDL cleanup. BeginSdlRegistration remains
+    the authoritative active/uncertain-cleanup gate before child creation.
+    """
+    transaction = status['placement_transaction']
+    return (not status['initial_layout_active'] and not status['viewer_cleanup_uncertain']
+            and (transaction == {'id': None, 'state': 'IDLE'}
+                 or transaction['state'] in ('OK', 'ERROR')))
+
+
+def launch_registration(bus, interface, unix_fd, adapter, host, port, username, desktop, slot,
+           bounds, call_timeout=3., emit=print, spawn=subprocess.Popen,
+           sleep=time.sleep, clock=time.monotonic, cancelled=lambda: False, profile=None, on_registered=None,
+           argv_builder=None, connection_factory=None):
+    """Injectable orchestration; real broker enforces all identity/ownership rules.
+
+    Registration is reported promptly, then supervision continues until child
+    exit. Cancellation/error terminates only this owned child. Registered UUIDs
+    remain registered after exit; this tool never unregisters or transfers them.
+    """
+    argv_builder = argv_builder or adapter.development_argv
+    connection_factory = connection_factory or Connection
+    api = child = pidfd = log = None
+    active = None
+    registered = False
+    termination_requested = False
+    stage = 'registration'
+    def check_log():
+        current = os.fstat(log.fileno())
+        require(stat.S_IMODE(current.st_mode) == 0o600 and current.st_nlink == 1
+                and current.st_uid == os.geteuid() and current.st_size <= bounds['rdp_backend_log_byte_limit'],
+                'Private log integrity/budget lost')
+    def supervision_report(**fields):
+        # Reporting is best effort after enrollment, never authority to kill.
+        value = dict(state='unresolved', phase='supervision', supervision='degraded',
+            registration='registered', request_id=active, managed_id=result['managed_id'],
+            window_uuid=result['window_uuid'], remote_session='unverified', reason=stage, **fields)
+        try:
+            emit(json.dumps(value, sort_keys=True))
+        except Exception:
+            try:
+                print('joetoo-kwin: registered SDL supervision degraded stage=' + stage,
+                      file=sys.stderr, flush=True)
+            except Exception:
+                pass
+    try:
+        bounds = adapter.settings(bounds, profile) if profile is not None else adapter.settings(bounds)
+        require(100 <= call_timeout * 1000 <= 30000, 'Call/cleanup timeout out of range')
+        require(type(desktop) is int and type(slot) is int and 1 <= desktop <= 256 and 1 <= slot <= 256,
+                'Invalid desktop/slot')
+        # Validate all local arguments and executable before creating an intent.
+        argv_builder(host, port, username, 'joetoo-rdp-' + '0' * 64)
+        expected_exe = adapter.executable_identity()
+        api = connection_factory(bus, interface, call_timeout)
+        before = api.call('RegistryStatus')
+        require(before['observation']['synchronized'] is True, 'Inventory is not synchronized')
+        source = before['observation']['source']
+        require(before['request_counts']['pending'] == before['request_counts']['running'] == 0
+                and placement_available(before), 'Broker is busy')
+        folder = Path(tempfile.mkdtemp(prefix='joetoo-sdl-registration-'))
+        os.chmod(folder, 0o700)
+        descriptor = os.open(folder / 'stdout.log', os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        log = os.fdopen(descriptor, 'w+b')
+        os.fchmod(log.fileno(), 0o600)
+        inode = os.fstat(log.fileno())
+        emit(json.dumps(dict(evidence_directory=str(folder), placement='not_requested')))
+        deadline = clock() + bounds['rdp_registration_timeout_ms'] / 1000
+        payload = dict(protocol=1, desktop=desktop, slot=slot, bounds=bounds)
+        if profile is not None:
+            payload['profile'] = profile
+        result = api.call('BeginSdlRegistration', json.dumps(payload))
+        # Retain a valid ID even if another Begin field is invalid, for cleanup.
+        active = result.get('request_id')
+        require(isinstance(active, str) and re.fullmatch(r'[0-9a-f]{32}', active), 'Invalid request ID')
+        api.result(result, active)
+        require(result['state'] == 'pending' and result.get('bounds') == bounds, 'Unexpected Begin result')
+        require(result.get('profile') == profile, 'Unexpected SDL profile')
+        argv = argv_builder(host, port, username, result.get('title_marker'))
+        argv[0] = '/usr/bin/sdl-freerdp'  # Same fixed executable checked by broker.
+        api.pinned()
+        require(not cancelled() and clock() < deadline, 'Cancelled/expired before spawn')
+        child = spawn(argv, stdin=None, stdout=log, stderr=subprocess.STDOUT,
+                      env=(adapter.development_environment(os.environ, profile, bounds) if profile is not None
+                           else adapter.development_environment(os.environ)), close_fds=True)
+        # POSIX Popen returns after exec's error pipe closes. No shell/wrapper,
+        # sleep, log forwarder or intermediate process supplies the bound PID.
+        pidfd = os.pidfd_open(child.pid)
+        info = adapter._proc_info(child.pid)
+        require(info['parent'] == os.getpid() and info['exe'] == expected_exe,
+                'Direct child executable mismatch')
+        emit(json.dumps(dict(child_pid=child.pid, child_start=info['start'], request_id=active,
+                             placement='not_requested', remote_session='unverified')))
+        # Use separate read-only access; dbus UnixFd duplicates it for transport.
+        require(not cancelled() and clock() < deadline and child.poll() is None,
+                'Cancelled/expired or exited before Bind')
+        with open(folder / 'stdout.log', 'rb') as reader:
+            current = os.fstat(reader.fileno())
+            require((current.st_dev, current.st_ino) == (inode.st_dev, inode.st_ino), 'Log substituted')
+            fd = unix_fd(reader.fileno())
+            try:
+                result = api.result(api.call('BindSdlRegistration', active, child.pid, fd), active)
+            finally:
+                os.close(fd.take())
+        while True:
+            require(result.get('profile') == profile and (profile is None or result.get('bounds') == bounds),
+                    'SDL profile/settings changed')
+            if not registered and result['state'] == 'registered':
+                # A validated positive broker reply is the ownership boundary,
+                # even if the next reporting/logging operation subsequently fails.
+                registered = True
+                stage = 'registration_notification'
+                # Opt-in notification precedes output/supervision waits;
+                # the ordinary launcher still requests no placement.
+                if on_registered is not None:
+                    on_registered(dict(result), cancelled)
+                emit(json.dumps(result, sort_keys=True))
+            stage = 'cancellation_check'
+            if cancelled():
+                termination_requested = True
+                raise RuntimeError('Operator cancellation')
+            stage = 'private_log_integrity_or_budget'
+            check_log()
+            if not registered:
+                if result['state'] != 'pending':
+                    emit(json.dumps(result, sort_keys=True))
+                    return 1
+                require(child.poll() is None, 'Child exited before registration')
+                require(clock() < deadline, 'Local registration deadline expired')
+                result = api.result(api.call('PollSdlRegistration', active), active)
+                if result['state'] != 'pending':
+                    continue
+            stage = 'child_supervision'
+            if registered and child.poll() is not None:
+                emit(json.dumps(dict(child_exit=child.returncode, registration='registered',
+                                     remote_session='unverified', placement='not_requested')))
+                return 0
+            # Broker loss/restart after success must not close the viewer. Only
+            # pending registration needs source/placement guards here.
+            if not registered:
+                status = api.call('RegistryStatus')
+                require(status['observation']['synchronized'] is True
+                        and status['observation']['source'] == source, 'Observation source lost')
+                require(placement_available(status), 'Placement became active')
+            stage = 'supervision_wait'
+            sleep(bounds['rdp_registration_poll_ms'] / 1000)
+    except KeyboardInterrupt:
+        # The foreground POC's Ctrl-C remains an explicit owned-child stop.
+        termination_requested = True
+        raise
+    except Exception:
+        if not registered or termination_requested:
+            raise
+        supervision_report()
+        # Retain the original connection and direct-child ownership. Failed
+        # evidence is not reused for registration, placement or success claims.
+        # Regular-file size is detected, not a kernel write quota: a preserved
+        # client can still write beyond the budget; report that unresolved state.
+        while child.poll() is None:
+            try:
+                stop = cancelled()
+            except Exception:
+                stop = False  # Broken supervision is not termination authority.
+            if stop:
+                termination_requested = True
+                raise RuntimeError('Operator cancellation')
+            try:
+                check_log()
+            except Exception:
+                pass  # Already degraded; keep checking without flooding output.
+            # Use the child's owned pidfd, not a broken injected reporting/wait
+            # callback. No broker retry, registration transfer or placement occurs.
+            select.select([pidfd], [], [], bounds['rdp_registration_poll_ms'] / 1000)
+        supervision_report(child_exit=child.returncode)
+        return 1
+    finally:
+        # Ctrl-C can also interrupt degraded supervision's pidfd wait.
+        if isinstance(sys.exc_info()[1], KeyboardInterrupt):
+            termination_requested = True
+        try:
+            if api is not None and active and not registered:
+                try:
+                    emit(json.dumps(api.result(api.call('CancelSdlRegistration', active), active), sort_keys=True))
+                except Exception:
+                    # Unknown/lost reply or disconnected sender: closing this
+                    # connection triggers broker owner-loss cleanup; never PASS.
+                    pass
+        finally:
+            bus.close()
+            try:
+                if child is not None and (not registered or termination_requested):
+                    if pidfd is None:
+                        # Bind has not occurred. Popen still owns this unreaped
+                        # direct child (no other waiter in this single-threaded
+                        # launcher); use its ordinary cleanup on pidfd exhaustion.
+                        # This is never a fallback for broker identity verification.
+                        try:
+                            child.terminate()
+                            child.wait(timeout=call_timeout)
+                        except subprocess.TimeoutExpired:
+                            child.kill()
+                            child.wait(timeout=call_timeout)
+                    else:
+                        stop_child(child, pidfd, call_timeout)
+                elif child is not None and child.poll() is not None:
+                    child.wait(timeout=call_timeout)  # Reap natural registered exit.
+            finally:
+                if pidfd is not None:
+                    os.close(pidfd)
+                if log is not None:
+                    log.close()
+
+
+
+def release_placement(bus, interface, managed_id, desktop, slot, geometry, *, confirmed,
+            timeout_ms, poll_ms, call_timeout_ms, emit=print, sleep=time.sleep, clock=time.monotonic,
+            expected_window_uuid=None, cancelled=lambda: False, observe=None, connection_factory=None):
+    require(confirmed is True, 'Explicit --confirm required')
+    connection_factory = connection_factory or Connection
+    api = None
+    rid = None
+    terminal = False
+    started = clock()
+    def diagnostic(stage, result):
+        try:
+            print("joetoo-kwin SDL operator diagnostic " + json.dumps(dict(stage=stage,
+                request_id=rid, window_uuid=result['window_uuid'],
+                elapsed_ms=max(0, int((clock() - started) * 1000))), sort_keys=True), file=sys.stderr, flush=True)
+        except Exception:
+            pass
+    def notify(stage, value=None):
+        # Optional diagnostic consumers cannot change authorization or cleanup.
+        if observe is not None:
+            try: observe(stage, value, api)
+            except Exception: pass
+    try:
+        require(not cancelled(), 'Operator cancellation')
+        api = connection_factory(bus, interface, call_timeout_ms / 1000)
+        # No raw UUID is submitted. The broker owns the managed-ID resolution.
+        before = api.call('RegistryStatus')
+        payload = dict(protocol=1, confirmed=True, managed_id=managed_id,
+            action_id=uuid.uuid4().hex, desktop=desktop, slot=slot, **geometry,
+            source=before['observation']['source'], revision=before['observation']['revision'], timeout_ms=timeout_ms)
+        require(not cancelled(), 'Operator cancellation')
+        notify('submission')
+        result = api.call('SubmitSdlPlacement', json.dumps(payload))
+        rid = result['request_id']
+        expected_uuid = result['window_uuid']
+        def valid(value):
+            require(value.get('protocol') == 1 and value.get('request_id') == rid
+                and re.fullmatch(r'[0-9a-f]{32}', rid) and value.get('window_uuid') == expected_uuid
+                and re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', expected_uuid)
+                and value.get('managed_id') == managed_id and value.get('registration') == 'registered'
+                and value.get('remote_session') == 'unverified'
+                and value.get('placement') in ('pending', 'succeeded', 'failed'),
+                'Placement identity/result mismatch')
+        valid(result)
+        require(expected_window_uuid is None or expected_uuid == expected_window_uuid,
+                           'Registered/placement UUID mismatch')
+        notify('submitted', result)
+        # Broker owns the mechanical deadline, including its authentication.
+        # This later local bound only detects an unresponsive/stuck broker.
+        deadline = clock() + timeout_ms / 1000
+        if result['placement'] == 'pending':
+            require(not cancelled(), 'Operator cancellation')
+            # Invoke the dedicated action; never an active-window move shortcut.
+            accel = str(api.daemon.GetNameOwner('org.kde.kglobalaccel', timeout=call_timeout_ms / 1000))
+            proxy = bus.get_object(accel, '/component/kwin', introspect=False)
+            diagnostic('shortcut_dispatch', result)
+            interface(proxy, 'org.kde.kglobalaccel.Component').invokeShortcut(
+                'joetoo_bridge_sdl_placement', timeout=call_timeout_ms / 1000)
+            diagnostic('shortcut_returned', result)
+        while result['placement'] == 'pending':
+            require(not cancelled(), 'Operator cancellation')
+            sleep(min(poll_ms / 1000, max(0, deadline - clock())))
+            require(not cancelled(), 'Operator cancellation')
+            result = api.call('PollSdlPlacement', rid)
+            valid(result)
+            require(result['placement'] != 'pending' or clock() < deadline,
+                               'Placement broker response deadline expired')
+        terminal = True
+        notify('terminal', result)
+        emit(json.dumps(result, sort_keys=True))
+        return 0 if result['placement'] == 'succeeded' else 1
+    finally:
+        try:
+            if rid is not None and not terminal:
+                api.call('CancelSdlPlacement', rid)
+        finally:
+            bus.close()
+
+
+
+class ConfiguredError(RuntimeError):
+    """Fixed nonsecret error codes for the configured frontend."""
+    pass
+
+
+def configured_argv(host, port, username, marker, client_settings):
+    from joetoo_kwin_rdp_target import sizing_arguments
+    # Reuse endpoint/marker/log policy, replacing only development sizing.
+    return [v for v in development_argv(host, port, username, marker)
+            if not v.startswith(('/size:', '/smart-sizing:'))] + sizing_arguments(client_settings)
+
+
+def configured_job(data):
+    from joetoo_kwin_rdp_target import target, settings as client_settings
+    from joetoo_kwin_vnc_target import settings as mechanical_settings
+    keys = {'target', 'settings', 'bounds', 'mechanical', 'desktop', 'slot', 'x', 'y', 'width', 'height'}
+    if not isinstance(data, dict) or set(data) != keys:
+        raise ConfiguredError('invalid_job_schema')
+    try:
+        target(data['target'])
+        sizing = client_settings(data['settings'])
+    except (TypeError, ValueError):
+        raise ConfiguredError('invalid_rdp_target_or_settings') from None
+    requested = sizing['rdp_windowing_backend']
+    profile = X11_PROFILE if requested == 'x11' else None
+    raw = data['bounds']
+    if not isinstance(raw, dict): raise ConfiguredError('invalid_registration_bounds')
+    # Auto needs both profiles' knobs validated, without changing backend intent.
+    limits = settings(raw, X11_PROFILE)
+    if requested == 'wayland':
+        limits = settings({k: v for k, v in limits.items() if k in DEFAULTS})
+    if (not isinstance(data['mechanical'], dict) or
+            set(data['mechanical']) != {'call_timeout_ms', 'placement_timeout_ms'}):
+        raise ConfiguredError('invalid_mechanical_bounds')
+    mechanical = mechanical_settings(dict(vnc_dbus_timeout_ms=data['mechanical']['call_timeout_ms'],
+        vnc_placement_timeout_ms=data['mechanical']['placement_timeout_ms']))
+    for k in ('desktop', 'slot', 'x', 'y', 'width', 'height'):
+        v = data[k]
+        low, high = ((1, 256) if k in ('desktop', 'slot') else
+                     (-32768, 32768) if k in ('x', 'y') else (1, 32768))
+        if type(v) is not int or not low <= v <= high:
+            raise ConfiguredError('invalid_destination')
+    return dict(data, settings=sizing, bounds=limits,
+        mechanical=dict(call_timeout_ms=mechanical['vnc_dbus_timeout_ms'],
+                        placement_timeout_ms=mechanical['vnc_placement_timeout_ms']))
+
+
+def resolve_windowing_backend(bus, interface, requested, timeout):
+    """Pinned authenticated KWin support-information, never session env guessing.
+
+    KWin/kwin-x11 6.7.6 src/workspace.cpp emits one literal Operation Mode line.
+    Unknown/changed formats fail closed. Child backend evidence remains mandatory.
+    """
+    daemon = interface(bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus', introspect=False),
+                       'org.freedesktop.DBus')
+    owner = str(daemon.GetNameOwner('org.kde.KWin', timeout=timeout))
+    require(owner.startswith(':'), 'KWin owner unavailable')
+    identity = CallerIdentity(daemon.GetConnectionCredentials(owner, timeout=timeout))
+    try:
+        info = str(interface(bus.get_object(owner, '/KWin', introspect=False), 'org.kde.KWin').supportInformation(timeout=timeout))
+        modes = re.findall(r'^Operation Mode: (X11|Wayland)$', info, re.M) if len(info.encode()) <= 65536 else []
+        if len(modes) != 1 or not identity.alive() or str(daemon.GetNameOwner('org.kde.KWin', timeout=timeout)) != owner:
+            raise ConfiguredError('windowing_backend_unverified_select_wayland_or_x11')
+        backend = modes[0].lower()
+        if requested != 'auto' and requested != backend:
+            raise ConfiguredError('native_x11_required_not_xwayland' if requested == 'x11' else 'windowing_backend_mismatch')
+        return backend
+    finally:
+        identity.close()
+
+
+def configured_preflight(job, bus, interface):
+    job = configured_job(job)
+    require(os.geteuid() != 0 and hasattr(os, 'pidfd_open') and hasattr(signal, 'pidfd_send_signal'),
+            'Non-root Linux pidfd session required')
+    executable_identity()
+    timeout = job['mechanical']['call_timeout_ms'] / 1000
+    backend = resolve_windowing_backend(bus, interface, job['settings']['rdp_windowing_backend'], timeout)
+    if backend == 'x11':
+        if not re.fullmatch(r'(?:unix)?:[0-9]+(?:\.[0-9]+)?', os.environ.get('DISPLAY', '')):
+            raise ConfiguredError('local_x11_display_required')
+    elif not os.environ.get('WAYLAND_DISPLAY'):
+        raise ConfiguredError('wayland_display_required')
+    api = Connection(bus, interface, timeout)
+    # Introspection is sufficient; no new public capability/schema is required.
+    for name in ('SubmitSdlPlacement', 'PollSdlPlacement', 'CancelSdlPlacement', 'TakeSdlPlacement'):
+        method = api.methods.get(name)
+        args = method.findall('arg') if method is not None else []
+        if (''.join(a.get('type') for a in args if a.get('direction', 'in') == 'in') != 's' or
+                ''.join(a.get('type') for a in args if a.get('direction') == 'out') != 's'):
+            raise ConfiguredError('placement_interface_unavailable')
+    status = api.call('RegistryStatus')
+    if (not status['observation']['synchronized'] or not placement_available(status) or
+            status['request_counts']['pending'] or status['request_counts']['running'] or
+            status.get('initial_layout_protocol') != 1 or status['presence_counts']['uncertain']):
+        raise ConfiguredError('broker_busy_or_observation_unavailable')
+    for window in api.call('ListManaged')['windows']:
+        if window['intended'] == dict(desktop=job['desktop'], slot=job['slot']):
+            raise ConfiguredError('managed_slot_reserved_including_missing_history')
+    return dict(job, resolved_backend=backend, broker_owner=api.owner,
+                source=status['observation']['source'])
+
+
+def _private_json(path, value):
+    """Atomic 0600 control/status file inside an already verified 0700 directory."""
+    pending = path.with_name(path.name + '.tmp-' + secrets.token_hex(8))
+    fd = os.open(pending, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(value, stream, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(pending, path)
+    finally:
+        if pending.exists(): pending.unlink()
+
+
+def _read_private_json(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        st = os.fstat(fd)
+        if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid() or
+                stat.S_IMODE(st.st_mode) != 0o600 or st.st_nlink != 1 or st.st_size > 65536):
+            raise ConfiguredError('unsafe_control_file')
+        raw = os.read(fd, 65537)
+        if len(raw) > 65536: raise ConfiguredError('control_file_budget')
+        return json.loads(raw)
+    finally:
+        os.close(fd)
+
+
+def _runtime_directory(path):
+    path = Path(path)
+    st = path.lstat()
+    if not path.is_absolute() or not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or stat.S_IMODE(st.st_mode) != 0o700:
+        raise ConfiguredError('private_runtime_directory_required')
+    return path
+
+
+def _failure_code(error):
+    if isinstance(error, ConfiguredError): return str(error)
+    known = {'Broker is busy': 'broker_busy', 'Operator cancellation': 'cancelled',
+             'Child exited before registration': 'child_exited', 'Local registration deadline expired': 'timeout',
+             'Broker owner changed': 'broker_owner_changed', 'Observation source lost': 'source_lost'}
+    if type(error) is RuntimeError and str(error) in known: return known[str(error)]
+    if type(error) is RuntimeError:
+        match = re.fullmatch(r'(?:Begin|Bind|Poll|Cancel)SdlRegistration failed: (org\.[A-Za-z0-9_.]+)', str(error))
+        if match: return match[1]
+    return dbus_error_name(error) or type(error).__name__
+
+
+def configured_worker(folder, bus_factory, interface, unix_fd):
+    """One stable worker owns original Begin connection and direct SDL child."""
+    folder = _runtime_directory(folder)
+    envelope = _read_private_json(folder / 'job')
+    job, nonce = envelope['job'], envelope['nonce']
+    if not re.fullmatch(r'[0-9a-f]{32}', nonce): raise ConfiguredError('invalid_job_nonce')
+    own_start = _proc_info(os.getpid(), include_executable=False)['start']
+    parent_fd = os.pidfd_open(envelope['frontend_pid'])
+    try:
+        if (_pidfd_pid(parent_fd) != envelope['frontend_pid'] or _exited(parent_fd) or
+                _proc_info(envelope['frontend_pid'], include_executable=False)['start'] != envelope['frontend_start']):
+            raise ConfiguredError('frontend_identity_lost')
+    except Exception:
+        os.close(parent_fd)
+        raise
+    registered = False
+    published = False
+    explicit_stop = [False]
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, lambda signum, frame: explicit_stop.__setitem__(0, True))
+    def pending_cancel():
+        cancel = False
+        if (folder / 'cancel').exists():
+            cancel = _read_private_json(folder / 'cancel').get('nonce') == nonce
+        return explicit_stop[0] or cancel or (not published and _exited(parent_fd))
+    def publish(state, **fields):
+        _private_json(folder / 'status', dict(state=state, nonce=nonce, worker_pid=os.getpid(),
+            worker_start=own_start, remote_session='unverified', **fields))
+    def connection_factory(bus, iface, timeout):
+        api = Connection(bus, iface, timeout)
+        if api.owner != job['broker_owner'] or api.call('RegistryStatus')['observation']['source'] != job['source']:
+            raise ConfiguredError('broker_owner_or_source_replaced')
+        return api
+    registration = {}
+    registration_events = []
+    def emitted(line):
+        value = json.loads(line)
+        if value.get('supervision') == 'degraded':
+            _private_json(folder / 'supervision', dict(value, nonce=nonce,
+                worker_pid=os.getpid(), worker_start=own_start))
+        elif value.get('state') in ('failed', 'ambiguous', 'timeout'):
+            registration_events.append(value)
+    def positive(result, unused):
+        nonlocal registered, published, registration
+        registered = True
+        registration = result
+        publish('pending', phase='placement', registration=result, broker_owner=job['broker_owner'])
+        final = []
+        success = False
+        try:
+            placement_bus = bus_factory()
+            code = release_placement(placement_bus, interface, result['managed_id'], job['desktop'], job['slot'],
+                {k: job[k] for k in ('x', 'y', 'width', 'height')}, confirmed=True,
+                timeout_ms=job['mechanical']['placement_timeout_ms'], poll_ms=job['bounds']['rdp_registration_poll_ms'],
+                call_timeout_ms=job['mechanical']['call_timeout_ms'], expected_window_uuid=result['window_uuid'],
+                cancelled=pending_cancel, emit=lambda line: final.append(json.loads(line)),
+                connection_factory=connection_factory)
+            success = code == 0
+            publish('completed' if success else 'failed', phase='placement',
+                registration=result, placement=final[-1], broker_owner=job['broker_owner'])
+        except Exception as error:
+            publish('cancelled' if pending_cancel() else 'unresolved', phase='placement', reason=_failure_code(error), registration=result,
+                    broker_owner=job['broker_owner'])
+        published = True
+        # A bounded private receipt handshake, never a viewer/GDM readiness gate.
+        # Failure does not revoke registration or kill the registered client.
+        if success:
+            deadline = time.monotonic() + job['mechanical']['call_timeout_ms'] / 1000
+            acknowledged = False
+            while time.monotonic() < deadline:
+                try:
+                    acknowledged = _read_private_json(folder / 'ack').get('nonce') == nonce
+                except FileNotFoundError:
+                    pass
+                if acknowledged: break
+                time.sleep(min(job['bounds']['rdp_registration_poll_ms'] / 1000,
+                               max(0, deadline - time.monotonic())))
+            _private_json(folder / 'handoff', dict(nonce=nonce, worker_pid=os.getpid(), worker_start=own_start,
+                                                 acknowledged=acknowledged))
+        # Registered viewers survive placement failure/cancel or frontend exit.
+    def registered_callback(result, cancellation):
+        nonlocal registered, published
+        try:
+            positive(result, cancellation)
+        except Exception as error:
+            # Reporting/receipt failure cannot destroy an enrolled viewer.
+            # The frontend will stop unresolved if no trustworthy result arrives.
+            registered = published = True
+            try:
+                publish('unresolved', phase='handoff', reason=_failure_code(error), registration=result,
+                        broker_owner=job['broker_owner'])
+            except Exception:
+                pass
+    try:
+        if pending_cancel(): raise ConfiguredError('cancelled_before_begin')
+        bus = bus_factory()
+        try:
+            checked = configured_preflight({k: job[k] for k in ('target', 'settings', 'bounds', 'mechanical',
+                'desktop', 'slot', 'x', 'y', 'width', 'height')}, bus, interface)
+            if any(checked[k] != job[k] for k in ('broker_owner', 'source', 'resolved_backend')):
+                raise ConfiguredError('preflight_session_replaced')
+        finally:
+            bus.close()
+        endpoint = __import__('joetoo_kwin_rdp_target').target(job['target'])
+        profile = X11_PROFILE if job['resolved_backend'] == 'x11' else None
+        bounds = settings({k: v for k, v in job['bounds'].items() if profile is not None or k in DEFAULTS}, profile)
+        if pending_cancel(): raise ConfiguredError('cancelled_before_begin')
+        launch_registration(bus_factory(), interface, unix_fd, sys.modules[__name__], endpoint['host'], endpoint['port'],
+            endpoint['user'], job['desktop'], job['slot'], bounds,
+            call_timeout=job['mechanical']['call_timeout_ms'] / 1000,
+            emit=emitted, on_registered=registered_callback, profile=profile,
+            argv_builder=lambda h, p, u, m: configured_argv(h, p, u, m, job['settings']),
+            connection_factory=connection_factory,
+            cancelled=lambda: explicit_stop[0] if registered else pending_cancel())
+        if not published:
+            terminal = registration_events[-1] if registration_events else {}
+            state = terminal.get('state', 'failed')
+            publish(state, phase='registration', reason=terminal.get('reason', 'registration_not_completed'),
+                    registration=terminal, cleanup_confirmed=False)
+    except Exception as error:
+        if not published:
+            publish('cancelled' if pending_cancel() else 'failed', phase='registration',
+                    reason=_failure_code(error), cleanup_confirmed=False)
+    finally:
+        os.close(parent_fd)
+        _private_json(folder / 'worker_exited', dict(nonce=nonce))
+
+
+def configured_frontend(job, *, spawn=subprocess.Popen, clock=time.monotonic, sleep=time.sleep):
+    """Return only this worker's nonce/PID/start-bound status; never hold FD 9."""
+    runtime = _runtime_directory(os.environ.get('XDG_RUNTIME_DIR', ''))
+    folder = Path(tempfile.mkdtemp(prefix='joetoo-rdp-', dir=runtime))
+    os.chmod(folder, 0o700)
+    nonce = secrets.token_hex(16)
+    _private_json(folder / 'job', dict(job=job, nonce=nonce, frontend_pid=os.getpid(),
+        frontend_start=_proc_info(os.getpid(), include_executable=False)['start']))
+    worker = None
+    worker_fd = None
+    result = None
+    interrupted = [False]
+    old_handlers = {}
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        old_handlers[sig] = signal.signal(sig, lambda signum, frame: interrupted.__setitem__(0, True))
+    timeout = job['mechanical']['call_timeout_ms'] / 1000
+    deadline = clock() + job['bounds']['rdp_registration_timeout_ms'] / 1000 + job['mechanical']['placement_timeout_ms'] / 1000 + 5 * timeout
+    try:
+        fd = os.open(folder / 'worker.stderr', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'wb') as log:
+            worker = spawn([sys.executable, str(Path(__file__).resolve()), '--worker', str(folder)],
+                           stdin=None, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True, close_fds=True)
+        worker_fd = os.pidfd_open(worker.pid)
+        info = _proc_info(worker.pid, include_executable=False)
+        if (_pidfd_pid(worker_fd) != worker.pid or info['uid'] != os.geteuid()
+                or info['parent'] != os.getpid()):
+            raise ConfiguredError('worker_process_identity_mismatch')
+        start = info['start']
+        while clock() < deadline:
+            if interrupted[0]:
+                _private_json(folder / 'cancel', dict(nonce=nonce))
+                deadline = min(deadline, clock() + 3 * timeout)
+                interrupted[0] = False
+            try:
+                status = _read_private_json(folder / 'status')
+                if (status.get('nonce') != nonce or status.get('worker_pid') != worker.pid or status.get('worker_start') != start):
+                    raise ConfiguredError('worker_status_identity_mismatch')
+                if status.get('state') not in ('pending', 'completed', 'failed', 'cancelled', 'timeout', 'ambiguous', 'unresolved'):
+                    raise ConfiguredError('worker_status_invalid')
+                if status['state'] == 'completed':
+                    if _exited(worker_fd) or worker.poll() is not None:
+                        raise ConfiguredError('worker_exited_before_handoff')
+                    reg, place = status.get('registration', {}), status.get('placement', {})
+                    if (status.get('broker_owner') != job['broker_owner'] or reg.get('state') != 'registered' or
+                            place.get('placement') != 'succeeded' or place.get('remote_session') != 'unverified' or
+                            status.get('remote_session') != 'unverified' or
+                            not re.fullmatch(r'win-[0-9]+', reg.get('managed_id', '')) or
+                            not re.fullmatch(r'[0-9a-f]{32}', reg.get('request_id', '')) or
+                            not re.fullmatch(r'[0-9a-f]{32}', place.get('request_id', '')) or
+                            not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', reg.get('window_uuid', '')) or
+                            place.get('window_uuid') != reg['window_uuid'] or
+                            place.get('managed_id') != reg.get('managed_id')):
+                        raise ConfiguredError('worker_terminal_identity_mismatch')
+                if status['state'] != 'pending':
+                    result = status
+                    break
+            except FileNotFoundError:
+                pass
+            if worker.poll() is not None: break
+            sleep(job['bounds']['rdp_registration_poll_ms'] / 1000)
+        if result is None:
+            _private_json(folder / 'cancel', dict(nonce=nonce))
+            result = dict(state='unresolved', reason='worker_handoff_unavailable', remote_session='unverified')
+        _private_json(folder / 'ack', dict(nonce=nonce))
+        if result['state'] == 'completed':
+            receipt_deadline = clock() + timeout
+            received = False
+            while clock() < receipt_deadline:
+                try:
+                    receipt = _read_private_json(folder / 'handoff')
+                    received = (receipt.get('nonce') == nonce and receipt.get('worker_pid') == worker.pid
+                                and receipt.get('worker_start') == start and receipt.get('acknowledged') is True)
+                    if not received: raise ConfiguredError('worker_receipt_identity_mismatch')
+                except FileNotFoundError:
+                    pass
+                if received and not _exited(worker_fd): break
+                if _exited(worker_fd): raise ConfiguredError('worker_exited_before_receipt')
+                sleep(job['bounds']['rdp_registration_poll_ms'] / 1000)
+            if not received: raise ConfiguredError('worker_receipt_unavailable')
+        return result
+    except Exception as error:
+        _private_json(folder / 'cancel', dict(nonce=nonce))
+        return dict(state='unresolved', reason=_failure_code(error), remote_session='unverified')
+    finally:
+        for sig, handler in old_handlers.items(): signal.signal(sig, handler)
+        if worker_fd is not None: os.close(worker_fd)
+        if worker is not None and worker.poll() is not None: worker.wait(timeout=timeout)
+        # Private evidence/control records are retained, never deleted recursively.
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Configured serial SDL RDP frontend/worker')
+    parser.add_argument('--worker')
+    parser.add_argument('--preflight', action='store_true')
+    parser.add_argument('--job-fd', type=int, default=0)
+    args = parser.parse_args(argv)
+    import dbus
+    address = os.environ.get('DBUS_SESSION_BUS_ADDRESS', '')
+    if os.geteuid() == 0 or not address.startswith('unix:') or ';' in address:
+        raise ConfiguredError('existing_nonroot_local_session_bus_required')
+    factory = lambda: dbus.bus.BusConnection(address)
+    if args.worker:
+        configured_worker(Path(args.worker), factory, dbus.Interface, dbus.types.UnixFd)
+        return 0
+    with os.fdopen(os.dup(args.job_fd)) as stream:
+        raw = stream.read(65537)
+    if len(raw) > 65536: raise ConfiguredError('job_budget_exceeded')
+    job = configured_job(json.loads(raw))
+    bus = factory()
+    try: job = configured_preflight(job, bus, dbus.Interface)
+    finally: bus.close()
+    if args.preflight:
+        result = job
+    else:
+        try: result = configured_frontend(job)
+        except Exception as error:
+            result = dict(state='unresolved', phase='frontend', reason=_failure_code(error), remote_session='unverified')
+    print(json.dumps(result, sort_keys=True))
+    return 0 if args.preflight or result['state'] == 'completed' else 2
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except Exception as error:
+        print(json.dumps(dict(state='preflight_failed', reason=_failure_code(error), remote_session='unverified')), file=sys.stderr)
+        sys.exit(2)

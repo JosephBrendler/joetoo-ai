@@ -7,6 +7,8 @@
 # Severity and color globals are supplied by the caller's script_header_joetoo.
 # shellcheck disable=SC2154
 
+# Defaults also feed sourced launch-functions and typed configuration reporting.
+# shellcheck disable=SC2034
 plan_defaults() {
     # Work-area discovery is unresolved: dimensions must be supplied explicitly.
     screen_width=""
@@ -27,6 +29,13 @@ plan_defaults() {
     vnc_dbus_timeout_ms=3000
     vnc_identity_start_timeout_ms=1000
     vnc_placement_timeout_ms=15000
+    rdp_registration_timeout_ms=120000
+    rdp_registration_poll_ms=100
+    rdp_registration_event_limit=4096
+    rdp_registration_window_limit=64
+    rdp_backend_log_byte_limit=65536
+    rdp_x11_renderer=auto
+    rdp_x11_identity_settle_ms=500
     # Offline configured RDP intent; runtime dispatch belongs to Stage 2.
     rdp_remote_width=1024
     rdp_remote_height=768
@@ -103,6 +112,7 @@ validate_plan() {
     declare -ga planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
     declare -ga planned_explicit=() desktop_groups=()
     declare -ga planned_rdp_target=()
+    declare -g rdp_bounds="" # Existing identity bounds, validated offline.
     declare -g rdp_settings="" # Validated nonsecret sizing/backend JSON, not a runtime launch.
     declare -g vnc_bounds="" # Validated JSON consumed by the configured VNC launcher.
     # shellcheck disable=SC2034
@@ -164,6 +174,10 @@ validate_plan() {
                 rdp_settings=$(python3 "$_vp_sftp_dir/joetoo_kwin_rdp_target.py" --settings \
                     "$rdp_remote_width" "$rdp_remote_height" "$RDP_SMART_SIZING" \
                     "$rdp_initial_client_width" "$rdp_initial_client_height" "$rdp_windowing_backend") || return 2
+                rdp_bounds=$(python3 "$_vp_sftp_dir/joetoo_kwin_rdp_target.py" --bounds \
+                    "$rdp_windowing_backend" "$rdp_registration_timeout_ms" "$rdp_registration_poll_ms" \
+                    "$rdp_registration_event_limit" "$rdp_registration_window_limit" "$rdp_backend_log_byte_limit" \
+                    "$rdp_x11_renderer" "$rdp_x11_identity_settle_ms") || return 2
             fi
         fi
         _vp_uri=""
