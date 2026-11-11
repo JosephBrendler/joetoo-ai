@@ -150,6 +150,31 @@ placement and remote usability remain separate.
 | `rdp_initial_client_width` | 800 | 64..8192 initial client pixels |
 | `rdp_initial_client_height` | 600 | 64..8192 initial client pixels |
 | `rdp_windowing_backend` | `auto` | `auto`, `wayland`, `x11`; positive runtime KWin/backend evidence required |
+| `rdp_security_protocol` | `nla` | `nla` -> `/sec:nla`; `negotiate` -> no `/sec:` argument |
+| `rdp_certificate_policy` | `strict` | `strict` -> `/cert:deny`; `prompt` -> no `/cert:` argument |
+
+Security policy is validated offline by `-c` and shown at info verbosity (`-vc`).
+Built-ins are NLA and strict certificate refusal; the existing system/user defaults,
+selected profile or explicit per-run plan may override either enum. Supported CLI
+verbosity overrides still apply last; there are no new raw client-switch options.
+
+| Config variable | Allowed value | Literal FreeRDP argv mapping |
+| --- | --- | --- |
+| `rdp_security_protocol` | `nla` (default) | One `/sec:nla`; exclusive NLA mode, not `/sec:nla:on` |
+| `rdp_security_protocol` | `negotiate` | No `/sec:` argument; stock negotiation, not `/sec:rdp` or `-nego` |
+| `rdp_certificate_policy` | `strict` (default) | One `/cert:deny`; failed validation is refused without an exception prompt |
+| `rdp_certificate_policy` | `prompt` | No `/cert:` argument; stock trust/interactive handling |
+
+NLA still uses TLS internally. `/sec:tls` instead selects TLS-only RDP security
+mode; `/tls:*` controls a separate TLS-version/cipher dimension. No TLS-version
+force or arbitrary security switches are added here. `prompt` is an explicit,
+less restrictive user choice; `negotiate` permits the client's default security
+negotiation rather than enforcing NLA. Neither option means automatic certificate
+bypass. The same shared argument builder gives development launchers NLA/strict
+defaults; production supplies effective layered settings. Local registration and
+placement still report remote authentication/session state as unverified; a local
+viewer may register before certificate refusal. Previous native success evidence
+predates these defaults and does not constitute their native acceptance.
 
 Remote dimensions map to `/size:WIDTHxHEIGHT`. Smart sizing enabled maps initial
 client dimensions to `/smart-sizing:WIDTHxHEIGHT`; disabled maps to

@@ -77,12 +77,12 @@ def settings(data, profile=None):
     return result
 
 
-def development_argv(host, port, username, marker):
-    """Restricted development arguments, NOT an approved production recipe.
+def development_argv(host, port, username, marker, client_settings=None):
+    """Shared restricted SDL arguments, including the validated security policy.
 
-    No arbitrary switches, shell parsing, password or certificate exceptions.
-    Production NLA/negotiation/trust decisions and the executable entry point
-    remain maintainer gates. Do not use these arguments for native testing yet.
+    Development callers use the same NLA/strict defaults as production. Only
+    configured callers pass validated settings to select negotiate or prompt;
+    neither path accepts arbitrary switches, shell parsing or passwords.
     """
     if not isinstance(host, str) or not host or not host.isascii():
         raise ValueError('Invalid development endpoint (redacted)')
@@ -99,12 +99,14 @@ def development_argv(host, port, username, marker):
         raise ValueError('Invalid development username (redacted)')
     if not isinstance(marker, str) or not re.fullmatch(r'joetoo-rdp-[0-9a-f]{64}', marker):
         raise ValueError('Invalid broker launch marker')
+    from joetoo_kwin_rdp_target import security_arguments
+    policy = security_arguments({} if client_settings is None else client_settings)
     return ['sdl-freerdp', '/v:' + host + ':' + str(port), '/u:' + username,
             '/t:' + marker,
             '/size:1024x768',
             '/smart-sizing:800x600',
             '/log-level:INFO',
-            '/log-filters:com.freerdp.client.SDL:DEBUG']
+            '/log-filters:com.freerdp.client.SDL:DEBUG'] + policy
 
 
 def development_environment(environment, profile=None, bounds=None):
@@ -817,8 +819,8 @@ class ConfiguredError(RuntimeError):
 
 def configured_argv(host, port, username, marker, client_settings):
     from joetoo_kwin_rdp_target import sizing_arguments
-    # Reuse endpoint/marker/log policy, replacing only development sizing.
-    return [v for v in development_argv(host, port, username, marker)
+    # Reuse endpoint/marker/log/security policy, replacing only development sizing.
+    return [v for v in development_argv(host, port, username, marker, client_settings)
             if not v.startswith(('/size:', '/smart-sizing:'))] + sizing_arguments(client_settings)
 
 

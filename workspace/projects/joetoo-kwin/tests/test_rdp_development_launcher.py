@@ -122,6 +122,8 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(self.events[:2], ['begin', 'spawn'])
         self.assertEqual(argv[0], '/usr/bin/sdl-freerdp')
         self.assertIn('/t:' + self.f.marker, argv)
+        self.assertEqual([a for a in argv if a.startswith('/sec:')], ['/sec:nla'])
+        self.assertEqual([a for a in argv if a.startswith('/cert:')], ['/cert:deny'])
         self.assertTrue(kwargs['close_fds'])
         self.assertEqual(kwargs['env']['SDL_VIDEO_DRIVER'],
                          'x11' if self.f.b._rdp_registration.get('profile') else 'wayland')
@@ -130,6 +132,8 @@ class LauncherTests(unittest.TestCase):
         code = ('import os,sys; print("[0] [%d:thread] [DEBUG][com.freerdp.client.SDL] - '
                 '[main]: client is using backend \'%s\'" % (os.getpid(),sys.argv[1]),flush=sys.argv[2] == "flush"); '
                 'print("ready",file=sys.stderr,flush=True); sys.stdin.read()')
+        if self.mode == 'certificate_refusal':
+            code += '; print("simulated certificate refusal",flush=True); sys.exit(1)'
         self.child = subprocess.Popen([sys.executable, '-c', code,
             'x11' if self.mode == 'x11' else kwargs['env']['SDL_VIDEO_DRIVER'],
             'buffer' if self.mode == 'buffered' else 'flush'], stdin=subprocess.PIPE,
@@ -193,6 +197,22 @@ class LauncherTests(unittest.TestCase):
         self.assertTrue(receipts[0]['eligible'])
         self.assertTrue(receipts[0]['natural_exit'])
         self.assertEqual(receipts[0]['terminal']['reason'],'child_identity_rejected')
+
+    def test_simulated_strict_refusal_reaps_real_pending_child(self):
+        # The child is Python, not FreeRDP: assert argv and actual cleanup only.
+        self.mode = 'certificate_refusal'
+        receipts = []
+        def refused(duration):
+            self.child.stdin.close()
+            self.child.wait(timeout=3)
+            self.f.loop.tick()
+        self.wait = refused
+        with self.assertRaisesRegex(RuntimeError, 'Child exited before registration'):
+            self.run_launcher(on_cleanup=receipts.append)
+        self.assertEqual(self.child.returncode, 1)
+        self.assertTrue(receipts[0]['eligible'])
+        self.assertTrue(receipts[0]['child_reaped'])
+        self.assertEqual(json.loads(self.f.b.ListManaged())['count'], 0)
 
     def test_unknown_cancel_reply_retains_real_owned_child_without_clean_claim(self):
         self.mode = 'deadline'

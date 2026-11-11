@@ -72,6 +72,25 @@ class TargetTests(unittest.TestCase):
         self.assertEqual(rdp.settings({'RDP_SMART_SIZING': '0'})['RDP_SMART_SIZING'], True)
         self.assertEqual(rdp.settings({'RDP_SMART_SIZING': False})['RDP_SMART_SIZING'], False)
 
+    def test_security_policy_defaults_all_mappings_and_omission(self):
+        self.assertEqual(rdp.security_arguments({}), ['/sec:nla', '/cert:deny'])
+        for protocol in ('nla', 'negotiate'):
+            for certificate in ('strict', 'prompt'):
+                with self.subTest(protocol=protocol, certificate=certificate):
+                    expected = (['/sec:nla'] if protocol == 'nla' else [])
+                    expected += ['/cert:deny'] if certificate == 'strict' else []
+                    settings = dict(rdp_security_protocol=protocol, rdp_certificate_policy=certificate)
+                    self.assertEqual(rdp.security_arguments(settings), expected)
+
+    def test_security_policy_rejects_injection_types_and_conflicting_values(self):
+        for name in ('rdp_security_protocol', 'rdp_certificate_policy'):
+            for value in ('', 'NLA', 'nla:on', 'nla negotiate', 'strict prompt', '/cert:ignore',
+                          'nla /cert:ignore', 'nla;PRIVATE', 'strict\n', None, True, [], {}):
+                with self.subTest(name=name, value=value):
+                    with self.assertRaisesRegex(ValueError, 'redacted') as caught:
+                        rdp.security_arguments({name: value})
+                    self.assertNotIn('PRIVATE', str(caught.exception))
+
     def test_dimension_bounds_types_and_unknown_settings(self):
         names = ('rdp_remote_width', 'rdp_remote_height', 'rdp_initial_client_width', 'rdp_initial_client_height')
         for name in names:
@@ -102,7 +121,7 @@ class TargetTests(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stderr)
         self.assertEqual(json.loads(run.stdout), dict(user='joe', host='::1', port=3390))
         for sizing in ('0', ''):
-            run = subprocess.run([sys.executable, script, '--settings', '1024', '768', sizing, '800', '600', 'auto'],
+            run = subprocess.run([sys.executable, script, '--settings', '1024', '768', sizing, '800', '600', 'auto', 'nla', 'strict'],
                                  text=True, capture_output=True)
             self.assertEqual(run.returncode, 0, run.stderr)
             self.assertEqual(json.loads(run.stdout)['RDP_SMART_SIZING'], sizing == '0')
@@ -118,6 +137,46 @@ class RdpPlannerTests(PlannerHarness, unittest.TestCase):
             path = self.folder / program
             path.write_text('#!/bin/sh\nprintf "unexpected\\n" >> "$TRACE"\nexit 99\n')
             path.chmod(0o755)
+
+    def test_security_policy_layer_precedence_and_selected_profile(self):
+        self.write_config(['1|sdl-freerdp|rdp|rdp://user@rdp.example'])
+        def check(output, protocol, certificate):
+            self.assertIn('rdp_security_protocol=' + protocol, output)
+            self.assertIn('rdp_certificate_policy=' + certificate, output)
+        check(self.plan('-v'), 'nla', 'strict')
+        self.system_defaults.write_text('rdp_security_protocol=negotiate\nrdp_certificate_policy=prompt\n')
+        check(self.plan('-v'), 'negotiate', 'prompt')
+        root = Path(self.env['XDG_CONFIG_HOME']) / 'joetoo-kwin'
+        root.mkdir(parents=True)
+        (root / 'defaults.conf').write_text('rdp_security_protocol=nla\nrdp_certificate_policy=strict\n')
+        check(self.plan('-v'), 'nla', 'strict')
+        profiles = root / 'profiles'; profiles.mkdir()
+        selected = profiles / 'work.conf'
+        selected.write_text(self.config.read_text() + 'rdp_security_protocol=negotiate\nrdp_certificate_policy=prompt\n')
+        active = root / 'joetoo-kwin.conf'; active.symlink_to('profiles/work.conf')
+        check(self.run_cli('-vc'), 'negotiate', 'prompt')
+        # Explicit per-run selection overrides the profile, without changing it.
+        check(self.plan('-v'), 'nla', 'strict')
+        self.assertEqual(active.readlink(), Path('profiles/work.conf'))
+        quiet = self.plan('-v', '-q')
+        self.assertNotIn('rdp_security_protocol=', quiet)
+        self.assertNotIn('rdp_certificate_policy=', quiet)
+        check(self.plan('-vv'), 'nla', 'strict')
+        self.assertFalse(self.calls.exists())
+
+    def test_bad_policy_is_rejected_offline_before_confirmation_or_preflight(self):
+        self.env['XDG_RUNTIME_DIR'] = str(self.folder)  # Only the disposable invocation lock.
+        for helper in ('joetoo-kwin-launch-functions', 'joetoo-kwin-session.bashrc'):
+            shutil.copyfile(ROOT / 'libexec' / helper, self.folder / 'libexec' / helper)
+        for name in ('rdp_security_protocol', 'rdp_certificate_policy'):
+            for value in ('bad', 'nla:on', '/cert:ignore', 'nla /cert:ignore', 'PRIVATE'):
+                self.write_config(['1|sdl-freerdp|rdp|rdp://user@rdp.example'], extra=name + "='" + value + "'\n")
+                for operation in ('-c', '-o'):
+                    with self.subTest(name=name, value=value, operation=operation):
+                        output = self.run_cli(operation, '-v', '-f', str(self.config), expected=2)
+                        self.assertNotIn('PRIVATE', output)
+                        self.assertNotIn('Do you want to continue', output)
+                        self.assertFalse(self.calls.exists())
 
     def test_single_rdp_defaults_nonsecret_settings_and_no_backend_probe(self):
         self.write_config(['1|sdl-freerdp|rdp|rdp://joe@host'])

@@ -159,6 +159,29 @@ class BackendTests(unittest.TestCase):
             with self.assertRaisesRegex(rdp.ConfiguredError, 'reserved'):
                 rdp.configured_preflight(job(), self.bus, lambda o, i: o)
 
+    def test_production_and_development_share_exact_security_mapping(self):
+        marker = 'joetoo-rdp-' + 'a' * 64
+        for backend in ('wayland', 'x11'):
+            for protocol in ('nla', 'negotiate'):
+                for certificate in ('strict', 'prompt'):
+                    with self.subTest(backend=backend, protocol=protocol, certificate=certificate):
+                        data = dict(rdp_windowing_backend=backend, rdp_security_protocol=protocol,
+                                    rdp_certificate_policy=certificate)
+                        for args in (rdp.configured_argv('host.example', 3389, 'user', marker, data),
+                                     rdp.development_argv('host.example', 3389, 'user', marker, data)):
+                            self.assertEqual([a for a in args if a.startswith('/sec:')],
+                                             ['/sec:nla'] if protocol == 'nla' else [])
+                            self.assertEqual([a for a in args if a.startswith('/cert:')],
+                                             ['/cert:deny'] if certificate == 'strict' else [])
+                            self.assertFalse(any(a.startswith(('/p:', '/tls:')) for a in args))
+        for key in ('rdp_security_protocol', 'rdp_certificate_policy'):
+            with self.assertRaises(ValueError):
+                rdp.configured_argv('host.example', 3389, 'user', marker, {key: '/cert:ignore'})
+            invalid = job()
+            invalid['settings'][key] = '/cert:ignore'
+            with self.assertRaisesRegex(rdp.ConfiguredError, 'invalid_rdp_target_or_settings'):
+                rdp.configured_job(invalid)
+
     def test_configured_sizes_ports_and_existing_defaults_are_independent(self):
         data = rdp.configured_job(job())
         self.assertEqual(data['bounds']['rdp_registration_timeout_ms'], 300000)
@@ -167,7 +190,9 @@ class BackendTests(unittest.TestCase):
         self.assertIn('/v:[::1]:3390', args)
         self.assertIn('/size:1920x1080', args)
         self.assertIn('/smart-sizing:off', args)
-        self.assertFalse(any('/cert:' in arg or '/p:' in arg for arg in args))
+        self.assertIn('/cert:deny', args)
+        self.assertIn('/sec:nla', args)
+        self.assertFalse(any(arg.startswith(('/p:', '/tls:')) for arg in args))
         self.assertIn('/smart-sizing:800x600', rdp.development_argv('host', 3389, 'joe', 'joetoo-rdp-' + 'a' * 64))
         with self.assertRaises(rdp.ConfiguredError): rdp.configured_job(dict(job(), target='rdp://joe:secret@host'))
 
@@ -191,7 +216,18 @@ class WorkerTests(unittest.TestCase):
             self.calls.append('registration')
             self.assertEqual((host, port, user), ('::1', 3390, 'joe'))
             self.assertEqual((desktop, slot), (1, 1))
-            self.assertIn('/size:1024x768', kw['argv_builder'](host, port, user, 'joetoo-rdp-' + 'a' * 64))
+            args = kw['argv_builder'](host, port, user, 'joetoo-rdp-' + 'a' * 64)
+            self.assertIn('/size:1024x768', args)
+            self.assertEqual([a for a in args if a.startswith('/sec:')],
+                ['/sec:nla'] if self.job['settings']['rdp_security_protocol'] == 'nla' else [])
+            self.assertEqual([a for a in args if a.startswith('/cert:')],
+                ['/cert:deny'] if self.job['settings']['rdp_certificate_policy'] == 'strict' else [])
+            if self.outcome == 'certificate_refusal':
+                receipt = clean_receipt(self.job)
+                receipt['terminal'].update(state='failed', reason='child_identity_rejected')
+                kw['emit'](json.dumps(receipt['terminal']))
+                kw['on_cleanup'](receipt)
+                return 1
             if self.outcome == 'registration_failure': raise ValueError('private')
             if self.outcome == 'parent_lost':
                 dead = patch.object(rdp, '_exited', return_value=True)
@@ -239,6 +275,26 @@ class WorkerTests(unittest.TestCase):
              patch.object(rdp, 'launch_registration', registration), patch.object(rdp, 'release_placement', place):
             rdp.configured_worker(self.folder, lambda: self.bus, lambda o, i: o, None)
         return rdp._read_private_json(self.folder / 'status')
+
+    def test_worker_passes_effective_security_policy_to_direct_launch(self):
+        for backend, protocol, certificate in (('wayland', 'nla', 'strict'), ('x11', 'negotiate', 'prompt')):
+            self.job['resolved_backend'] = backend
+            self.job['settings'].update(rdp_security_protocol=protocol, rdp_certificate_policy=certificate)
+            rdp._private_json(self.folder / 'job', dict(job=self.job, nonce=self.nonce,
+                frontend_pid=os.getpid(), frontend_start=rdp._proc_info(os.getpid(), include_executable=False)['start']))
+            self.calls.clear()
+            self.assertEqual(self.run_worker()['state'], 'completed')
+            self.assertEqual(self.calls, ['registration', 'placement'])
+
+    def test_simulated_certificate_refusal_remains_local_failure_with_verified_cleanup(self):
+        # Model child refusal, not TLS itself. No certificate/server operation occurs.
+        self.outcome = 'certificate_refusal'
+        result = self.run_worker()
+        self.assertEqual(self.calls, ['registration'])
+        self.assertEqual(result['state'], 'failed')
+        self.assertTrue(result['cleanup_confirmed'])
+        self.assertEqual(result['remote_session'], 'unverified')
+        self.assertNotIn('placement', result)
 
     def test_one_registration_one_placement_and_bound_terminal_result(self):
         result = self.run_worker()

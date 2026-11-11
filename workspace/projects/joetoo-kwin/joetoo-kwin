@@ -208,7 +208,7 @@ check_plan() {
     local info_varlist="verbosity desktop_limit dt_win_limit min_window_exposure_px"
     info_varlist+=" terminal_width_percent terminal_gap_percent terminal_height_percent terminal_left_percent terminal_top_percent terminal_row_gap_percent"
     info_varlist+=" graphical_left_percent graphical_top_percent graphical_width_percent graphical_height_percent"
-    info_varlist+=" rdp_registration_timeout_ms rdp_windowing_backend rdp_x11_renderer rdp_remote_width rdp_remote_height bool.RDP_SMART_SIZING rdp_initial_client_width rdp_initial_client_height"
+    info_varlist+=" rdp_registration_timeout_ms rdp_windowing_backend rdp_security_protocol rdp_certificate_policy rdp_x11_renderer rdp_remote_width rdp_remote_height bool.RDP_SMART_SIZING rdp_initial_client_width rdp_initial_client_height"
     info_varlist+=" vnc_viewer_ready_timeout_ms bool.sftp_advisory_enabled sftp_advisory_timeout_ms sftp_advisory_ssh_port"
     local debug_varlist="initial_focus_timeout_ms initial_focus_poll_interval_ms sftp_capability_timeout_ms"
     debug_varlist+=" rdp_registration_poll_ms rdp_registration_event_limit rdp_registration_window_limit rdp_backend_log_byte_limit rdp_x11_identity_settle_ms"

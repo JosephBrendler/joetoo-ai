@@ -14,7 +14,8 @@ import sys
 
 DEFAULTS = dict(rdp_remote_width=1024, rdp_remote_height=768, RDP_SMART_SIZING=True,
                 rdp_initial_client_width=800, rdp_initial_client_height=600,
-                rdp_windowing_backend='auto')
+                rdp_windowing_backend='auto', rdp_security_protocol='nla',
+                rdp_certificate_policy='strict')
 # Application policy: bound pathological/tiny allocations, below FreeRDP 3.32.1's
 # UINT16_MAX size parser ceiling. This is not server/renderer capability proof.
 DIMENSION_BOUNDS = (64, 8192)
@@ -58,6 +59,10 @@ def settings(data):
         if name == 'rdp_windowing_backend':
             if value not in ('auto', 'wayland', 'x11'):
                 raise ValueError('Invalid rdp_windowing_backend; expected auto, wayland or x11')
+        elif name in ('rdp_security_protocol', 'rdp_certificate_policy'):
+            allowed = ('nla', 'negotiate') if name == 'rdp_security_protocol' else ('strict', 'prompt')
+            if not isinstance(value, str) or value not in allowed:
+                raise ValueError('Invalid RDP security policy (redacted)')
         elif name == 'RDP_SMART_SIZING':
             # Trusted Bash uses TRUE=0, FALSE="". JSON callers use actual bools;
             # do not accept truthy strings, numeric booleans or shell expressions.
@@ -88,6 +93,17 @@ def sizing_arguments(data):
     return [f"/size:{s['rdp_remote_width']}x{s['rdp_remote_height']}",
             (f"/smart-sizing:{s['rdp_initial_client_width']}x{s['rdp_initial_client_height']}"
              if s['RDP_SMART_SIZING'] else '/smart-sizing:off')]
+
+
+def security_arguments(data):
+    """Map validated policy enums only; omission deliberately selects stock defaults."""
+    s = settings(data)
+    result = []
+    if s['rdp_security_protocol'] == 'nla':
+        result.append('/sec:nla')
+    if s['rdp_certificate_policy'] == 'strict':
+        result.append('/cert:deny')
+    return result
 
 
 def registration_bounds(data, backend):

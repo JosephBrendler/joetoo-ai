@@ -43,6 +43,8 @@ plan_defaults() {
     rdp_initial_client_width=800
     rdp_initial_client_height=600
     rdp_windowing_backend=auto
+    rdp_security_protocol=nla
+    rdp_certificate_policy=strict
     sftp_advisory_enabled=$TRUE
     sftp_advisory_timeout_ms=2000
     sftp_advisory_ssh_port=22
@@ -173,7 +175,8 @@ validate_plan() {
             if [[ -z $rdp_settings ]]; then
                 rdp_settings=$(python3 "$_vp_sftp_dir/joetoo_kwin_rdp_target.py" --settings \
                     "$rdp_remote_width" "$rdp_remote_height" "$RDP_SMART_SIZING" \
-                    "$rdp_initial_client_width" "$rdp_initial_client_height" "$rdp_windowing_backend") || return 2
+                    "$rdp_initial_client_width" "$rdp_initial_client_height" "$rdp_windowing_backend" \
+                    "$rdp_security_protocol" "$rdp_certificate_policy") || return 2
                 rdp_bounds=$(python3 "$_vp_sftp_dir/joetoo_kwin_rdp_target.py" --bounds \
                     "$rdp_windowing_backend" "$rdp_registration_timeout_ms" "$rdp_registration_poll_ms" \
                     "$rdp_registration_event_limit" "$rdp_registration_window_limit" "$rdp_backend_log_byte_limit" \

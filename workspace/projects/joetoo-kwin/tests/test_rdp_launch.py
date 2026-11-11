@@ -121,13 +121,15 @@ class LaunchAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'integrity'):
             self.reader.read_backend()
 
-    def test_safe_development_argv_and_no_security_policy_invention(self):
+    def test_safe_development_argv_and_strict_security_defaults(self):
         marker = 'joetoo-rdp-' + 'a' * 64
         args = adapter.development_argv('example.invalid', 3389, 'tester', marker)
         self.assertEqual(args[:4], ['sdl-freerdp', '/v:example.invalid:3389', '/u:tester', '/t:' + marker])
         self.assertIn('/size:1024x768', args)
         self.assertIn('/smart-sizing:800x600', args)
-        self.assertFalse(any(a.startswith(('/p:', '/cert:', '/sec:')) for a in args))
+        self.assertEqual([a for a in args if a.startswith('/sec:')], ['/sec:nla'])
+        self.assertEqual([a for a in args if a.startswith('/cert:')], ['/cert:deny'])
+        self.assertFalse(any(a.startswith(('/p:', '/tls:')) for a in args))
         self.assertIn('/v:[::1]:3390', adapter.development_argv('::1', 3390, 'tester', marker))
 
     def test_rejected_credentials_flags_targets_and_markers(self):
