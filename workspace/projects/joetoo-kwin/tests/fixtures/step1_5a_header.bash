@@ -29,7 +29,7 @@ show_config() {
                 *) value=INVALID ;;
             esac
         else
-            name=$entry
+            name=${entry#rlv.}
             value=${!name}
         fi
         printf '%s=%s\n' "$name" "$value"
@@ -49,3 +49,14 @@ _pc_action_verbosity() {
 }
 # Tests use plain ASCII cells; real display-width handling is integration-tested.
 get_msg_len() { printf '%s\n' "${#1}"; }
+
+# Match the header's severity gate and its deliberately unconditional success.
+d_do() {
+    (( $# >= 2 )) || return 1
+    [[ -n $verbosity ]] || return 2
+    local level=${!#}
+    isint "$level" || return 3
+    if [[ $DEBUG ]] || (( verbosity >= level )); then eval "$1"; fi
+    return 0
+}
+die() { printf '%s\n' "$1" >&2; exit 1; }

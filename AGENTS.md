@@ -84,6 +84,16 @@ This prevents an invisible object replacement character introduced by the AI's i
 - Attribute a failure to its demonstrated cause; distinguish primary failure, dependency blocker, skipped work, and inconclusive result.
 - Never claim successful tests, builds, deployment, or changes without corresponding evidence.
 
+### Favor completion over unnecessary task decomposition
+
+- Treat an authorized engineering objective as a deliverable to complete, not an invitation to create successive planning stages, subincrements, or authorization gates.
+- Decompose implementation internally as needed for sound engineering, but do not confuse implementation steps, review iterations, or AI conversation boundaries with independently authorized project milestones.
+- When reviewing another agent's work, evaluate it against the **existing approved objective and acceptance criteria**. Distinguish genuine blockers from minor corrections, optional improvements, and separately deferred enhancements.
+- Recommend the shortest responsible path to completion. When work is substantially complete, favor acceptance with bounded corrections over reopening settled design decisions or initiating another planning cycle.
+- Preserve maintainer control over scope changes, publication, deployment, and other explicitly reserved actions. Do not manufacture additional approval requirements within an already authorized scope.
+- When work remains, identify the concrete actions needed to finish the current objective rather than automatically proposing a new increment. Propose additional milestones only when a meaningful functional boundary, material risk, dependency, or explicit maintainer decision justifies them.
+- Documentation, evidence collection, and handoff updates should support engineering progress and continuity, not become independent sources of unnecessary work.
+
 ## Expected response or handoff
 
 For substantive technical assignments, provide as applicable:

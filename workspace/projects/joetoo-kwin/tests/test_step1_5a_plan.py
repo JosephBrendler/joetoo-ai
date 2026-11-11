@@ -48,9 +48,11 @@ class PlannerHarness:
         # terminal width, emoji availability or an installed joetoo header.
         self.mock_header = self.folder / 'header'
         shutil.copyfile(ROOT / 'tests/fixtures/step1_5a_header.bash', self.mock_header)
+        self.system_defaults = self.folder / 'system-defaults.conf'
         self.client.write_text((ROOT / 'joetoo-kwin').read_text().replace(
             'source /usr/sbin/script_header_joetoo',
-            'source "' + str(self.mock_header) + '"', 1))
+            'source "' + str(self.mock_header) + '"', 1).replace(
+                '/etc/joetoo-kwin/defaults.conf', str(self.system_defaults)))
         self.write_config()
 
     def write_config(self, records=None, extra=''):
@@ -99,7 +101,7 @@ class PlannerHarness:
 
 class PlannerTests(PlannerHarness, unittest.TestCase):
     def test_default_budget_and_effective_config_before_plan(self):
-        output = self.plan()
+        output = self.plan('-v')
         self.assertLess(output.index('CONFIG'), output.index('DRY RUN'))
         self.assertIn('terminal_width_percent=87', output)
         self.assertIn('not autodetected', output)
@@ -108,25 +110,28 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
 
     def test_config_overrides_defaults_then_cli_overrides_config(self):
         self.write_config(extra='terminal_width_percent=80\nterminal_gap_percent=4\nverbosity=6')
+        self.client.write_text(self.client.read_text() + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
         output = self.plan('-q')
-        self.assertIn('verbosity=5', output)
-        self.assertIn('terminal_width_percent=80', output)
+        self.assertIn('TEST_VERBOSITY=5', output)
+        self.assertNotIn('terminal_width_percent=', output)
         self.assertEqual([row[-4:] for row in self.rows(output)],
                          [['19', '54', '730', '918'], ['825', '54', '730', '918']])
 
     def test_common_option_order_and_clusters(self):
+        self.client.write_text(self.client.read_text() + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
         output = self.run_cli('-vq', '-f', str(self.config), '-c')
-        self.assertIn('verbosity=5', output)
-        self.assertIn('verbosity=7', self.plan('-vv'))
-        self.assertIn('verbosity=3', self.plan('-qq'))
-        self.assertIn('verbosity=5', self.plan('-v', '-q'))
+        self.assertIn('TEST_VERBOSITY=5', output)
+        self.assertIn('TEST_VERBOSITY=7', self.plan('-vv'))
+        self.assertIn('TEST_VERBOSITY=3', self.plan('-qq'))
+        self.assertIn('TEST_VERBOSITY=5', self.plan('-v', '-q'))
         self.plan('--')
 
     def test_verbosity_clamps_and_interactive_floor(self):
-        self.assertIn('verbosity=7', self.plan('-vvvvvv'))
-        self.assertIn('verbosity=0', self.plan('-qqqqqqqq'))
+        self.client.write_text(self.client.read_text() + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
+        self.assertIn('TEST_VERBOSITY=7', self.plan('-vvvvvv'))
+        self.assertIn('TEST_VERBOSITY=0', self.plan('-qqqqqqqq'))
         self.env['INTERACTIVE'] = '0'
-        self.assertIn('verbosity=5', self.plan('-qqqqqqqq'))
+        self.assertIn('TEST_VERBOSITY=5', self.plan('-qqqqqqqq'))
 
     def test_one_three_four_and_alternate_display(self):
         for count in (1, 3, 4):
@@ -293,7 +298,7 @@ class InstalledHeaderPlannerTests(PlannerHarness, unittest.TestCase):
         output = self.plan()
         plain = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', output)
         self.assertIn('DRY RUN: [2]', plain)
-        self.assertIn('terminal_width_percent', plain)
+        self.assertNotIn('terminal_width_percent', plain)
         self.assertIn('816', plain)
 
     def test_installed_header_long_target_columns_and_verbosity(self):

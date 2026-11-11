@@ -121,7 +121,7 @@ class RdpPlannerTests(PlannerHarness, unittest.TestCase):
 
     def test_single_rdp_defaults_nonsecret_settings_and_no_backend_probe(self):
         self.write_config(['1|sdl-freerdp|rdp|rdp://joe@host'])
-        output = self.plan()
+        output = self.plan('-v')
         self.assertIn('sdl-freerdp', output)
         for field in ('rdp_remote_width=1024', 'rdp_remote_height=768', 'RDP_SMART_SIZING=True',
                       'rdp_initial_client_width=800', 'rdp_initial_client_height=600', 'rdp_windowing_backend=auto'):
@@ -174,7 +174,7 @@ launch_managed_window() { printf 'application-launch\n' >> "$TRACE"; return 99; 
         record = ['1|sdl-freerdp|rdp|rdp://joe@host|under']
         for value in ('auto', 'wayland', 'x11'):
             self.write_config(record, extra=f'rdp_windowing_backend={value}\nRDP_SMART_SIZING=$FALSE\nrdp_remote_width=1920\n')
-            output = self.plan()
+            output = self.plan('-v')
             self.assertIn('rdp_windowing_backend=' + value, output)
             self.assertIn('rdp_remote_width=1920', output)
             self.assertIn('RDP_SMART_SIZING=False', output)

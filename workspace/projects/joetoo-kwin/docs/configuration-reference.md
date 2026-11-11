@@ -3,7 +3,8 @@
 <!-- Copyright 2025-2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
 This is documentation, not a sourced defaults file. It describes the current
-implementation, including accepted Increment 4 Stage 3 behavior. The short
+implementation, including layered CLI defaults and the optional user-owned
+profile selector. Accepted Increment 4 Stage 3 behavior is unchanged. The short
 `joetoo-kwin-per-run-template.conf` at the project root is the copyable starting
 point. In an installed package, use the resource path in the packaging section.
 
@@ -12,22 +13,38 @@ point. In an installed package, use the resource path in the packaging section.
 `joetoo-kwin -c -f FILE` validates and calculates a plan without launching it.
 `joetoo-kwin -o -f FILE` additionally performs runtime preflight, requests
 confirmation, and runs the serial plan. `joetoo-kwin -f FILE -m l` (or `-m r`) consumes the shared
-geometry policy; put `-f` and other options before `-m`. Configuration is **trusted
+geometry policy; put `-f` and other options before `-m`. Numeric move forms
+and read-only/help operations retain their existing policy without loading
+plan/default layers. Configuration is **trusted
 executable Bash**, not sandboxed key/value data; even `-c` executes the selected
 file. Read it before use.
 
-The implemented order is built-in `plan_defaults()`, **one** selected plan,
-then explicit CLI `-v`/`-q` adjustments. Explicit `-f FILE` selects that plan
-instead of searching. Otherwise the CLI selects:
+The implemented precedence, lowest to highest, is:
 
-1. `${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf`;
-2. `/etc/joetoo-kwin/joetoo-kwin.conf` only if the user plan is absent.
+1. Built-in `plan_defaults()`.
+2. Optional `/etc/joetoo-kwin/defaults.conf`.
+3. Optional `${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/defaults.conf`.
+4. One selected per-run plan: explicit `-f FILE`, otherwise the XDG user
+   `joetoo-kwin/joetoo-kwin.conf`, with `/etc/joetoo-kwin/joetoo-kwin.conf`
+   as fallback only when the user plan is absent.
+5. Supported explicit CLI overrides (`-v`/`-q` verbosity adjustments).
 
-A relative `XDG_CONFIG_HOME` is ignored in favor of `$HOME/.config`. A selected
-unreadable, invalid or dangling-symlink plan fails; it does not trigger fallback.
-User and system plans are not combined. No `defaults.conf` files are currently
-loaded. `-f` does not erase built-in defaults: it selects a different plan with
-the same authority to override any exposed setting, subject to validation.
+System and user defaults are **sparse overrides**, not copies of the reference.
+Every exposed setting can still be overridden in the selected per-run plan.
+`-f` selects a different highest-precedence plan; it does **not** suppress the
+preceding defaults. Relative `-f` paths are anchored to the invocation directory,
+not searched through `PATH`. A relative `XDG_CONFIG_HOME` uses `$HOME/.config` for both
+user defaults and the normal user plan, preserving existing path behavior.
+
+Missing optional defaults are allowed. Present unreadable/non-file/dangling
+layers, inaccessible configuration directories, Bash syntax errors and nonzero
+source results fail rather than silently falling back. All selected files are
+syntax/readability checked before any is sourced. Final **effective values**
+are then validated through existing validators; an explicit later assignment
+can replace an earlier value, which is an override, not fallback. Bash remains
+trusted executable code, so syntax checking does not sandbox it or prevent
+side effects. Use plain assignments/arrays, and do not redefine internal helpers
+or configuration-selection variables.
 
 OpenRC `joetoo-kwind` conf.d is separate service configuration. Its executable,
 resident and environment settings are **not** CLI plan inputs. Exact UUID
@@ -35,10 +52,9 @@ ownership, fail-closed cleanup and other safety invariants are not configurable
 toggles. Derived slots, managed IDs, UUIDs and internal transaction constants
 are not plan settings.
 
-The accepted direction for a later Stage 4B is optional **sparse** system/user
-overrides between built-ins and the selected per-run plan. Each plan, including
-one selected by `-f`, can override any exposed validated setting. Those extra
-layers and optional per-user `eselect` selection are not implemented here.
+Profile selection is optional: a regular existing user plan remains valid,
+and explicit `-f` works independently of the selected profile. The selector
+never changes system defaults or daemon configuration.
 
 ## Reading the tables
 
@@ -203,27 +219,117 @@ This example requires an appropriate native Wayland host for actual launch.
 Use `-c` to inspect a copied, edited plan. A successful dry run is not native
 backend, endpoint, authentication or placement acceptance.
 
-## Packaging preparation — maintainer proposal, not an installation
+## User-owned profiles and migration
 
-| Checkout source | Candidate installed destination |
+The optional `eselect joetoo-kwin` module uses the same XDG directory as the CLI.
+It does not bootstrap configuration/profile directories or populate HOME with
+plans. Users create their profiles explicitly. A requested `set` creates only
+its private lock, temporary publication directory and selection link. As the intended **non-root** user, after package installation:
+
+```bash
+config_root=${XDG_CONFIG_HOME:-$HOME/.config}
+case $config_root in /*) ;; *) config_root=$HOME/.config ;; esac
+config_dir=$config_root/joetoo-kwin
+install -d -m 0700 -- "$config_dir/profiles"
+cp -n -- /usr/share/joetoo-kwin/joetoo-kwin-per-run-template.conf "$config_dir/profiles/work.conf"
+# Inspect/edit work.conf for the display, desired recipes and overrides first.
+eselect joetoo-kwin list
+eselect joetoo-kwin set work.conf && joetoo-kwin -c
+eselect joetoo-kwin show
+# End of commands
+
+```
+
+`list` gives names/numbers; `set` accepts a safe basename such as `work.conf`
+or its current list number. Prefer names for stable scripts. `show` reports
+the selected name, an unchanged regular configuration, or no user selection.
+The resulting user-plan symlink is `joetoo-kwin.conf -> profiles/work.conf`.
+The CLI sources that plan normally; the selector itself never executes profiles.
+Validate another plan with `joetoo-kwin -c -f FILE` without changing the selection.
+Use confirmed `-o` only after reviewing the effective plan and runtime preflight.
+
+Profile names must start with an ASCII letter/digit, contain only ASCII letters,
+digits, underscore, dot or hyphen, and end in `.conf`. The module accepts only
+readable regular user-owned files with one link and valid Bash syntax, not
+symlink/hardlink profiles, arbitrary absolute paths or directory traversal.
+Configuration/profile directories must be user-owned, non-symlink directories
+without group/other write permission; the XDG base must also be owned and not
+writable by others. An existing symlinked XDG base can resolve to a safe owned
+directory, but the `joetoo-kwin` and `profiles` subdirectories cannot be symlinks.
+The CLI's pre-existing trusted-file behavior remains broader: the optional
+selector does not prohibit an existing manually managed plan or explicit `-f`.
+
+The selector refuses to replace a regular file, foreign/dangling active symlink
+or unexpected object. Existing valid relative or canonical absolute profile
+symlinks may be switched. A retained private lock serializes selector actions;
+Busy selection fails without waiting indefinitely. First publication uses no-clobber rename. Switching uses GNU
+`mv --exchange --no-copy`: the displaced object is preserved and checked before cleanup, so a
+concurrently substituted regular file is restored rather than discarded. Target
+rechecks roll back a switch if the target disappears. If interference prevents
+restoration, the displaced object is retained in a reported private temporary
+directory for manual recovery; success is never claimed.
+Do not concurrently rewrite/remove profiles or the active plan outside the
+selector: the advisory lock coordinates selector invocations, not arbitrary
+editors. Revalidate after manually editing a selected trusted Bash file.
+
+For an existing **regular** user plan, first preserve it deliberately. Do not
+run these migration steps blindly, and choose an unused backup filename:
+
+```bash
+# config_dir is the user configuration directory resolved above.
+cp -n -- "$config_dir/joetoo-kwin.conf" "$config_dir/profiles/migrated.conf"
+cmp -s -- "$config_dir/joetoo-kwin.conf" "$config_dir/profiles/migrated.conf" &&
+    mv -n -- "$config_dir/joetoo-kwin.conf" "$config_dir/joetoo-kwin.conf.backup"
+eselect joetoo-kwin set migrated.conf && joetoo-kwin -c
+# End of commands
+
+```
+
+If a backup already exists, inspect it and choose another name. A non-moved
+regular plan makes `set` refuse safely. Invalid/dangling/foreign links require
+manual inspection and preservation before removal; the module does not repair
+or migrate them automatically. Deleting a selected profile later makes the CLI
+fail on the dangling selection instead of using the system plan.
+
+## Packaging integration — maintainer actions
+
+| Checkout source | Installed destination |
 | --- | --- |
 | `joetoo-kwin-per-run-template.conf` | `/usr/share/joetoo-kwin/joetoo-kwin-per-run-template.conf` |
-| `docs/configuration-reference.md` | `/usr/share/doc/${PF}/configuration-reference.md` (possibly compressed by Gentoo documentation policy) |
+| `docs/configuration-reference.md` | `/usr/share/doc/${PF}/configuration-reference.md` (possibly compressed) |
+| `eselect/joetoo-kwin.eselect` | `/usr/share/eselect/modules/joetoo-kwin.eselect` |
 
-Both resources are package-owned data files, normally mode 0644.
-`${PF}` is the ebuild's versioned package name, not a literal directory to
-create. The maintainer decides final ebuild paths, documentation compression and
-post-install guidance. This reference is documentation, not an active
-`/etc/joetoo-kwin/defaults.conf`. Do not install it as one or claim that sparse
-defaults loading already exists. The development broker installer remains
-unchanged; it is not the package documentation installer.
+`${PF}` is the ebuild's versioned package name. The selector requires Gentoo's
+`eselect` framework (`app-admin/eselect`) and the usual Bash/coreutils/util-linux
+commands (`realpath`, `stat`, `flock`, etc.). Safe switching requires GNU `mv`
+with `--exchange`/`--no-copy` and filesystem atomic-exchange support; unsupported
+systems fail without an unsafe replacement fallback. The CLI does not require `eselect`;
+profile selection is optional. Final dependencies/compression belong to the
+maintainer's protected packaging repository.
 
-For human packaging integration, install the template as a read-only resource
-and the reference as package documentation. Do not populate/overwrite HOME,
-create user profiles, source OpenRC conf.d into the CLI, or migrate current
-plans. No ebuild changes or installs were made by this preparation. The optional
-user profile selector and all runtime layering changes require separate scope.
-Installed readers should use the absolute resource destination from the table.
+Merge this **EAPI helper fragment into the existing `src_install()`**, adapting
+source paths if the project is unpacked below `${S}`. It is not a standalone
+shell installer and must not replace other package installation logic:
+
+```bash
+insinto /usr/share/joetoo-kwin
+insopts -m0644
+doins joetoo-kwin-per-run-template.conf
+insinto /usr/share/eselect/modules
+doins eselect/joetoo-kwin.eselect
+dodoc docs/configuration-reference.md
+# End of commands
+
+```
+
+Do not populate/overwrite HOME, create user profiles, run the selector, source
+OpenRC conf.d into the CLI, or migrate plans during package installation or
+post-installation. Give users optional setup instructions instead. No active
+`defaults.conf` is required; optional administrator/user files should contain
+only intentional overrides, not this exhaustive manual. Keep their ownership
+and write access appropriate for trusted executable code. The broker POC
+installer remains unchanged and is not the package documentation installer.
+No protected ebuild, live user file or installed resource was changed here.
 
 ## Implementation references
 

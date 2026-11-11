@@ -1,0 +1,169 @@
+# -*-eselect-*-  vim: ft=eselect
+# Copyright 2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Module metadata is consumed by the eselect framework.
+# shellcheck disable=SC2034
+DESCRIPTION="Select this user's joetoo-kwin launch profile"
+# shellcheck disable=SC2034
+MAINTAINER="Joseph Brendler"
+# shellcheck disable=SC2034
+VERSION="1.0"
+
+# No profile is sourced by this module. The CLI remains the Bash interpreter
+# and validates the resulting effective configuration before launching anything.
+jk_owned() {
+    local owner mode
+    read -r owner mode < <(stat -c '%u %a' -- "$1") || return 1
+    [[ $owner == "$EUID" && $mode =~ ^[0-7]{3,4}$ ]] && (( (8#$mode & 0022) == 0 ))
+}
+
+jk_paths() {
+    [[ ${HOME:-} == /* ]] || die -q 'An absolute HOME is required'
+    local base=${XDG_CONFIG_HOME:-$HOME/.config}
+    [[ $base == /* ]] || base=$HOME/.config
+    # Canonicalize only existing ancestors; list/show never create directories.
+    _jk_root=$base/joetoo-kwin
+    _jk_profiles=$_jk_root/profiles
+    _jk_active=$_jk_root/joetoo-kwin.conf
+    if [[ -e $_jk_root || -L $_jk_root ]]; then
+        if [[ ! -d $_jk_root || -L $_jk_root ]] || ! jk_owned "$_jk_root" || ! jk_owned "$(realpath -e -- "$base")"; then
+            die -q 'Unsafe configuration directory ownership, permissions or symlink'
+        fi
+        _jk_root=$(realpath -e -- "$_jk_root") || die -q 'Cannot resolve configuration directory'
+        _jk_profiles=$_jk_root/profiles; _jk_active=$_jk_root/joetoo-kwin.conf
+    fi
+    if [[ -e $_jk_profiles || -L $_jk_profiles ]]; then
+        if [[ ! -d $_jk_profiles || -L $_jk_profiles ]] || ! jk_owned "$_jk_profiles"; then
+            die -q 'Profiles must be a user-owned directory without group/other write access'
+        fi
+    fi
+}
+
+jk_profile() {
+    local LC_ALL=C
+    [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*\.conf$ && $1 != */* ]] || return 1
+    local file=$_jk_profiles/$1
+    [[ -f $file && -r $file && ! -L $file && $(stat -c '%h' -- "$file") == 1 ]] && jk_owned "$file" && bash -n -- "$file" >/dev/null 2>&1
+}
+
+jk_selected() {
+    local link name
+    [[ -L $_jk_active && $(stat -c '%u' -- "$_jk_active") == "$EUID" ]] || return 1
+    link=$(readlink -- "$_jk_active") || return 1
+    case $link in
+        profiles/*) name=${link#profiles/} ;;
+        "$_jk_profiles/"*) name=${link#"$_jk_profiles/"} ;;
+        *) return 1 ;;
+    esac
+    jk_profile "$name" || return 1
+    [[ $(realpath -e -- "$_jk_active") == "$_jk_profiles/$name" ]] || return 1
+    printf '%s\n' "$name"
+}
+
+jk_targets() {
+    local LC_ALL=C
+    _jk_targets=()
+    local file name
+    for file in "$_jk_profiles/"*.conf; do
+        name=${file##*/}
+        jk_profile "$name" && _jk_targets+=("$name")
+    done
+    return 0
+}
+
+describe_list() { echo 'List safe user profiles (does not execute them)'; }
+do_list() {
+    [[ $# == 0 ]] || die -q 'list takes no arguments'
+    jk_paths; jk_targets
+    local selected i targets=("${_jk_targets[@]}")
+    # Only the validated named selection earns the framework's highlighted star.
+    selected=$(jk_selected) || selected=''
+    for (( i = 0; i < ${#targets[@]}; i++ )); do
+        [[ ${targets[i]} != "$selected" ]] || targets[i]=$(highlight_marker "${targets[i]}")
+    done
+    write_list_start 'Available user joetoo-kwin profiles:'
+    write_numbered_list -m '(none found)' "${targets[@]}"
+}
+
+describe_show() { echo 'Show the current user selection'; }
+do_show() {
+    [[ $# == 0 ]] || die -q 'show takes no arguments'
+    jk_paths
+    if [[ -L $_jk_active ]]; then
+        jk_selected || die -q 'Invalid or dangling profile selection; inspect it manually'
+    elif [[ -e $_jk_active ]]; then
+        [[ -f $_jk_active ]] || die -q 'Unexpected configuration object'
+        echo '(regular configuration; unchanged)'
+    else
+        echo '(no user selection; CLI system-plan fallback may apply)'
+    fi
+}
+
+describe_set() { echo 'Select a user profile without overwriting a regular plan'; }
+describe_set_parameters() { echo '<name.conf|number>'; }
+do_set() {
+    [[ $# == 1 ]] || die -q 'set requires one profile name or list number'
+    [[ $EUID != 0 ]] || die -q 'Run profile selection as the intended non-root user'
+    jk_paths; jk_targets
+    local displaced
+    local name=$1 lock=$_jk_root/.profile-selection.lock fd before after previous='' created
+    if [[ $name =~ ^[1-9][0-9]{0,5}$ ]]; then name=${_jk_targets[name-1]:-}; fi
+    jk_profile "$name" || die -q 'Profile is missing, unsafe, unreadable or has invalid Bash syntax'
+    # All selector invocations serialize through the same retained lock inode.
+    [[ ! -L $lock ]] || die -q 'Unsafe selection lock'
+    if [[ ! -e $lock ]]; then (umask 077; set -C; : > "$lock") 2>/dev/null || :; fi
+    [[ -f $lock && ! -L $lock && $(stat -c '%u:%a:%h' -- "$lock") == "$EUID:600:1" ]] \
+        || die -q 'Unsafe selection lock'
+    exec {fd}>>"$lock" || die -q 'Cannot open selection lock'
+    flock -nx "$fd" || die -q 'Cannot lock profile selection'
+    # Check again under the lock; no regular file, foreign link or dangling link
+    # is migrated or overwritten. Users must migrate those deliberately.
+    before=absent
+    if [[ -e $_jk_active || -L $_jk_active ]]; then
+        jk_selected >/dev/null || die -q 'Existing configuration is not a valid profile symlink; preserve/migrate it manually'
+        before=$(stat -c '%d:%i' -- "$_jk_active") || die -q 'Selection changed'
+        previous=$(jk_selected) || die -q 'Selection changed'
+    fi
+    jk_profile "$name" || die -q 'Profile changed during selection'
+    _jk_temporary=$(mktemp -d "$_jk_root/.profile-select.XXXXXXXX") || die -q 'Cannot prepare selection'
+    # Cleanup may remove only our symlink, never a concurrently displaced file.
+    trap 'if [[ -L $_jk_temporary/joetoo-kwin.conf ]]; then rm -- "$_jk_temporary/joetoo-kwin.conf"; fi; rmdir -- "$_jk_temporary" 2>/dev/null || write_warning_msg "Preserved displaced object in $_jk_temporary; inspect manually"' EXIT
+    ln -s -- "profiles/$name" "$_jk_temporary/joetoo-kwin.conf" || die -q 'Cannot prepare profile link'
+    created=$(stat -c '%d:%i' -- "$_jk_temporary/joetoo-kwin.conf") || die -q 'Cannot inspect prepared link'
+    after=absent
+    [[ ! -e $_jk_active && ! -L $_jk_active ]] || after=$(stat -c '%d:%i' -- "$_jk_active")
+    [[ $before == "$after" ]] || die -q 'Selection changed outside the selector; retry after inspecting it'
+    if [[ $before == absent ]]; then
+        # -n refuses a file created since the last check; check whether mv acted.
+        mv -nT -- "$_jk_temporary/joetoo-kwin.conf" "$_jk_active" || die -q 'Cannot select profile'
+        [[ ! -L $_jk_temporary/joetoo-kwin.conf ]] || die -q 'A configuration appeared; it was not overwritten'
+    else
+        # Atomic exchange retains the displaced object until its inode/type is
+        # verified. Never fall back to a rename that could destroy a regular file.
+        mv --exchange --no-copy -T -- "$_jk_temporary/joetoo-kwin.conf" "$_jk_active" \
+            || die -q 'Safe replacement requires GNU mv --exchange/--no-copy and filesystem support'
+        displaced=$(stat -c '%d:%i' -- "$_jk_temporary/joetoo-kwin.conf") || die -q 'Cannot inspect displaced selection'
+        if [[ ! -L $_jk_temporary/joetoo-kwin.conf || $displaced != "$before" ]]; then
+            if [[ -L $_jk_active && $(stat -c '%d:%i' -- "$_jk_active") == "$created" ]]; then
+                mv --exchange --no-copy -T -- "$_jk_temporary/joetoo-kwin.conf" "$_jk_active" \
+                    || die -q 'Concurrent configuration preserved in temporary directory; inspect manually'
+            fi
+            die -q 'Configuration changed during selection; original object preserved'
+        fi
+    fi
+    if [[ $(jk_selected) != "$name" ]]; then
+        # A target removed during publication must not leave our dangling link.
+        # Never remove an object substituted by a non-cooperating editor.
+        if [[ -L $_jk_active && $(stat -c '%d:%i' -- "$_jk_active") == "$created" ]]; then
+            if [[ -n $previous ]] && jk_profile "$previous"; then
+                mv --exchange --no-copy -T -- "$_jk_temporary/joetoo-kwin.conf" "$_jk_active" \
+                    || die -q 'Prior selection preserved in temporary directory; inspect manually'
+            else
+                rm -- "$_jk_active" || die -q 'Selection verification failed; inspect user configuration'
+            fi
+        fi
+        die -q 'Profile changed during selection; no successful selection reported'
+    fi
+    write_list_start "Selected user profile: $name"
+}
