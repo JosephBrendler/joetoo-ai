@@ -2,6 +2,14 @@
 
 This is the **historical task record**, not execution authority. For current actor/scope/approval see [HANDOFF](HANDOFF.md), for engineering requirements see [Step 1.5c.5 scope](Step1.5c5_implementation_scope.md), and for architecture see [project ARCHITECTURE](../ARCHITECTURE.md). Source, records and tests described below remain separate from authorization to act.
 
+## Increment 5 native evidence and security-policy decision (2026-11-11)
+
+**Production trusted endpoint accepted on both backends:** `gmki91` native X11 and `q552u01` native Wayland each launched `joetoo-kwin -v -o` against `raspiubuntu401.brendler:3389`; desktop 18 slot 1 exact UUID, verified placement and stacking, `1/1` success and GDM greeter screenshots. Prior registered windows were preserved; no certificate warning observed. X11 explicitly included a completed NLA prompt. System GRD certificate fingerprint and SAN/CA chain were checked; exact negotiated TLS protocol/cipher remains unrecorded. Existing default FreeRDP production policy was *not* strict. Details/excerpts and limitations: [2026-11-11 production native/security evidence](step1.5c5d-increment5-production-native-security-evidence-2026-11-11.md), supplemented by the [earlier Codex closure candidate](step1.5c5d-increment5-security-native-closure-candidate.md).
+
+**Maintainer security-policy decision (implementation PENDING):** `rdp_security_protocol=nla` default maps **exclusively** to `/sec:nla`, alternate `negotiate` **omits `/sec:`** (not `/sec:rdp`); `rdp_certificate_policy=strict` default maps `/cert:deny`, alternate `prompt` **omits `/cert:`**. Both settings will appear at `$info` configuration verbosity and be documented with per-value CLI mapping comments and a four-row manual table. No `/tls:enforce:1.3` default. [Bounded Codex implementation prompt](step1.5c5d-increment5-rdp-security-policy-codex-task-DRAFT.md). One trusted strict production check and one safe automatic mismatch refusal remain after implementation; final Increment 5 acceptance has **not** occurred.
+
+**Later ebuild to-do (not Increment 5):** install `/etc/joetoo-kwin/BUILD` from package `$PVR`; have CLI source its own BUILD rather than `joetoolkit` BUILD, with an appropriate development fallback.
+
 ## Accepted increment outcomes
 
 | Increment | Accepted outcome / limitation | Primary evidence |

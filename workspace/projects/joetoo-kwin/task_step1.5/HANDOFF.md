@@ -1,8 +1,8 @@
 # Step 1.5 — Active task dispatcher
 
-**Task / current gate:** Step 1.5c.5d — **Increment 4 COMPLETE AND MAINTAINER ACCEPTED (2026-11-11)**; **Increment 5 RDP security/native closure remains to be reconciled**. Step 1.5d integration and official Gentoo packaging are separate work.
+**Task / current gate (2026-11-11):** Step 1.5c.5d — Increment 4 **COMPLETE AND MAINTAINER ACCEPTED**. Increment 5 **native production trusted-endpoint observations completed on X11 and Wayland; strict security-policy implementation and final negative native check PENDING**. Step 1.5d integration and official Gentoo packaging are separate.
 
-**Maintainer decision:** Stage 4 (configuration layering, optional user-owned `eselect` profiles, template/reference and severity-aware `show_config`) is accepted. Earlier Increment 4 Stages 1–3 are accepted. This HANDOFF records acceptance and directs the *next review*, not a new implementation authorization.
+**Maintainer decisions:** Earlier Increment 4 Stages 1–4 remain accepted and closed. Increment 5 adopts two user-configurable policy enums with built-in `rdp_security_protocol=nla` (`/sec:nla`) and `rdp_certificate_policy=strict` (`/cert:deny`); alternate `negotiate` and `prompt` each omit their respective flag. Do not require `/tls:enforce:1.3`. These are agreed specifications, **not yet implemented or acceptance-tested**. See [native evidence and four-row mapping](step1.5c5d-increment5-production-native-security-evidence-2026-11-11.md) and the [focused Codex draft](step1.5c5d-increment5-rdp-security-policy-codex-task-DRAFT.md).
 
 **Repository:** `JosephBrendler/joetoo-ai`  
 **Branch:** `task/joetoo-kwin-step1.5c5d-managed-rdp-implementation`  
@@ -18,9 +18,11 @@
 
 ## Current next actor and objective — Increment 5
 
-**Next actor:** Maintainer reviews and explicitly issues the [draft Increment 5 evidence-reconciliation Codex task](step1.5c5d-increment5-evidence-reconciliation-codex-task-DRAFT.md) if desired. **No further Stage 4 development is pending.**
+**Next actor:** Maintainer reviews and explicitly issues the [bounded Increment 5 security-policy Codex task](step1.5c5d-increment5-rdp-security-policy-codex-task-DRAFT.md). The [earlier evidence-reconciliation draft](step1.5c5d-increment5-evidence-reconciliation-codex-task-DRAFT.md) has been superseded by the [Codex closure candidate](step1.5c5d-increment5-security-native-closure-candidate.md) and [new maintainer native evidence](step1.5c5d-increment5-production-native-security-evidence-2026-11-11.md). **No further Increment 4 development is pending.**
 
-**Next objective:** Determine whether already collected GNOME Remote Desktop, private-PKI, TLS/NLA, authentication and native X11/Wayland observations meet the accepted Increment 5 security/native closure criteria. Start by building an evidence-to-requirement matrix, not by changing code or commissioning another broad implementation pass. Accept what is supported; specify only concrete missing native checks or genuine blockers. Use [Step 1.5c.5 scope](Step1.5c5_implementation_scope.md), [architecture](../ARCHITECTURE.md), [task evidence index](README.md), [GNOME study](README_gnome_remote_desktop.md), [PKI record](step1.5c5d-gnome-remote-login-pki-evidence-2026-11-07.md) and existing RDP test records.
+**Next objective:** Implement exactly `rdp_security_protocol=nla|negotiate` (default `nla` -> `/sec:nla`; alternate omission of `/sec:`) and `rdp_certificate_policy=strict|prompt` (default `strict` -> `/cert:deny`; alternate omission of `/cert:`) through accepted configuration layering, effective `$info` display, inline template mapping and reference/manual table; add focused and full tests. Preserve exact UUID, lifecycle, SDL backend decisions, Stage 4 behavior, fail-closed assumptions and serial `-o`. After patch review, maintainer performs one strict trusted-FQDN production check and one safe strict certificate mismatch refusal. Window registration may precede certificate rejection; test remote refusal without assuming no local registered window. Close Increment 5/Step 1.5c.5d only on maintainer acceptance. No TLS 1.3 force, policy bitmask UI, per-target grammar or new implementation stage.
+
+**Packaging backlog, explicitly outside Increment 5:** future ebuild installs `/etc/joetoo-kwin/BUILD` (`BUILD="${PVR}"` at installation) and scripts source their own package version, not installed `joetoolkit` BUILD.
 
 **Permissions / stop conditions:** The HANDOFF alone does not authorize Codex execution, native experiments, host services, edits to `joetoo`/`joetoo-upstream`, commits, pushes, PRs, merges or packaging deployment. Preserve exact UUID ownership, fail-closed behavior, managed-slot reservations, existing OpenRC separation and accepted Stage 4 configuration semantics. Report evidence gaps, source/baseline conflicts or a material security issue rather than silently expanding scope.
 
@@ -34,3 +36,6 @@
 - [Step 1.5c.5 implementation scope](Step1.5c5_implementation_scope.md)
 - [Project architecture](../ARCHITECTURE.md)
 - [Increment 4 maintainer decisions](step1.5c5d_Increment_4_decisions.md)
+- [Increment 5 production native security evidence](step1.5c5d-increment5-production-native-security-evidence-2026-11-11.md)
+- [Increment 5 security-policy Codex task draft](step1.5c5d-increment5-rdp-security-policy-codex-task-DRAFT.md)
+- [Increment 5 Codex closure candidate (historical review)](step1.5c5d-increment5-security-native-closure-candidate.md)
