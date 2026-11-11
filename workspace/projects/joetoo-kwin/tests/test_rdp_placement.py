@@ -791,7 +791,7 @@ class LatePlacementTraceTests(unittest.TestCase):
 
     def test_post_capture_horizon_is_independent_of_placement_deadline(self):
         self.submit(); self.expire()
-        self.f.clock += 121
+        self.f.clock += self.b._sdl_placement['trace']['post_ms'] / 1000 + 1
         self.observe(geometry=dict(x=90, y=0, width=800, height=600))
         self.assertEqual(self.stage('post_observation'), [])
         self.assertEqual(self.b.request['state'], 'ERROR')

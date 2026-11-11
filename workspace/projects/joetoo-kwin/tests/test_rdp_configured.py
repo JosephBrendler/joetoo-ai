@@ -35,6 +35,13 @@ def resolved_job():
     return dict(rdp.configured_job(job()), broker_owner=':1.broker', source='source', resolved_backend='wayland')
 
 
+def clean_receipt(j):
+    return dict(request_id='a'*32,broker_owner=j['broker_owner'],source=j['source'],
+        eligible=True,broker_terminal=True,child_reaped=True,resources_released=True,
+        terminal=dict(protocol=1,request_id='a'*32,state='timeout',reason='expired',
+                      placement='not_requested',remote_session='unverified'))
+
+
 def completed(job, nonce, pid, start):
     reg = dict(state='registered', request_id='a' * 32, managed_id='win-001', window_uuid=WINDOW_ID)
     place = dict(placement='succeeded', remote_session='unverified', request_id='b' * 32,
@@ -94,6 +101,20 @@ class BackendTests(unittest.TestCase):
         result = rdp.configured_preflight(job(), self.bus, lambda o, i: o)
         self.assertEqual(result['resolved_backend'], 'x11')
 
+    def test_readiness_defaults_overrides_and_independent_mechanical_budgets(self):
+        import joetoo_kwin_vnc_target as vnc
+        self.assertEqual(rdp.DEFAULTS['rdp_registration_timeout_ms'],300000)
+        self.assertEqual(vnc.DEFAULTS['vnc_viewer_ready_timeout_ms'],300000)
+        for value in (1000,120000,600000,3600000):
+            self.assertEqual(rdp.settings(dict(rdp_registration_timeout_ms=value))['rdp_registration_timeout_ms'],value)
+            self.assertEqual(vnc.settings(dict(vnc_viewer_ready_timeout_ms=value))['vnc_viewer_ready_timeout_ms'],value)
+        for value in (0,999,3600001,True,'unlimited'):
+            with self.assertRaises(ValueError):rdp.settings(dict(rdp_registration_timeout_ms=value))
+            with self.assertRaises(ValueError):vnc.settings(dict(vnc_viewer_ready_timeout_ms=value))
+        self.assertEqual(vnc.settings({})['vnc_placement_timeout_ms'],15000)
+        self.assertEqual(vnc.settings({})['vnc_ssh_start_timeout_ms'],10000)
+        self.assertEqual(rdp.settings({})['rdp_registration_poll_ms'],100)
+
     def test_native_x11_requested_on_wayland_is_rejected_before_spawn(self):
         with self.assertRaisesRegex(rdp.ConfiguredError, 'not_xwayland'):
             rdp.configured_preflight(job('x11'), self.bus, lambda o, i: o)
@@ -140,7 +161,7 @@ class BackendTests(unittest.TestCase):
 
     def test_configured_sizes_ports_and_existing_defaults_are_independent(self):
         data = rdp.configured_job(job())
-        self.assertEqual(data['bounds']['rdp_registration_timeout_ms'], 120000)
+        self.assertEqual(data['bounds']['rdp_registration_timeout_ms'], 300000)
         args = rdp.configured_argv('::1', 3390, 'joe', 'joetoo-rdp-' + 'a' * 64,
             dict(rdp_remote_width=1920, rdp_remote_height=1080, RDP_SMART_SIZING=False))
         self.assertIn('/v:[::1]:3390', args)
@@ -177,6 +198,10 @@ class WorkerTests(unittest.TestCase):
                 dead.start(); self.addCleanup(dead.stop)
                 self.assertTrue(kw['cancelled']())
                 raise RuntimeError('Operator cancellation')
+            if self.outcome == 'clean_timeout':
+                kw['on_cleanup'](clean_receipt(self.job))
+                kw['emit'](json.dumps(dict(state='timeout',request_id='a'*32,reason='expired')))
+                return 1
             if self.outcome in ('timeout', 'ambiguous'):
                 kw['emit'](json.dumps(dict(state=self.outcome, request_id='a' * 32, reason=self.outcome)))
                 return 1
@@ -248,24 +273,36 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(result['state'], 'cancelled')
         self.assertEqual(result['phase'], 'placement')
 
+    def test_known_cleanup_is_bound_to_original_worker_mission(self):
+        self.outcome='clean_timeout'
+        result=self.run_worker()
+        self.assertTrue(rdp.clean_registration_receipt(result,self.job))
+        for field, value in (('source','other'),('broker_owner',':1.foreign'),('child_reaped',False),
+                             ('broker_terminal',False),('resources_released',False),('request_id','b'*32)):
+            forged=copy.deepcopy(result);forged['cleanup'][field]=value
+            self.assertFalse(rdp.clean_registration_receipt(forged,self.job),field)
+        forged=copy.deepcopy(result);forged['cleanup']['terminal']['managed_id']='win-001'
+        self.assertFalse(rdp.clean_registration_receipt(forged,self.job))
+
     def test_registration_timeout_and_ambiguity_remain_distinct(self):
         for outcome in ('timeout', 'ambiguous'):
             self.outcome = outcome
             result = self.run_worker()
-            self.assertEqual(result['state'], outcome)
+            self.assertEqual(result['state'], 'unresolved')
+            self.assertEqual(result['registration']['state'], outcome)
             self.assertFalse(result['cleanup_confirmed'])
 
     def test_frontend_loss_before_registration_cancels_only_pending_mission(self):
         self.outcome = 'parent_lost'
         result = self.run_worker()
-        self.assertEqual(result['state'], 'cancelled')
+        self.assertEqual(result['state'], 'unresolved')
         self.assertEqual(self.calls, ['registration'])
         self.assertFalse(result['cleanup_confirmed'])
 
     def test_registration_failure_is_not_a_clean_continuation_claim(self):
         self.outcome = 'registration_failure'
         result = self.run_worker()
-        self.assertEqual(result['state'], 'failed')
+        self.assertEqual(result['state'], 'unresolved')
         self.assertFalse(result['cleanup_confirmed'])
         self.assertEqual(self.calls, ['registration'])
 
@@ -313,6 +350,17 @@ reg=dict(state='registered',request_id='a'*32,managed_id='win-001',window_uuid=s
 place=dict(placement='succeeded',remote_session='unverified',request_id='b'*32,managed_id='win-001',window_uuid=sys.argv[3])
 value=dict(state='completed',nonce=e['nonce'],worker_pid=os.getpid(),worker_start=r._proc_info(os.getpid(),include_executable=False)['start'],broker_owner=e['job']['broker_owner'],registration=reg,placement=place,remote_session='unverified')
 mode=sys.argv[4]
+if mode.startswith('clean'):
+ value.update(state='timeout',phase='registration',cleanup_confirmed=True,cleanup=dict(
+  request_id='a'*32,broker_owner=e['job']['broker_owner'],source=e['job']['source'],eligible=True,
+  broker_terminal=True,child_reaped=True,resources_released=True,
+  terminal=dict(protocol=1,request_id='a'*32,state='timeout',reason='expired',placement='not_requested',remote_session='unverified')))
+ value.pop('registration');value.pop('placement')
+ if mode=='clean_forged': value['cleanup']['source']='foreign'
+ r._private_json(p/'status',value)
+ if mode!='clean_unreaped':
+  r._private_json(p/'worker_exited',dict(nonce=e['nonce'],worker_pid=os.getpid(),worker_start=value['worker_start']))
+  sys.exit(0)
 if mode=='foreign': value['nonce']='f'*32
 if mode=='wrong_uuid': place['window_uuid']='ffffffff-ffff-ffff-ffff-ffffffffffff'
 if mode=='exit': sys.exit(1)
@@ -344,6 +392,25 @@ sys.stdin.read()
         folder, = self.runtime.glob('joetoo-rdp-*')
         self.assertEqual(rdp._read_private_json(folder / 'ack')['nonce'], result['nonce'])
         self.assertEqual((folder / 'fd9').read_text(), 'False')
+
+    def test_clean_failure_waits_for_real_worker_reaping_and_session_verification(self):
+        self.mode='clean'
+        result=rdp.configured_frontend(resolved_job(),spawn=self.spawn,verify_cleanup=lambda c:True)
+        self.assertTrue(result['continuation_eligible'])
+        self.assertIsNotNone(self.children[-1].returncode)
+        self.assertEqual(result['state'],'timeout')
+
+    def test_forged_cleanup_or_unreaped_worker_never_authorizes_continuation(self):
+        for mode in ('clean_forged','clean_unreaped'):
+            with self.subTest(mode=mode):
+                self.mode=mode
+                result=rdp.configured_frontend(resolved_job(),spawn=self.spawn,verify_cleanup=lambda c:True)
+                self.assertEqual(result['state'],'unresolved')
+
+    def test_changed_session_after_worker_cleanup_stops(self):
+        self.mode='clean'
+        result=rdp.configured_frontend(resolved_job(),spawn=self.spawn,verify_cleanup=lambda c:False)
+        self.assertEqual(result['state'],'unresolved')
 
     def test_worker_cannot_retain_configured_fd9_lock(self):
         import fcntl
@@ -473,7 +540,9 @@ if '--preflight' in sys.argv:
 n=j['desktop']*100+j['slot']; rid=f'{n:032x}'; pid=f'{n+1000:032x}'; uid=f'{n:08x}-0000-0000-0000-000000000000'
 with open(os.environ['TRACE'],'a') as f: f.write(f'rdp:{j["desktop"]}:{j["slot"]}\\n')
 result=dict(state='completed',remote_session='unverified',registration=dict(state='registered',request_id=rid,managed_id='win-'+str(n),window_uuid=uid),placement=dict(placement='succeeded',request_id=pid,managed_id='win-'+str(n),window_uuid=uid))
-if os.environ.get('RDP_FAILED'): result['state']='failed'
+if os.environ.get('RDP_CLEAN_FAIL_SLOT')==str(j['slot']):
+ result=dict(state='timeout',phase='registration',cleanup_confirmed=True,continuation_eligible=True,remote_session='unverified',cleanup=dict(request_id=rid))
+elif os.environ.get('RDP_FAILED'): result['state']='failed'
 else:
  p=Path(os.environ['RDP_RESERVATIONS']); windows=json.loads(p.read_text()) if p.exists() else []
  windows.append(dict(managed_id='win-'+str(n),request_id=rid,window_uuid=uid,presence='present',placement='succeeded',intended=dict(desktop=j['desktop'],slot=j['slot'])))
@@ -481,7 +550,7 @@ else:
   windows.append(dict(managed_id='win-foreign',presence='missing',intended=dict(desktop=j['desktop'],slot=j['slot']+1)))
  p.write_text(json.dumps(windows))
  if os.environ.get('AFTER_RDP_HEALTH'): Path(os.environ['BROKER_HEALTH']).write_text(os.environ['AFTER_RDP_HEALTH'])
-print(json.dumps(result)); sys.exit(2 if result['state']=='failed' else 0)
+print(json.dumps(result)); sys.exit(2 if result['state']!='completed' else 0)
 '''
         helper.write_text('from rdp_contract import settings, DEFAULTS, X11_DEFAULTS, X11_PROFILE\n' +
                           "if __name__ == '__main__':\n" + textwrap.indent(cli, ' '))
@@ -593,6 +662,18 @@ INNER
                     path.unlink(missing_ok=True)
                 self.assertEqual(self.execute(1), ['confirm', 'rdp:1:1'])
                 self.assertFalse(self.trace.exists())
+
+    def test_clean_rdp_failure_continues_and_finalizes_only_successes(self):
+        self.env['RDP_CLEAN_FAIL_SLOT']='2'
+        self.write_config(['1|konsole|local|btop|panel','1|sdl-freerdp|rdp|rdp://joe@host|under',
+                           '1|sdl-freerdp|rdp|rdp://joe@other|over'])
+        self.assertEqual(self.execute(1),['confirm','launch:1:1','rdp:1:2','rdp:1:3'])
+        cohorts=[json.loads(row) for row in self.trace.read_text().splitlines() if row.startswith('{')]
+        self.assertEqual(len(cohorts),1)
+        self.assertEqual(cohorts[0]['entries'],[dict(registration_request_id='reg',layer='panel'),
+            dict(registration_request_id=f'{103:032x}',layer='over')])
+        windows=json.loads(self.reservations.read_text())
+        self.assertEqual([w['intended']['slot'] for w in windows],[3])
 
     def test_mixed_rdp_konsole_dolphin_vnc_uses_existing_single_cohort(self):
         state = json.loads(self.env['BROKER_STATE']); state['viewer_protocol'] = 1

@@ -20,7 +20,7 @@ plan_defaults() {
     initial_focus_poll_interval_ms=25
     sftp_capability_timeout_ms=2000
     vnc_ssh_start_timeout_ms=10000
-    vnc_viewer_ready_timeout_ms=120000
+    vnc_viewer_ready_timeout_ms=300000
     vnc_supervisor_poll_interval_ms=100
     vnc_cleanup_timeout_ms=2000
     vnc_local_port_attempts=3
@@ -29,7 +29,7 @@ plan_defaults() {
     vnc_dbus_timeout_ms=3000
     vnc_identity_start_timeout_ms=1000
     vnc_placement_timeout_ms=15000
-    rdp_registration_timeout_ms=120000
+    rdp_registration_timeout_ms=300000
     rdp_registration_poll_ms=100
     rdp_registration_event_limit=4096
     rdp_registration_window_limit=64

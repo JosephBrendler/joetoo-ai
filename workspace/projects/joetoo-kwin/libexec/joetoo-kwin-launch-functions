@@ -41,7 +41,7 @@ rdp_configured_job() {
 
 launch_configured_rdp() {
     local _rl_job _rl_rc
-    launch_registration_id=""; launch_placement_id=""; launch_rdp_result=""
+    launch_registration_id=""; launch_placement_id=""; launch_rdp_result=""; LAUNCH_CLEAN_FAILURE=$FALSE
     _rl_job=$(rdp_configured_job) || return 2
     j_msg "-${notice}" -p 'Starting owned SDL RDP viewer; remote authentication remains unverified'
     # Job data uses FD 3, preserving stdin for the original interactive session.
@@ -49,13 +49,18 @@ launch_configured_rdp() {
     if launch_rdp_result=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_rdp_launch.py" \
         --job-fd 3 3<<< "$_rl_job" 9>&-); then _rl_rc=0; else _rl_rc=$?; fi
     j_msg "-${info}" -m "RDP local outcome (remote login unverified): $launch_rdp_result"
-    launch_registration_id=$(jq -er '.registration.request_id' <<< "$launch_rdp_result") || return 2
-    launch_placement_id=$(jq -er '.placement.request_id' <<< "$launch_rdp_result") || return 2
+    launch_registration_id=$(jq -r '.registration.request_id // .cleanup.request_id // ""' <<< "$launch_rdp_result") || return 2
+    launch_placement_id=$(jq -r '.placement.request_id // ""' <<< "$launch_rdp_result") || return 2
+    if (( _rl_rc != 0 )) && jq -e '.continuation_eligible == true and .cleanup_confirmed == true
+        and .phase == "registration" and (.state == "failed" or .state == "cancelled" or .state == "timeout")' <<< "$launch_rdp_result" >/dev/null; then
+        LAUNCH_CLEAN_FAILURE=$TRUE
+    fi
     return "$_rl_rc"
 }
 
 # Same configured orchestration; VNC alone uses the deferred viewer-role path.
 launch_configured_window() {
+    LAUNCH_CLEAN_FAILURE=$FALSE
     if [[ $1 == sdl-freerdp ]]; then launch_configured_rdp; return $?; fi
     if [[ $1 != vncviewer ]]; then launch_managed_window "$@"; return $?; fi
     local _vl_job _vl_result _vl_rc _vl_dir
@@ -74,7 +79,10 @@ launch_configured_window() {
     report_action "$_vl_rc" "$notice" || :
     j_msg "-${info}" -m "TigerVNC outcome (SSH/VNC usability remains separate): $_vl_result"
     if (( _vl_rc != 0 )); then j_msg "-${err}" -p "TigerVNC incomplete: $_vl_result"; fi
-    [[ $(jq -r '.state // ""' <<< "$_vl_result") != cancelled ]] || return 2
+    if (( _vl_rc != 0 )) && jq -e '.continuation_eligible == true and
+        (.state == "failed" or .state == "cancelled")' <<< "$_vl_result" >/dev/null; then
+        LAUNCH_CLEAN_FAILURE=$TRUE
+    fi
     return "$_vl_rc"
 }
 
@@ -183,6 +191,7 @@ lock_configured_launcher() {
 
 open_plan() {
     local _op_dir _op_i _op_failed=0 _op_initial_failed=0 _op_rc _op_state _op_status _op_group _op_payload _op_layout _op_try
+    local _op_attempted=0 _op_completed=0
     local -A launch_finished=() launch_done_entry=()
     local -a _op_entries=()
     lock_configured_launcher || return 1
@@ -213,7 +222,10 @@ open_plan() {
         [[ ${planned_desktop[$_op_i]} == "$_op_group" ]] || continue
         # Recheck after confirmation and between entries; broker independently
         # guards each actual submission against concurrent conflicting launches.
-        launch_preflight "$_op_i" || return 1
+        if ! launch_preflight "$_op_i"; then
+            j_msg "-${err}" -p "Incomplete layout: completed [$_op_completed], failed [$_op_failed], skipped [$(( ${#planned_desktop[@]} - _op_attempted ))]; current cohort not finalized"
+            return 1
+        fi
         j_msg "-${notice}" -p "Launching desktop [${planned_desktop[$_op_i]}] slot [${planned_slot[$_op_i]}]"
         _op_capacity=$(launch_resource verify "$_op_required" "$_op_capacity") || return 1
         _op_class=${planned_program[$_op_i]}
@@ -231,6 +243,7 @@ open_plan() {
             _op_argv=(env JOETOO_SESSION_MODE="${planned_mode[$_op_i]}" JOETOO_SESSION_TARGET="${planned_target[$_op_i]}"
                 konsole --separate -e bash --rcfile "$launch_session_file" -i)
         fi
+        _op_attempted=$((_op_attempted + 1))
         if launch_configured_window "$_op_class" "${planned_slot[$_op_i]}" "${planned_desktop[$_op_i]}" \
             "${planned_x[$_op_i]}" "${planned_y[$_op_i]}" "${planned_width[$_op_i]}" "${planned_height[$_op_i]}" \
             -- "${_op_argv[@]}"; then _op_rc=0
@@ -238,6 +251,17 @@ open_plan() {
         if (( _op_rc != 0 )); then
             _op_failed=$((_op_failed + 1))
             j_msg "-${err}" -p 'Window failed; layout is incomplete'
+        fi
+        if [[ $_op_class == sdl-freerdp || $_op_class == vncviewer ]] && (( _op_rc != 0 )); then
+            if [[ $LAUNCH_CLEAN_FAILURE ]]; then
+                # This entry is handled, not successful or a reusable historical slot.
+                # The next iteration independently preflights every remaining entry.
+                launch_done_entry[$_op_i]=$TRUE
+                j_msg "-${warn}" -p 'Owned pending mission ended cleanly; continuing incomplete serial plan'
+                continue
+            fi
+            j_msg "-${err}" -p "Remote launch unresolved or registered viewer retained: completed [$_op_completed], failed [$_op_failed], skipped [$(( ${#planned_desktop[@]} - _op_attempted ))]; current cohort incomplete"
+            return 1
         fi
         # A local wait failure is not proof that broker work ended. Independently
         # require terminal exact-ID results before starting another transaction.
@@ -266,6 +290,7 @@ open_plan() {
         fi
         launch_done_entry[$_op_i]=$TRUE
         if (( _op_rc == 0 )); then
+            _op_completed=$((_op_completed + 1))
             _op_entries+=("$(jq -cn --arg id "$launch_registration_id" --arg layer "${planned_layer[$_op_i]}" \
                 '{registration_request_id:$id,layer:$layer}')")
         fi
@@ -301,6 +326,7 @@ open_plan() {
     if (( _op_initial_failed > 0 )); then
         j_msg "-${err}" -p "Initial stacking/focus incomplete for [$_op_initial_failed] desktop groups; window placement results remain separate"
     fi
+    j_msg "-${notice}" -p "Entries: completed [$_op_completed], failed [$_op_failed], skipped [$(( ${#planned_desktop[@]} - _op_attempted ))]; incomplete desktop cohorts [$_op_initial_failed]"
     j_msg "-${notice}" -pn "Configured layout: [$(( ${#planned_desktop[@]} - _op_failed ))/${#planned_desktop[@]}] windows completed ..."
     if (( _op_failed == 0 && _op_initial_failed == 0 )); then report_action 0 "$notice"; else report_action 1 "$notice"; fi
 }

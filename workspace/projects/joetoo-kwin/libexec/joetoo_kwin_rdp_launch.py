@@ -26,7 +26,7 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
-DEFAULTS = dict(rdp_registration_timeout_ms=120000, rdp_registration_poll_ms=100,
+DEFAULTS = dict(rdp_registration_timeout_ms=300000, rdp_registration_poll_ms=100,
                 rdp_registration_event_limit=4096, rdp_registration_window_limit=64,
                 rdp_backend_log_byte_limit=65536)
 BOUNDS = dict(rdp_registration_timeout_ms=(1000, 3600000),
@@ -466,7 +466,7 @@ def placement_available(status):
 def launch_registration(bus, interface, unix_fd, adapter, host, port, username, desktop, slot,
            bounds, call_timeout=3., emit=print, spawn=subprocess.Popen,
            sleep=time.sleep, clock=time.monotonic, cancelled=lambda: False, profile=None, on_registered=None,
-           argv_builder=None, connection_factory=None):
+           argv_builder=None, connection_factory=None, on_cleanup=None, registered_cancelled=None):
     """Injectable orchestration; real broker enforces all identity/ownership rules.
 
     Registration is reported promptly, then supervision continues until child
@@ -628,41 +628,106 @@ def launch_registration(bus, interface, unix_fd, adapter, host, port, username, 
         supervision_report(child_exit=child.returncode)
         return 1
     finally:
-        # Ctrl-C can also interrupt degraded supervision's pidfd wait.
-        if isinstance(sys.exc_info()[1], KeyboardInterrupt):
+        # A terminal reply and reaping are separate facts. Never infer either
+        # from a failed local call, process exit, or a frontend return code.
+        local_error = sys.exc_info()[1]
+        if isinstance(local_error, KeyboardInterrupt):
             termination_requested = True
-        try:
-            if api is not None and active and not registered:
-                try:
-                    emit(json.dumps(api.result(api.call('CancelSdlRegistration', active), active), sort_keys=True))
-                except Exception:
-                    # Unknown/lost reply or disconnected sender: closing this
-                    # connection triggers broker owner-loss cleanup; never PASS.
-                    pass
-        finally:
-            bus.close()
+        receipt = dict(request_id=active, broker_owner=getattr(api, 'owner', None),
+                       source=locals().get('source'), broker_terminal=False,
+                       child_reaped=False, resources_released=False, eligible=False)
+        clean_error = (local_error is None or isinstance(local_error, KeyboardInterrupt) or
+            (type(local_error) is RuntimeError and str(local_error) in (
+                'Operator cancellation', 'Local registration deadline expired',
+                'Child exited before registration', 'Cancelled/expired or exited before Bind',
+                'Cancelled/expired before spawn')))
+        def notify_cleanup(value):
             try:
-                if child is not None and (not registered or termination_requested):
-                    if pidfd is None:
-                        # Bind has not occurred. Popen still owns this unreaped
-                        # direct child (no other waiter in this single-threaded
-                        # launcher); use its ordinary cleanup on pidfd exhaustion.
-                        # This is never a fallback for broker identity verification.
-                        try:
-                            child.terminate()
-                            child.wait(timeout=call_timeout)
-                        except subprocess.TimeoutExpired:
-                            child.kill()
-                            child.wait(timeout=call_timeout)
-                    else:
-                        stop_child(child, pidfd, call_timeout)
-                elif child is not None and child.poll() is not None:
-                    child.wait(timeout=call_timeout)  # Reap natural registered exit.
-            finally:
+                on_cleanup(value)
+            except Exception:
+                # Failed private reporting cannot end protection of a retained child.
+                try: print('joetoo-kwin: RDP cleanup reporting unavailable', file=sys.stderr, flush=True)
+                except Exception: pass
+        terminal_not_registered = False
+        exited_before_cancel = child is not None and child.poll() is not None
+        receipt['natural_exit'] = exited_before_cancel
+        if api is not None and active and not registered:
+            try:
+                reply = api.result(api.call('CancelSdlRegistration', active), active)
+                receipt['terminal'] = reply
+                terminal_not_registered = reply['state'] in ('failed', 'timeout', 'ambiguous')
+                if reply['state'] == 'registered':
+                    # Cancellation raced successful enrollment. Inform the owner
+                    # before waiting; never kill/re-adopt this positively enrolled child.
+                    registered = True
+                    if on_cleanup is not None:
+                        notify_cleanup(dict(receipt, registration=reply))
+                    while child is not None and child.poll() is None:
+                        if (registered_cancelled or cancelled)():
+                            termination_requested = True
+                            break
+                        select.select([pidfd], [], [], bounds['rdp_registration_poll_ms'] / 1000)
+                else:
+                    receipt['broker_terminal'] = (reply.get('state') in ('failed', 'timeout') and
+                        (reply.get('reason') in ('cancelled', 'expired') or
+                         (reply.get('reason') == 'child_identity_rejected' and exited_before_cancel)) and
+                        reply.get('profile') == profile and (profile is None or reply.get('bounds') == bounds))
+                emit(json.dumps(reply, sort_keys=True))
+            except Exception:
+                # Missing/ambiguous cancellation evidence cannot authorize continuation.
+                receipt['broker_terminal'] = False
+        if (on_cleanup is not None and not registered and child is not None and
+                child.poll() is None and not terminal_not_registered):
+            # Unknown broker completion is not permission to kill a possibly
+            # enrolled viewer. Keep this owned child and original connection.
+            notify_cleanup(dict(receipt, retained=True))
+            registered = True  # Cleanup protection only; no registration claim.
+            termination_requested = False
+            while child.poll() is None:
+                if (registered_cancelled or cancelled)():
+                    termination_requested = True
+                    break
                 if pidfd is not None:
-                    os.close(pidfd)
-                if log is not None:
-                    log.close()
+                    select.select([pidfd], [], [], bounds['rdp_registration_poll_ms'] / 1000)
+                else:
+                    try: child.wait(timeout=bounds['rdp_registration_poll_ms'] / 1000)
+                    except subprocess.TimeoutExpired: pass
+        cleanup_okay = True
+        try:
+            if child is not None and (not registered or termination_requested):
+                if pidfd is None:
+                    # Before Bind, Popen still owns the unreaped direct child.
+                    try:
+                        child.terminate(); child.wait(timeout=call_timeout)
+                    except subprocess.TimeoutExpired:
+                        child.kill(); child.wait(timeout=call_timeout)
+                else:
+                    stop_child(child, pidfd, call_timeout)
+            elif child is not None and child.poll() is not None:
+                child.wait(timeout=call_timeout)
+            receipt['child_reaped'] = child is None or child.returncode is not None
+        except Exception:
+            cleanup_okay = False
+        if not registered and receipt['broker_terminal'] and receipt['child_reaped'] and clean_error:
+            try:
+                status = api.call('RegistryStatus')
+                require(status['observation']['synchronized'] is True and
+                        status['observation']['source'] == source and placement_available(status) and
+                        status['request_counts']['pending'] == status['request_counts']['running'] == 0 and
+                        status['presence_counts']['uncertain'] == 0, 'Cleanup state unavailable')
+                require(not any(w['intended'] == dict(desktop=desktop, slot=slot)
+                    for w in api.call('ListManaged')['windows']), 'Cleanup slot remains reserved')
+                receipt['eligible'] = True
+            except Exception:
+                receipt['eligible'] = False
+        for resource, close in ((bus, lambda b: b.close()), (pidfd, os.close), (log, lambda f: f.close())):
+            if resource is not None:
+                try: close(resource)
+                except Exception: cleanup_okay = False
+        receipt['resources_released'] = cleanup_okay
+        receipt['eligible'] = receipt['eligible'] and cleanup_okay and not registered
+        if on_cleanup is not None and not registered:
+            on_cleanup(receipt)
 
 
 
@@ -931,6 +996,14 @@ def configured_worker(folder, bus_factory, interface, unix_fd):
         return api
     registration = {}
     registration_events = []
+    cleanup = {}
+    def cleaned(value):
+        nonlocal cleanup, registered, published
+        cleanup = value
+        if value.get('registration', {}).get('state') == 'registered' or value.get('retained'):
+            registered = published = True
+            publish('unresolved', phase='registration', reason='registration_outcome_unresolved' if value.get('retained') else 'cancellation_raced_registration',
+                    registration=value.get('registration', {}), cleanup_confirmed=False)
     def emitted(line):
         value = json.loads(line)
         if value.get('supervision') == 'degraded':
@@ -1008,23 +1081,45 @@ def configured_worker(folder, bus_factory, interface, unix_fd):
             call_timeout=job['mechanical']['call_timeout_ms'] / 1000,
             emit=emitted, on_registered=registered_callback, profile=profile,
             argv_builder=lambda h, p, u, m: configured_argv(h, p, u, m, job['settings']),
-            connection_factory=connection_factory,
+            connection_factory=connection_factory, on_cleanup=cleaned, registered_cancelled=lambda: explicit_stop[0],
             cancelled=lambda: explicit_stop[0] if registered else pending_cancel())
         if not published:
             terminal = registration_events[-1] if registration_events else {}
             state = terminal.get('state', 'failed')
-            publish(state, phase='registration', reason=terminal.get('reason', 'registration_not_completed'),
-                    registration=terminal, cleanup_confirmed=False)
+            publish(state if cleanup.get('eligible') is True else 'unresolved', phase='registration',
+                    reason=terminal.get('reason', 'registration_not_completed') if cleanup.get('eligible') is True else 'cleanup_unverified',
+                    registration=terminal, cleanup=cleanup, cleanup_confirmed=cleanup.get('eligible') is True)
     except Exception as error:
         if not published:
-            publish('cancelled' if pending_cancel() else 'failed', phase='registration',
-                    reason=_failure_code(error), cleanup_confirmed=False)
+            publish(('cancelled' if pending_cancel() else 'timeout' if _failure_code(error)=='timeout' else 'failed')
+                    if cleanup.get('eligible') is True else 'unresolved', phase='registration',
+                    reason=_failure_code(error) if cleanup.get('eligible') is True else 'cleanup_unverified',
+                    failure_reason=_failure_code(error), cleanup=cleanup, cleanup_confirmed=cleanup.get('eligible') is True)
     finally:
         os.close(parent_fd)
-        _private_json(folder / 'worker_exited', dict(nonce=nonce))
+        _private_json(folder / 'worker_exited', dict(nonce=nonce, worker_pid=os.getpid(), worker_start=own_start))
 
 
-def configured_frontend(job, *, spawn=subprocess.Popen, clock=time.monotonic, sleep=time.sleep):
+def clean_registration_receipt(value, job):
+    """Private worker proof; the next broker Begin remains the final eligibility gate."""
+    c = value.get('cleanup', {})
+    terminal = c.get('terminal', {})
+    return (value.get('phase') == 'registration' and value.get('cleanup_confirmed') is True and
+        value.get('state') in ('failed', 'cancelled', 'timeout') and
+        all(c.get(k) is True for k in ('eligible', 'broker_terminal', 'child_reaped', 'resources_released')) and
+        c.get('broker_owner') == job['broker_owner'] and c.get('source') == job['source'] and
+        isinstance(c.get('request_id'), str) and re.fullmatch(r'[0-9a-f]{32}', c['request_id']) is not None and
+        terminal.get('request_id') == c['request_id'] and type(terminal.get('protocol')) is int and terminal.get('protocol') == 1 and
+        terminal.get('state') in ('failed', 'timeout') and
+        (terminal.get('reason') in ('cancelled', 'expired') or
+         (terminal.get('reason') == 'child_identity_rejected' and c.get('natural_exit') is True)) and
+        terminal.get('placement') == 'not_requested' and terminal.get('remote_session') == 'unverified' and
+        not any(k in terminal for k in ('managed_id', 'window_uuid')) and
+        terminal.get('profile') == (X11_PROFILE if job['resolved_backend'] == 'x11' else None) and
+        (job['resolved_backend'] != 'x11' or terminal.get('bounds') == job['bounds']))
+
+
+def configured_frontend(job, *, spawn=subprocess.Popen, clock=time.monotonic, sleep=time.sleep, verify_cleanup=None):
     """Return only this worker's nonce/PID/start-bound status; never hold FD 9."""
     runtime = _runtime_directory(os.environ.get('XDG_RUNTIME_DIR', ''))
     folder = Path(tempfile.mkdtemp(prefix='joetoo-rdp-', dir=runtime))
@@ -1103,6 +1198,18 @@ def configured_frontend(job, *, spawn=subprocess.Popen, clock=time.monotonic, sl
                 if _exited(worker_fd): raise ConfiguredError('worker_exited_before_receipt')
                 sleep(job['bounds']['rdp_registration_poll_ms'] / 1000)
             if not received: raise ConfiguredError('worker_receipt_unavailable')
+        result['continuation_eligible'] = False
+        if result.get('cleanup_confirmed') is True:
+            if not clean_registration_receipt(result, job):
+                raise ConfiguredError('invalid_cleanup_receipt')
+            if worker.wait(timeout=timeout) != 0:
+                raise ConfiguredError('cleanup_worker_failed')
+            exited = _read_private_json(folder / 'worker_exited')
+            if exited != dict(nonce=nonce, worker_pid=worker.pid, worker_start=start):
+                raise ConfiguredError('cleanup_worker_identity_mismatch')
+            if verify_cleanup is None or verify_cleanup(result['cleanup']) is not True:
+                raise ConfiguredError('cleanup_session_unverified')
+            result['continuation_eligible'] = True
         return result
     except Exception as error:
         _private_json(folder / 'cancel', dict(nonce=nonce))
@@ -1138,7 +1245,14 @@ def main(argv=None):
     if args.preflight:
         result = job
     else:
-        try: result = configured_frontend(job)
+        def verify_cleanup(receipt):
+            connection = factory()
+            try:
+                fresh = configured_preflight({k: job[k] for k in ('target', 'settings', 'bounds', 'mechanical',
+                    'desktop', 'slot', 'x', 'y', 'width', 'height')}, connection, dbus.Interface)
+                return fresh['broker_owner'] == job['broker_owner'] and fresh['source'] == job['source']
+            finally: connection.close()
+        try: result = configured_frontend(job, verify_cleanup=verify_cleanup)
         except Exception as error:
             result = dict(state='unresolved', phase='frontend', reason=_failure_code(error), remote_session='unverified')
     print(json.dumps(result, sort_keys=True))

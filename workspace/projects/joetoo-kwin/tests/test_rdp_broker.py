@@ -302,12 +302,12 @@ class RdpBrokerTests(unittest.TestCase):
 
     def test_automatic_watchdog_expiry_no_poll(self):
         self.bind()
-        self.clock += 121
+        self.clock += 301
         self.loop.tick()
         self.assertFailed('timeout')
 
     def test_unbound_watchdog_expires(self):
-        self.clock += 121
+        self.clock += 301
         self.loop.tick()
         self.assertFailed('timeout')
 
@@ -987,7 +987,7 @@ class SdlInterfaceTests(unittest.TestCase):
         self.bus.auto = False
         self.begin()
         self.assertIsNone(self.b._rdp_registration)
-        self.clock += 121; self.loop.tick()
+        self.clock += 301; self.loop.tick()
         self.assertEqual(self.errors[-1].name, 'org.freedesktop.DBus.Error.Timeout')
         credentials = self.bus.credentials()
         fd = credentials['ProcessFD'].fd
@@ -1011,8 +1011,8 @@ class SdlInterfaceTests(unittest.TestCase):
         self.clock += 5
         self.bus.deliver()
         spec = json.loads(self.replies[-1]); self.rid = spec['request_id']
-        self.assertEqual(self.b._rdp_registration['deadline'], 220.)
-        self.poll(); self.assertEqual(self.b._rdp_registration['deadline'], 220.)
+        self.assertEqual(self.b._rdp_registration['deadline'], 400.)
+        self.poll(); self.assertEqual(self.b._rdp_registration['deadline'], 400.)
 
     def test_child_reparent_or_uid_change_rejected(self):
         self.begin(); self.spawn()
@@ -1060,7 +1060,7 @@ class SdlInterfaceTests(unittest.TestCase):
 
     def test_unauthorized_poll_does_not_advance_or_expire_owner(self):
         self.begin()
-        self.clock += 121
+        self.clock += 301
         with self.assertRaises(self.module.dbus.DBusException): self.poll(sender=':1.502')
         self.assertEqual(self.b._rdp_registration['state'], 'PENDING')
         self.loop.tick()

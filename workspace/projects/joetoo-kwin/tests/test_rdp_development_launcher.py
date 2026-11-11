@@ -156,7 +156,7 @@ class LauncherTests(unittest.TestCase):
             path = next(Path(self.folder.name).glob('*/stdout.log'))
             with path.open('ab') as stream: stream.write(b'x' * 65537)
 
-    def run_launcher(self, profile=None, bounds=None):
+    def run_launcher(self, profile=None, bounds=None, **options):
         # close() models disconnect; no further external calls are possible.
         original_close = self.transport.bus.close
         def close():
@@ -166,7 +166,85 @@ class LauncherTests(unittest.TestCase):
         return self.client.launch(self.transport.bus, lambda obj, iface: obj,
             lambda fd: self.f.FD(os.dup(fd)), self.f.adapter, 'example.invalid', 3389,
             'testuser', 3, 1, bounds or {}, emit=self.output.append, spawn=self.spawn,
-            sleep=self.wait, clock=lambda: self.f.clock, cancelled=lambda: self.cancelled, profile=profile)
+            sleep=self.wait, clock=lambda: self.f.clock, cancelled=lambda: self.cancelled, profile=profile, **options)
+
+    def test_pending_timeout_proves_broker_terminal_and_real_child_reaped(self):
+        self.mode = 'deadline'
+        receipts = []
+        with self.assertRaisesRegex(RuntimeError, 'deadline expired'):
+            self.run_launcher(bounds={'rdp_registration_timeout_ms': 1000}, on_cleanup=receipts.append)
+        receipt, = receipts
+        self.assertTrue(receipt['eligible'])
+        self.assertTrue(receipt['broker_terminal'])
+        self.assertTrue(receipt['child_reaped'])
+        self.assertTrue(receipt['resources_released'])
+        self.assertEqual(receipt['terminal']['request_id'], self.f.rid)
+        self.assertIsNotNone(self.child.returncode)
+        self.assertFalse(self.f.b.registry.managed_windows)
+
+    def test_verified_natural_exit_and_terminal_broker_result_can_be_clean(self):
+        self.mode='deadline';receipts=[]
+        def exited(duration):
+            self.child.stdin.close();self.child.wait(timeout=3)
+            self.f.loop.tick()  # Broker independently observes its bound child's exit.
+        self.wait=exited
+        with self.assertRaisesRegex(RuntimeError,'Child exited before registration'):
+            self.run_launcher(on_cleanup=receipts.append)
+        self.assertTrue(receipts[0]['eligible'])
+        self.assertTrue(receipts[0]['natural_exit'])
+        self.assertEqual(receipts[0]['terminal']['reason'],'child_identity_rejected')
+
+    def test_unknown_cancel_reply_retains_real_owned_child_without_clean_claim(self):
+        self.mode = 'deadline'
+        receipts = []
+        self.patch(self.bridge, 'CancelSdlRegistration', lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('lost reply')))
+        def retained(value):
+            receipts.append((value, self.child.poll()))
+            self.child.stdin.close(); self.child.wait(timeout=3)
+        with self.assertRaisesRegex(RuntimeError, 'deadline expired'):
+            self.run_launcher(bounds={'rdp_registration_timeout_ms': 1000}, on_cleanup=retained)
+        self.assertEqual(len(receipts), 1)
+        self.assertIsNone(receipts[0][1])
+        self.assertTrue(receipts[0][0]['retained'])
+        self.assertFalse(receipts[0][0]['eligible'])
+
+    def test_source_change_prevents_clean_receipt_even_after_reaping(self):
+        self.mode='deadline'
+        self.wait=lambda duration:(setattr(self.f,'clock',self.f.clock+2),setattr(self.f.b,'observation_source','replaced'))
+        receipts=[]
+        with self.assertRaisesRegex(RuntimeError,'deadline expired'):
+            self.run_launcher(bounds={'rdp_registration_timeout_ms':1000},on_cleanup=receipts.append)
+        self.assertFalse(receipts[0]['eligible'])
+        self.assertTrue(receipts[0]['child_reaped'])
+
+    def test_failed_reaping_cannot_be_reported_clean(self):
+        self.mode='deadline';receipts=[]
+        def cleanup(value):
+            receipts.append(value)
+            self.child.stdin.close();self.child.wait(timeout=3)
+        with patch.object(self.client._runtime,'stop_child',side_effect=RuntimeError('unreaped')):
+            with self.assertRaisesRegex(RuntimeError,'deadline expired'):
+                self.run_launcher(bounds={'rdp_registration_timeout_ms':1000},on_cleanup=cleanup)
+        self.assertFalse(receipts[0]['eligible'])
+        self.assertFalse(receipts[0]['child_reaped'])
+
+    def test_cancel_racing_broker_registration_preserves_exact_real_child(self):
+        self.mode='stay';snapshots=[]
+        previous=self.bridge.PollSdlRegistration
+        def lost(*args,**kwargs):
+            previous(*args,**kwargs)
+            raise RuntimeError('simulated lost positive reply')
+        self.patch(self.bridge,'PollSdlRegistration',lost)
+        def retain(value):
+            snapshots.append((value,self.child.poll()))
+            self.child.stdin.close();self.child.wait(timeout=3)
+        with self.assertRaisesRegex(RuntimeError,'lost positive reply'):
+            self.run_launcher(on_cleanup=retain)
+        self.assertEqual(len(snapshots),1)
+        self.assertIsNone(snapshots[0][1])
+        self.assertEqual(snapshots[0][0]['registration']['state'],'registered')
+        self.assertFalse(snapshots[0][0]['eligible'])
+        self.assertEqual(len(self.f.b.registry.managed_windows),1)
 
     def registered_failure(self, failure, cancel=False):
         # Actual disposable child plus the real broker/registry identity path.
