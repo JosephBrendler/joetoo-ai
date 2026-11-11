@@ -14,7 +14,14 @@ This is the **historical task record**, not execution authority. For current act
 | 1.5c.5c | Affirmative RDP feasibility; SDL3 FreeRDP chosen **first by implementation order**, not as default over TigerVNC | [PR #28](https://github.com/JosephBrendler/joetoo-ai/pull/28), [research](README_remote_desktop_research.md) |
 | 1.5c.5d / Increment 1 | **ACCEPTED**: native-Wayland SDL registration-only, no placement | [Native-Wayland evidence](step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md) |
 | 1.5c.5d / Increment 2 | **ACCEPTED (2026-11-08)**: native-KWin-X11 stock SDL registration-only with `auto` and `software`; same exact UUID retained when closed; 644 Python and 145 JavaScript regressions passed on the implementation baseline. The 500 ms X11 persistence heuristic has a known counterexample; no automatic placement or general production-RDP security acceptance. | [Native X11 registration evidence, including `software` closeout](step1.5c5d-increment2-native-x11-registration-2026-11-08.md) |
+| 1.5c.5d / Increment 4 Stage 3 | **ACCEPTED (2026-11-10–11)**: five-minute readiness defaults, known-clean failure continuation, fail-closed uncertainty, success-only cohort ordering; headless and native X11/Wayland pass | [Stage 3 native acceptance](step1.5c5d-increment4-stage3-native-acceptance-2026-11-10-11.md) |
 | 1.5c.5d / Increment 3 | **Option C candidate implemented; new single-run native-Wayland automated placement succeeded (2026-11-10).** `599f7f3`: 789 Python / 161 JS tests pass; exact UUID registered, placement submitted +6.43 ms, full `(1,1) 800×628` frame broker-verified +116.16 ms after registration, while GDM still black. Earlier 15 s failure remains historical/unexplained; repeat/X11 regression and configured `-o` are open. | [New smart-sizing/immediate-placement evidence](step1.5c5d-increment3-native-wayland-smart-sizing-immediate-placement-2026-11-10.md), [normalized trace](step1.5c5d-increment3-immediate-placement-transcript-2026-11-10.log), [earlier failing Wayland trace](step1.5c5d-increment3-native-wayland-placement-trace-2026-11-09.md), [X11 sequential closeout](step1.5c5d-increment3-native-x11-sequential-registration-closeout-2026-11-09.md) |
+
+## Increment 4 Stage 3 acceptance and Stage 4 authorization (2026-11-10–11)
+
+The maintainer **accepted Stage 3** after Codex's 447 focused / 869 full Python and 161 JavaScript PASS report, locally observed `gmki91` 869 Python and 161 JavaScript PASS with service update/check, and native serial tests on **X11 (`gmki91`) and Wayland (`q552u01`)**. In both native tests: Konsole slot 1 succeeded, RDP slot 2 failed with positively verified terminal broker and child/worker cleanup, Konsole slot 3 succeeded, success-only initial stack/focus was verified, and final accounting correctly reported `completed [2], failed [1], skipped [0]` with incomplete/nonzero overall status. Valid `rdp_registration_timeout_ms=5000` test overrides worked; production RDP/VNC defaults are 300000 ms. The earlier unresolved failure correctly blocked continuation. Full field excerpts, screenshot provenance, limitations and test-plan pointer: [Stage 3 acceptance record](step1.5c5d-increment4-stage3-native-acceptance-2026-11-10-11.md).
+
+**Stage 4 authorized to proceed in bounded phases**: next Stage 4A documentation/template preparation, using [configuration layering design](step1.5c5d-increment4-configuration-layering-proposal-DRAFT.md), [per-run draft](../joetoo-kwin-per-run-template-IMPROVED-DRAFT.conf) and [draft Codex task](step1.5c5d-increment4-stage4A-codex-task-DRAFT.md). Stage 4B runtime layering and optional per-user `eselect` selection require separate implementation authorization. Do not reopen the working VNC/RDP implementations for redesign or normalization in version 1. HANDOFF controls the next actor and publication gates.
 
 ## Increment 2 closeout: what was actually observed
 
@@ -54,7 +61,7 @@ The maintainer selected a **straightforward, sequential, human-interactive** RDP
 
 This choice follows the already stated architecture: **Increment 3** exact-UUID operator-controlled RDP placement; **Increment 4** configured sequential mixed `-o` integration and correct human-wait handling; **Increment 5** RDP security/native closure; **Step 1.5d** broad integrated regression and `-L`/`-l`; **Phase 2** optional throughput optimization if measurement justifies queueing, prompt staging or concurrency. This sequencing is a decided product strategy, **not proof** that Increment 3/4 code already implements it.
 
-The current RDP/VNC development defaults are still 120 seconds; raising them to the approved 300 seconds and implementing safe failure/continuation remains **Increment 4 Stage 3 work, not an already delivered behavior**. See [authoritative Increment 4 decisions](step1.5c5d_Increment_4_decisions.md). The [earlier strategy](step1.5c5d-increment3-strategy-decision.md) and [authentication-workflow discussion](increment2-deferred-authentication-workflow-section.md) remain historical; their prior open-ended-wait language is superseded. Old exploratory drafts are not current task instructions.
+**Historical note:** Before Increment 4 Stage 3, the RDP/VNC readiness defaults were 120 seconds and known-clean continuation remained pending. **Current accepted Stage 3 defaults are 300 seconds**, with positive cleanup and serial continuation verified on X11 and Wayland; see the acceptance record above. See [authoritative Increment 4 decisions](step1.5c5d_Increment_4_decisions.md). The [earlier strategy](step1.5c5d-increment3-strategy-decision.md) and [authentication-workflow discussion](increment2-deferred-authentication-workflow-section.md) remain historical; their prior open-ended-wait language is superseded. Old exploratory drafts are not current task instructions.
 
 ## Historical authorization chronology
 
@@ -86,6 +93,9 @@ The original historical HANDOFF records **Codex iterations 0–45** and **cloud 
 | 45 | 1.5c.5c closeout and 1.5c.5d planning |
 
 ## Focused evidence and navigation
+
+- [Increment 4 Stage 3 native acceptance: X11/Wayland operator excerpts and test results](step1.5c5d-increment4-stage3-native-acceptance-2026-11-10-11.md)
+- [Increment 4 Stage 4A draft Codex assignment (not dispatched)](step1.5c5d-increment4-stage4A-codex-task-DRAFT.md)
 
 - [Increment 3 native-Wayland smart sizing and automatic immediate-placement success, with limitations (2026-11-10)](step1.5c5d-increment3-native-wayland-smart-sizing-immediate-placement-2026-11-10.md)
 - [Normalized native immediate-placement JSON/stderr output (2026-11-10)](step1.5c5d-increment3-immediate-placement-transcript-2026-11-10.log)

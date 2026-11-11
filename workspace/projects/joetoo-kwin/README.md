@@ -98,6 +98,12 @@ local Bash** in the same managed Konsole. These were maintainer-executed
 native tests, not AI-run host operations. They are not universal timing or
 multi-monitor guarantees.
 
+## Current Step 1.5c.5d status (2026-11-10–11)
+
+**Increment 4 Stage 3 accepted:** the maintainer observed 869 Python and 161 JavaScript regressions passing on `gmki91`; native `gmki91` X11 and `q552u01` Wayland tests both proved serial Konsole success → verified clean RDP failure → Konsole success, success-only stack/focus and correct incomplete `2/3` result. RDP registration and VNC viewer-readiness defaults are now 300000 ms, with validated overrides. See [Stage 3 native acceptance and operator excerpts](task_step1.5/step1.5c5d-increment4-stage3-native-acceptance-2026-11-10-11.md).
+
+**Next: Stage 4A authorized for preparation, not yet dispatched to Codex.** Develop a short per-run template and separate annotated settings reference; keep today's CLI lookup untouched. Loader layering (Stage 4B) and optional user-owned `eselect` plan selector are independently gated. See [current HANDOFF](task_step1.5/HANDOFF.md) and [draft Stage 4A task](task_step1.5/step1.5c5d-increment4-stage4A-codex-task-DRAFT.md).
+
 ## Window configuration at a glance
 
 `desktop_session_list` is an indexed Bash array of pipe-delimited recipes - see ARCHITECTURE.md
