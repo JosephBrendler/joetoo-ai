@@ -20,6 +20,8 @@ user="joe"
 project_dir="/home/${user}/joetoo-ai/workspace/projects/joetoo-kwin"
 bus=org.joetoo.KWinBridge
 path=/org/joetoo/KWinBridge
+kbus=org.kde.KWin
+kpath=/org/kde/KWin
 
 # ShellCheck thinks varlist is unused, but it is in script_header_joetoo
 # shellcheck disable=SC2034
@@ -114,9 +116,16 @@ right_status 0
 
 j_msg "-${notice}" -mp ""
 j_msg "-${notice}" -p "Make these abbreviation assignments to facilitate use of these methods"
-j_msg "-${notice}" -mp "bus=\"$bus\""
-j_msg "-${notice}" -mp "path=\"$path\""
+j_msg "-${notice}" -mp "bus=\"$bus\";  path=\"$path\""
+j_msg "-${notice}" -mp "kbus=\"$kbus\";  kpath=\"$kpath\""
 j_msg "-${notice}" -mp ""
+j_msg "-${notice}" -p "Use these to list all interface/methods for each service"
+j_msg "-${notice}" -mp "qdbus6 \$bus \$path"
+j_msg "-${notice}" -mp "qdbus6 \$kbus \$kpath"
+j_msg "-${notice}" -mp ""
+j_msg "-${notice}" -p "Use these for more focused queries in the joetoo KWinBridge service"
 j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.ListManaged"
+j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.RegistryStatus"
 j_msg "-${notice}" -mp ""
 j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.ListManaged | jq ."
+j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.RegistryStatus | jq ."
