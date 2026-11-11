@@ -18,9 +18,22 @@ isint() { [[ $1 =~ ^-?[0-9]+$ ]]; }
 handle_result() { return "${REPORT_RC:-0}"; }
 decode_right_status() { printf 'DECODE:%s\n' "$1"; }
 show_config() {
-    local name
+    local entry name value
     printf 'CONFIG\n'
-    for name in $varlist; do printf '%s=%s\n' "$name" "${!name}"; done
+    for entry in $varlist; do
+        if [[ $entry == bool.* ]]; then
+            name=${entry#bool.}
+            case ${!name} in
+                "$TRUE") value=True ;;
+                "$FALSE") value=False ;;
+                *) value=INVALID ;;
+            esac
+        else
+            name=${entry#rlv.}
+            value=${!name}
+        fi
+        printf '%s=%s\n' "$name" "$value"
+    done
 }
 
 # Model the documented verbosity bounds without reading system installations.
@@ -36,3 +49,14 @@ _pc_action_verbosity() {
 }
 # Tests use plain ASCII cells; real display-width handling is integration-tested.
 get_msg_len() { printf '%s\n' "${#1}"; }
+
+# Match the header's severity gate and its deliberately unconditional success.
+d_do() {
+    (( $# >= 2 )) || return 1
+    [[ -n $verbosity ]] || return 2
+    local level=${!#}
+    isint "$level" || return 3
+    if [[ $DEBUG ]] || (( verbosity >= level )); then eval "$1"; fi
+    return 0
+}
+die() { printf '%s\n' "$1" >&2; exit 1; }

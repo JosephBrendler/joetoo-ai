@@ -145,10 +145,14 @@ permissions to administer systems**.
 
 ### GNOME Remote Desktop on Ubuntu 26.04.1 (Raspberry Pi 4)
 
-**Investigation and reproducibility report — 2026-11-03; revised with native evidence 2026-11-04**  
-**Server:** `raspiubuntu401` (Ubuntu 26.04.1, Raspberry Pi 4)  
-**Client platforms:** `gmki91` (Gentoo/joetoo, KDE Plasma/KWin X11) and `q552u01` (Gentoo/joetoo, KDE Plasma/KWin Wayland)  
-**Destination in joetoo-ai:** `workspace/projects/joetoo-kwin/task_step1.5/`  
+**Investigation and reproducibility report — 2026-11-03; revised with native evidence 2026-11-04**
+
+**Server:** `raspiubuntu401` (Ubuntu 26.04.1, Raspberry Pi 4)
+
+**Client platforms:** `gmki91` (Gentoo/joetoo, KDE Plasma/KWin X11) and `q552u01` (Gentoo/joetoo, KDE Plasma/KWin Wayland)
+
+**Destination in joetoo-ai:** `workspace/projects/joetoo-kwin/task_step1.5/`
+
 **Scope:** GNOME Remote Desktop (GRD) Remote Login and Desktop Sharing; FreeRDP `xfreerdp` and `sdl-freerdp`, KRDC and Remmina; authentication, certificate identity, session lifecycle, display behavior, reboot and implications for `joetoo-kwin`.
 
 > **Evidence convention.** **Verified** refers to maintainer-observed commands, system logs, or supplied screenshots. **Reported** distinguishes a maintainer test result not independently reproduced here. **Likely** is a causal inference consistent with observations. **Not established / NOT TESTED** denotes a remaining question. Client windows visible in screenshots demonstrate usable remote graphics, *not* automatic `joetoo-kwin` registration, certificate-chain verification or remote-login persistence unless those were separately checked. Screenshot links are relative to this Markdown report; files `01`–`17` belong to the original evidence collection, and `18`–`25` are the 2026-11-04 additions.

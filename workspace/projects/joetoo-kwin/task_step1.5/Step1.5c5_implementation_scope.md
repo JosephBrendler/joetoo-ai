@@ -298,33 +298,85 @@ bounded failure/coexistence checks. Record actual security/certificate
 conditions. Feasibility archives do not establish production acceptance.
 Codex must not run native/network sessions without that authority.
 
-### Increment 2 — SDL X11 viewer-role identity
+### Increment 2 — SDL X11 viewer-role identity (stock-client legacy profile)
 
-Add independently demonstrated role discrimination between temporary and
-persistent SDL windows bearing the same PID/title marker; reject ambiguous
-or premature enrollment. Headless and maintainer `gmki91` native evidence
-must establish the persistent UUID without premature placement. Preserve the
-shared positive registration contract.
+**Maintainer direction, 2026-11-08:** Candidate A2 client-side XID/nonce/READY
+instrumentation is **ABORTED** as an implementation path because it requires a
+downstream FreeRDP patch for the retiring native Plasma X11 session. Its accepted
+Stage 0 synthetic tests remain historical research evidence, not Increment 2
+acceptance. Preserve the accepted native-Wayland Increment 1 unchanged.
 
-### Increment 3 — Controlled placement release
+**A1 renderer policy and C identity heuristic are independent.** Proposed
+centrally user-configurable `rdp_x11_renderer` accepts `auto` or `software`, only
+for the explicit legacy native-KWin-X11 profile. `auto` uses stock SDL selection:
+remove inherited `SDL_RENDER_DRIVER` and `SDL_FRAMEBUFFER_ACCELERATION` keys from
+the managed child's environment, not empty values. `software` sets both
+`SDL_RENDER_DRIVER=software` and `SDL_FRAMEBUFFER_ACCELERATION=0` for that child.
+Never mutate the parent/system environment or silently fall back between modes.
+`auto` does not guarantee GPU acceleration; `software` does not disable the remote
+host GPU or all FreeRDP protocol acceleration. Performance costs, especially for
+demanding video, remain unmeasured. Renderer choice is not identity proof and
+neither mode is infallible. **C applies in both modes**, subject to the
+[A1/C draft](step1.5c5d-sdl-x11-a1c-contract-addendum-DRAFT.md); no client patch.
 
-Registration does not establish successful GDM login, authenticated GNOME
-desktop readiness or allowed placement. Propose explicit operator-confirmed
-release first; automatic release requires separately reliable readiness
-evidence. Revalidate exact registered UUID, owner/source and transaction
-before existing desktop/geometry/layer/focus operations. Address Busy, slot
-reservation, cancellation, expiry and initial layout completeness without
-holding the ordinary launcher lock throughout interactive authentication.
+**Explicit, narrow exception to the Increment 1 fixed-delay prohibition:** For
+this **legacy native-KWin-X11 SDL profile only**, the maintainer permits a
+**bounded, centrally configurable, monotonic persistence interval** as *one
+component* of a pragmatic viewer-role heuristic. The proposed parameter is
+`rdp_x11_identity_settle_ms` (initial **500 ms for evaluation**, adjustable from
+the established configuration template after validation). Start the one timer
+when a particular newly observed UUID **first fully qualifies** by launched
+PID, application, exact marker, normal-window and source/lifecycle checks; a
+late marker cannot backdate qualification. Evaluate concurrently with normal
+broker observation and provenance checks; **never** chain it to a second 500 ms
+`PollCorrelation()` diagnostic wait. Do not use a blocking sleep or extend the
+registration deadline. The existing diagnostic `PollCorrelation()` wait is **not**
+a registration prerequisite and need not be modified by this exception.
 
-### Increment 4 — Configured SDL RDP workflow
+At the eligibility decision, require the **same unique live UUID** and fresh
+child/PID/class/marker/source/owner checks with complete, non-evicted birth and
+removal history. On X11 only, retain an observed temporary marked predecessor as
+a removed tombstone, instead of rejecting *solely* because it disappeared; do
+not discard ambiguity, changed identity, source gaps or an unresolved live
+competitor. No adoption of preexisting windows, silent UUID replacement,
+placement, focus or stack changes; existing caller/FD and resource safeguards
+remain in force. **Persistence is not positive proof of FreeRDP renderer
+completion.** Preserve the required counterexample: a fully qualifying marked
+temporary viewer surviving **600 ms** can be wrongly registered at **500 ms**;
+its later replacement must never be silently re-enrolled. Keep this residual
+risk explicit in both modes before implementation or native acceptance.
 
-With separate authorization, implement exact safe SDL recipe grammar and
-offline whole-plan `-c` validation plus confirmed `-o` execution. Reject
-unsupported/invalid plans before side effects. Preserve security policy,
-independent registration/placement/remote outcome reporting, slot ownership,
-layer/focus guarantees and Konsole/Dolphin/TigerVNC behavior. No automatic
-reconnect, UUID reassignment, multimonitor, RemoteApp or client fallback is
-implied.
+This permission is **Increment 2 only**: it does **not** weaken the accepted
+native-Wayland Increment 1 or generic/VNC contracts. **Gate F is ACCEPTED**;
+the Nov 5 marked 20 ms predecessor / 72.9 s successor remain timing baseline
+evidence, not a universal guarantee. The [Nov 8 software trial](step1.5c5d-a1-software-renderer-native-evidence-2026-11-08.md)
+is **ACCEPTED only as provisional feasibility evidence**: confirmed `x11` and
+`software`, one observed marked normal persistent UUID, two earlier unmarked
+generations, one X11 discovery gap, and client exit 131 after titlebar closure
+(parent proof result 0). Neither universal selector correctness nor renderer
+causation was established. **Gate N2**, one default-renderer comparison with both
+hints unset, is authorized **for the maintainer only**; Codex must not run it.
+Gate I broker/launcher implementation and Gate A native managed-registration
+acceptance remain **NOT YET AUTHORIZED**, requiring separate bounded grants.
+Increment 2 remains OPEN; no placement or later-increment authority is implied.
+
+### Increment 3 — Controlled placement release (IMPLEMENTED; NATIVE X11 VALIDATED IN PART)
+
+The implementation at `e7f63ce2a9bbb0ed09f7f7465099e360ecd88fa1` adds independent, operator-confirmed SDL viewer placement, targeting the existing broker-owned managed ID and original exact KWin UUID. SDL registration alone remains `placement=not_requested`, and an observed window/GDM greeter is not proof of successful remote login or permission for automatic focus/stack changes. Revalidate launcher/child/PID/marker ownership, source/revision, actual presence, reserved desktop/slot and geometry through existing resident/broker transaction machinery; fail closed on missing, replaced, disputed or unverified identity. A one-shot placement does not continuously enforce window location or size.
+
+On `gmki91` native KWin X11, both `software` and `auto` rendered exact-UUID placement, requested position and desktop, verified broker completion, same-UUID missing-state retention after close, and safe closed-viewer rejection. Original implementation regression: 191 focused / 676 full Python and 158 JS passed. **Subsequent resolution:** `5a2e152` fixed the two stale terminal-`OK` `IDLE`-only launcher guards; the maintainer's updated installation passed **691 full Python and 158 JS tests**, followed by viewer A `software` registration→placement→close and B `auto` registration→close in a different slot **without broker restart**, retaining original UUIDs and A's terminal `OK` transaction. This previously reported sequential-registration defect is **CLOSED / NATIVE ACCEPTED**. See [native sequential closeout](step1.5c5d-increment3-native-x11-sequential-registration-closeout-2026-11-09.md); the [earlier placement evidence](step1.5c5d-increment3-native-x11-placement-2026-11-09.md) preserves pre-fix history.
+
+**Increment 3 overall remains OPEN**: native Wayland controlled placement has not yet been tested, and native X11 requested 800×600 frames later measured 1032×804. Run the Wayland registration/placement/closure test after safe branch sync on `q552u01`; characterize SDL client-area versus KWin frame geometry and decide the actual one-shot placement contract without adding continuous resizing/focus/stack enforcement.
+
+Increment 3 does **not** implement prompt relocation, authentication observers, automatic login, concurrency, configured RDP `-o` recipe parsing, or changes to VNC/SSH/RDP human-authentication deadlines. Their absence is not an Increment 2 regression or proof of Increment 4 functionality.
+
+### Increment 4 — Configured SDL RDP workflow (SEQUENTIAL DESIGN ACCEPTED; NOT IMPLEMENTED)
+
+Integrate SDL RDP into the existing `DESKTOP|PROGRAM|MODE|TARGET[|LAYER]` configuration grammar and confirmed `joetoo-kwin -o` workflow, using the existing planner's **derived slot and geometry**, not a hand-calculated layout from the standalone registration tool. Preserve offline whole-plan `-c` validation, mixed Konsole/Dolphin/TigerVNC/RDP sequential launch, unique exact-UUID ownership, source/owner/slot checks, per-desktop layers/stack/focus, explicit confirmation, and truthful partial-completion/remote-session status.
+
+**Finite human-interactive viewer wait (Increment 4 maintainer decision):** configure `rdp_registration_timeout_ms=300000` and `vnc_viewer_ready_timeout_ms=300000` as the initial five-minute defaults, with bounded user overrides. These are deadlines for positive persistent-viewer identification, **not** evidence that the human is actually entering credentials. At timeout or known pre-registration failure, cancel the pending broker request, terminate only owned pending client/tunnel resources, verify terminal cleanup, report the failed recipe, and advance to the next serial entry when the broker confirms eligibility. Do not bypass Busy, source/owner ambiguity, active placement or uncertain cleanup. Keep SSH-tunnel establishment, D-Bus, post-registration identity/geometry verification and cleanup separately bounded; do not introduce an unbounded waiting phase or infer remote authentication success.
+
+The serial plan waits up to the configured viewer-readiness limit before proceeding; remote GDM login takes place inside the placed viewer and does not block `-o`. Parallel launch, prompt staging/cascades and selective queueing remain deferred **Version 2 / Option D** work. The [Increment 4 maintainer decisions](step1.5c5d_Increment_4_decisions.md) supersede the older [Increment 3 strategy record](step1.5c5d-increment3-strategy-decision.md) and [authentication-workflow discussion](increment2-deferred-authentication-workflow-section.md) where their wait policy differs.
 
 ### Increment 5 — Security, regression and milestone closure
 

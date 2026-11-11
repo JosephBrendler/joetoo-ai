@@ -7,7 +7,7 @@ import json
 import re
 import sys
 
-DEFAULTS = dict(vnc_ssh_start_timeout_ms=10000, vnc_viewer_ready_timeout_ms=120000,
+DEFAULTS = dict(vnc_ssh_start_timeout_ms=10000, vnc_viewer_ready_timeout_ms=300000,
                 vnc_supervisor_poll_interval_ms=100, vnc_cleanup_timeout_ms=2000,
                 vnc_local_port_attempts=3, vnc_identity_event_limit=256,
                 vnc_identity_settle_ms=500, vnc_dbus_timeout_ms=3000, vnc_placement_timeout_ms=15000, vnc_identity_start_timeout_ms=1000)

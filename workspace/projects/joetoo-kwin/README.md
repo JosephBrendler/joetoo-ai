@@ -6,7 +6,7 @@ in `joetoo-ai`, not yet the packaged version 1 application. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for accepted and proposed product contracts,
 including the next remote-access tranche.
 
-## Current status — November 5, 2026
+## Current status — November 10, 2026
 
 **Step 1.5c.4 is accepted and merged.** The tested implementation baseline was
 `a3c50fc`, with maintainers' X11 and Wayland acceptance and subsequent
@@ -55,16 +55,17 @@ own role discriminator. The existing KWin observations support the Wayland
 identity contract without an additional user-interaction observer. Detailed
 provenance and qualifications remain in the [handoff](task_step1.5/HANDOFF.md).
 
-**Next: Step 1.5c.5d — Managed RDP Implementation.** This is to be incrementally gated, requiring explicit maintainer authorization for each increment. The proposed first executable increment is native-Wayland SDL registrationwithout placement, after recipe, security and interface contract approval. Production RDP registration/placement is not accepted. In-process reconnect remains untested; a fresh client connection does not prove server-session continuity, and viewer identity does not prove GDM login or desktop readiness. TLS certificate trust and server identity remain separate implementation gates.
+**Step 1.5c.5d — Managed RDP implementation in candidate development.** Native-Wayland registration, native-X11 registration and serial X11 operator placement were accepted in earlier gates. Following Option C serial consolidation (`df01e0c`), development-only smart sizing (`54df85f`) and an immediate-placement harness (`599f7f3`), the maintainer demonstrated **one automatic native Wayland exact-frame placement** without waiting for GDM content. Increment 3 repeat/X11 regression and formal acceptance remain open; configured RDP `-o` is not implemented. Fresh-client connection does not establish server-session continuity, and local viewer registration/placement is not proof of TLS trust, GDM login or remote usability. See [new evidence](task_step1.5/step1.5c5d-increment3-native-wayland-smart-sizing-immediate-placement-2026-11-10.md).
 
 | Increment | Work | Status |
 | --- | --- | --- |
 | 1.5c.5a | Dolphin SFTP, safe URI handling and independent placement/remote outcomes | Accepted and closed; X11/Wayland native evidence |
 | 1.5c.5b | Positively identified TigerVNC viewer over owned authenticated SSH tunnel | Accepted and merged; supported peer capability |
 | 1.5c.5c | RDP interoperability, client comparison and viewer identity feasibility | Closed; affirmative maintainer decision; PR #28 |
-| 1.5c.5d | Add managed SDL RDP, preserving independent client contracts | Documentation preparation only; each source increment needs approval |
+| 1.5c.5d | Managed SDL RDP registration and deliberate placement; next configured `-o` integration | Candidate Option C implemented; native Wayland immediate placement verified once at `599f7f3`; repeat/X11/security and `-o` gates remain |
 | 1.5d | Broader integrated regression and `-L`/`-l` | Subsequent separate gate |
 
+**Latest RDP native evidence (2026-11-10):** The maintainer ran the `599f7f3` immediate-placement harness on `q552u01` (Wayland), with 789 Python and 161 JavaScript headless tests passing. Registration-to-placement submission took **6.43 ms** and the broker verified exact `(1,1) 800×628` at **116.16 ms**, while GDM content appeared later. This is a **single-run** development result; production `-o`, repeated Wayland launches, X11 smart-sizing regression, and remote-security outcomes remain separate. [Detailed evidence](task_step1.5/step1.5c5d-increment3-native-wayland-smart-sizing-immediate-placement-2026-11-10.md) · [task chronology](task_step1.5/README.md) · [active HANDOFF](task_step1.5/HANDOFF.md).
 **Implementation scope:** See [Step 1.5c.5 implementation scope and outline](task_step1.5/Step1.5c5_implementation_scope.md) for detailed objectives, program/mode contracts, investigation requirements, security constraints, acceptance criteria, and increment boundaries. The scope document guides planning and review; implementation authorization and execution controls are established separately in `task_step1.5/HANDOFF.md`.
 
 Additional installed RDP clients may now be evaluated deliberately, but are not
@@ -96,6 +97,12 @@ switches, duplicate slots rejected, and SSH logout returned to the **original
 local Bash** in the same managed Konsole. These were maintainer-executed
 native tests, not AI-run host operations. They are not universal timing or
 multi-monitor guarantees.
+
+## Current Step 1.5c.5d status (2026-11-10–11)
+
+**Increment 4 Stage 3 accepted:** the maintainer observed 869 Python and 161 JavaScript regressions passing on `gmki91`; native `gmki91` X11 and `q552u01` Wayland tests both proved serial Konsole success → verified clean RDP failure → Konsole success, success-only stack/focus and correct incomplete `2/3` result. RDP registration and VNC viewer-readiness defaults are now 300000 ms, with validated overrides. See [Stage 3 native acceptance and operator excerpts](task_step1.5/step1.5c5d-increment4-stage3-native-acceptance-2026-11-10-11.md).
+
+**Next: Stage 4A authorized for preparation, not yet dispatched to Codex.** Develop a short per-run template and separate annotated settings reference; keep today's CLI lookup untouched. Loader layering (Stage 4B) and optional user-owned `eselect` plan selector are independently gated. See [current HANDOFF](task_step1.5/HANDOFF.md) and [draft Stage 4A task](task_step1.5/step1.5c5d-increment4-stage4A-codex-task-DRAFT.md).
 
 ## Window configuration at a glance
 

@@ -130,6 +130,8 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.daemon = self.home / ".local/libexec/joetoo-kwind"
         self.override = self.home / ".config/rc/conf.d/joetoo-kwind"
         self.conf = self.home / ".config/rc/rc.conf"
+        self.rdp_module = self.home / ".local/libexec/joetoo_kwin_rdp_launch.py"
+        self.rdp_target = self.home / ".local/libexec/joetoo_kwin_rdp_target.py"
         self.vnc_modules = [self.home / '.local/libexec' / name for name in
                             ('joetoo_kwin_vnc_identity.py', 'joetoo_kwin_vnc_target.py',
                              'joetoo_kwin_vnc_launch.py')]
@@ -144,7 +146,10 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertEqual(self.daemon.read_bytes(), (ROOT / 'libexec/joetoo-kwind').read_bytes())
         self.assertEqual(self.override.read_bytes(), (ROOT / 'poc-user-conf.d/joetoo-kwind').read_bytes())
         self.assertEqual(self.conf.read_text(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC DISPLAY XAUTHORITY"\n')
-        self.assertIn('Installed nine user-owned', p.stdout)
+        self.assertIn('Installed eleven user-owned', p.stdout)
+        self.assertEqual(self.rdp_module.read_bytes(), (ROOT / 'libexec' / self.rdp_module.name).read_bytes())
+        self.assertEqual(self.rdp_module.stat().st_mode & 0o777, 0o644)
+        self.assertEqual(self.rdp_module.stat().st_uid, os.geteuid())
         for module in self.vnc_modules:
             self.assertEqual(module.read_bytes(), (ROOT / 'libexec' / module.name).read_bytes())
             self.assertEqual(module.stat().st_mode & 0o777, 0o644)
@@ -174,15 +179,15 @@ class InstallerIntegrationTests(unittest.TestCase):
                 module.chmod(0o644)
                 self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
 
-    def test_upgrade_six_file_install_adds_vnc_modules_and_is_content_idempotent(self):
+    def test_upgrade_six_file_install_adds_runtime_modules_and_is_content_idempotent(self):
         self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
-        for module in self.vnc_modules:
+        for module in [*self.vnc_modules, self.rdp_module]:
             module.unlink()
         self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 1)
         for _ in range(2):
             update = self.run_tool(INSTALL_TOOL, '--update')
             self.assertEqual(update.returncode, 0, update.stdout + update.stderr)
-            for module in self.vnc_modules:
+            for module in [*self.vnc_modules, self.rdp_module]:
                 self.assertEqual(module.read_bytes(), (ROOT / 'libexec' / module.name).read_bytes())
                 self.assertEqual(module.stat().st_mode & 0o777, 0o644)
             self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
@@ -214,11 +219,13 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertFalse(self.archive.exists())
         self.assertFalse(list(self.home.rglob('*.before-update.*')))
 
-    def test_mode_only_mismatches_checked_and_archived_for_all_nine_components(self):
+    def test_mode_only_mismatches_checked_and_archived_for_all_ten_components(self):
         self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
         installed = {
             'service': (self.service, 0o755), 'daemon': (self.daemon, 0o755),
             'override': (self.override, 0o644),
+            'rdp_launch': (self.rdp_module, 0o644),
+            'rdp_target': (self.rdp_target, 0o644),
             'registry': (self.daemon.with_name('joetoo_kwin_registry.py'), 0o644),
             'resident': (self.home / '.local/share/joetoo-kwin/joetoo-kwin-resident.js', 0o644),
             'cli': (self.home / '.local/bin/joetoo-kwin', 0o755),
@@ -296,10 +303,12 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertEqual(self.daemon.stat().st_mode & 0o7777, 0o600)
         self.assertEqual(self.archived('daemon', self.daemon.name), [])
 
-    def test_archive_all_nine_components_and_same_named_files_are_separate(self):
+    def test_archive_all_ten_components_and_same_named_files_are_separate(self):
         self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
         installed = {
             'service': self.service, 'daemon': self.daemon, 'override': self.override,
+            'rdp_launch': self.rdp_module,
+            'rdp_target': self.rdp_target,
             'registry': self.daemon.with_name('joetoo_kwin_registry.py'),
             'resident': self.home / '.local/share/joetoo-kwin/joetoo-kwin-resident.js',
             'cli': self.home / '.local/bin/joetoo-kwin',
@@ -593,7 +602,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         result = self.run_tool(INSTALL_TOOL, '--preview-legacy-backups')
         self.assertEqual(result.returncode, 0, result.stderr)
         records = [json.loads(line) for line in result.stdout.splitlines()]
-        self.assertEqual(len(records), 9)
+        self.assertEqual(len(records), 11)
         daemon = next(r for r in records if r['component'] == 'daemon')
         self.assertEqual(sorted(v['copies'] for v in daemon['versions']), [1, 2])
         self.assertEqual({p for v in daemon['versions'] for p in v['paths']}, set(map(str, files)))
@@ -750,6 +759,133 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertTrue((config_home / 'rc/rc.conf').is_file())
         self.assertTrue(self.daemon.is_file())
         self.assertTrue((config_home / 'rc/conf.d/joetoo-kwind').is_file())
+
+
+    def test_sdl_missing_outdated_or_wrong_mode_fails_nonmutating_check(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        original = self.rdp_module.read_bytes()
+        for kind in ('missing', 'outdated', 'mode'):
+            with self.subTest(kind=kind):
+                self.rdp_module.unlink()
+                if kind != 'missing':
+                    self.rdp_module.write_bytes(b'# old SDL adapter\n' if kind == 'outdated' else original)
+                    self.rdp_module.chmod(0o600 if kind == 'mode' else 0o644)
+                before = self.rdp_module.read_bytes() if self.rdp_module.exists() else None
+                check = self.run_tool(INSTALL_TOOL, '--check')
+                self.assertEqual(check.returncode, 1, check.stdout + check.stderr)
+                self.assertIn('Missing or outdated: ' + str(self.rdp_module), check.stdout)
+                self.assertEqual(self.rdp_module.read_bytes() if self.rdp_module.exists() else None, before)
+                self.assertFalse(self.archive.exists())
+                if not self.rdp_module.exists(): self.rdp_module.write_bytes(original)
+
+    def test_rdp_target_missing_outdated_mode_and_archival_lifecycle(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        source = (ROOT / 'libexec' / self.rdp_target.name).read_bytes()
+        self.assertEqual(self.rdp_target.read_bytes(), source)
+        self.assertEqual(self.rdp_target.stat().st_uid, os.geteuid())
+        self.assertEqual(self.rdp_target.stat().st_mode & 0o7777, 0o644)
+        for state in ('missing', 'outdated', 'mode'):
+            with self.subTest(state=state):
+                self.rdp_target.unlink()
+                if state != 'missing':
+                    self.rdp_target.write_bytes(b'# old parser\n' if state == 'outdated' else source)
+                    self.rdp_target.chmod(0o600 if state == 'mode' else 0o644)
+                check = self.run_tool(INSTALL_TOOL, '--check')
+                self.assertEqual(check.returncode, 1)
+                self.assertIn('Missing or outdated: ' + str(self.rdp_target), check.stdout)
+                update = self.run_tool(INSTALL_TOOL, '--update')
+                self.assertEqual(update.returncode, 0, update.stdout + update.stderr)
+                self.assertEqual(self.rdp_target.read_bytes(), source)
+                self.assertEqual(self.rdp_target.stat().st_mode & 0o7777, 0o644)
+                self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+        saved = self.archived('rdp_target', self.rdp_target.name)
+        self.assertTrue(any(path.read_bytes() == b'# old parser\n' for path in saved))
+
+    def test_sdl_nine_file_upgrade_and_repeat_update_idempotent(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.rdp_module.unlink()  # Simulate the previously complete nine-file install.
+        old = {p: p.read_bytes() for p in (self.daemon, self.service, self.override, *self.vnc_modules)}
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 1)
+        for _ in range(2):
+            result = self.run_tool(INSTALL_TOOL, '--update')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('Installed eleven user-owned', result.stdout)
+            self.assertEqual(self.rdp_module.read_bytes(), (ROOT / 'libexec' / self.rdp_module.name).read_bytes())
+            self.assertEqual(self.rdp_module.stat().st_mode & 0o7777, 0o644)
+            self.assertEqual(self.rdp_module.stat().st_uid, os.geteuid())
+            self.assertEqual({p: p.read_bytes() for p in old}, old)
+            self.assertFalse(self.archive.exists())
+            self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+
+    def test_sdl_update_archives_old_bytes_and_metadata_before_replacement(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        old = b'# prior SDL adapter\n'
+        self.rdp_module.write_bytes(old)
+        self.rdp_module.chmod(0o600)
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        saved, = self.archived('rdp_launch', self.rdp_module.name)
+        record = json.loads((saved.parent / 'provenance.json').read_text())
+        self.assertEqual(saved.read_bytes(), old)
+        self.assertEqual(record['mode'], '0o600')
+        self.assertEqual(record['installed_path'], str(self.rdp_module))
+        self.assertEqual(saved.stat().st_mode & 0o7777, 0o600)
+        self.assertEqual(saved.stat().st_uid, os.geteuid())
+        self.assertEqual(self.rdp_module.stat().st_mode & 0o7777, 0o644)
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
+
+    def test_sdl_symlinks_rejected_for_all_installer_actions(self):
+        self.rdp_module.parent.mkdir(parents=True)
+        target = self.home / 'unrelated'
+        target.write_bytes(b'untouched')
+        self.rdp_module.symlink_to(target)
+        for action in ('--install', '--update', '--check'):
+            result = self.run_tool(INSTALL_TOOL, action)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue(self.rdp_module.is_symlink())
+            self.assertEqual(target.read_bytes(), b'untouched')
+            self.assertFalse(self.daemon.exists())
+            self.assertFalse(self.archive.exists())
+
+    def test_sdl_archive_failure_keeps_active_adapter_and_other_files(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.rdp_module.write_bytes(b'# prior SDL adapter\n')
+        before = {p: p.read_bytes() for p in (self.rdp_module, self.daemon, self.service, *self.vnc_modules)}
+        self.inject_archive_python('import shutil\n'
+            'def fail(*args, **kwargs):\n'
+            '    raise OSError("injected SDL archive failure")\n'
+            'shutil.copy2 = fail\n')
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('injected SDL archive failure', result.stderr)
+        self.assertEqual({p: p.read_bytes() for p in before}, before)
+
+    def test_running_service_blocks_sdl_update_without_archive(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        self.rdp_module.write_bytes(b'# old SDL module\n')
+        self.rc_service.write_text('#!/bin/sh\nexit 0\n')
+        result = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.rdp_module.read_bytes(), b'# old SDL module\n')
+        self.assertFalse(self.archive.exists())
+
+    def test_sdl_foreign_ownership_is_not_current(self):
+        import shutil
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        # Simulate stat's UID result without chown or privileged test actions.
+        real_stat = shutil.which('stat')
+        wrapper = self.bindir / 'stat'
+        wrapper.write_text('#!' + sys.executable + '\nimport os, sys\n'
+            'if sys.argv[1:3] == ["-c", "%u"] and sys.argv[-1] == ' + repr(str(self.rdp_module)) + ':\n'
+            '    print(' + str(os.geteuid() + 1) + ')\n'
+            'else:\n    os.execv(' + repr(real_stat) + ', [' + repr(real_stat) + '] + sys.argv[1:])\n')
+        wrapper.chmod(0o755)
+        before = self.rdp_module.read_bytes()
+        check = self.run_tool(INSTALL_TOOL, '--check')
+        self.assertEqual(check.returncode, 1)
+        self.assertIn('Missing or outdated: ' + str(self.rdp_module), check.stdout)
+        self.assertEqual(self.rdp_module.read_bytes(), before)
+        self.assertFalse(self.archive.exists())
 
 
 if __name__ == '__main__':

@@ -8,6 +8,8 @@
 # shellcheck source=/usr/sbin/script_header_joetoo.shellcheck_func_stub
 source /usr/sbin/script_header_joetoo
 
+set -o pipefail   # capture proper status from pipelines
+
 PN=${0##*/}   #  like =$(basename $0) but w/o subshell and function call
 
 BUILD=$(date +%Y%m%d)
@@ -18,6 +20,8 @@ user="joe"
 project_dir="/home/${user}/joetoo-ai/workspace/projects/joetoo-kwin"
 bus=org.joetoo.KWinBridge
 path=/org/joetoo/KWinBridge
+kbus=org.kde.KWin
+kpath=/org/kde/KWin
 
 # ShellCheck thinks varlist is unused, but it is in script_header_joetoo
 # shellcheck disable=SC2034
@@ -49,17 +53,21 @@ rc-service -U joetoo-kwind stop &>/dev/null
 right_status $? "$notice"
 
 j_msg "-${notice}" -p "Running ./tools/joetoo-kwind-install-poc --update"
+
 ./tools/joetoo-kwind-install-poc --update | sed 's|^|    |'
+result=$?
 j_msg "-${notice}" -p -n "Update done; result:"
-handle_result $? "" "" "$notice"
+handle_result "$result" "" "" "$notice"
+
 
 j_msg "-${notice}" -p -n "Unloading joetoo-bridge KWin script"
 output=$(qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript joetoo-bridge)
 handle_result $? "$output" "$output" "$notice"
 
 j_msg "-${notice}" -p -n "Starting joetoo-kwind service"
-rc-service -U joetoo-kwind start >/dev/null 2>&1 | sed 's|^|    |'
-right_status $? "$notice"
+rc-service -U joetoo-kwind start >/dev/null 2>&1
+result="$?"
+right_status "$result" "$notice"
 
 if [ $# -eq 0 ]; then
     answer=""
@@ -70,25 +78,37 @@ fi
 case "${answer:0:1}" in
     [yYtT])
         j_msg "-${notice}" -p "Running python unit tests"
-        python3 -m unittest discover -s tests -p 'test_*.py' -v
+        if (( verbosity == debug )); then
+            python3 -m unittest discover -s tests -p 'test_*.py' -v
+        else
+            python3 -m unittest discover -s tests -p 'test_*.py'
+        fi
+        result=$?
         j_msg "-${notice}" -p -n "python tests done; result:"
-        handle_result $? "" "" "$notice"
+        handle_result "$result" "" "" "$notice"
         j_msg "-${notice}" -p "Running javascript unit tests"
         node --test tests/test_*.js
+        result=$?
         j_msg "-${notice}" -p -n "javascript tests done; result:"
-        handle_result $? "" "" "$notice"
+        handle_result "$result" "" "" "$notice"
         ;;
     [nN]) ;;  # no testing
     *) die "invalid answer in $PN" 2 ;;
 esac
 
 j_msg "-${notice}" -p "Running ./tools/joetoo-kwind-install-poc --check"
+
 ./tools/joetoo-kwind-install-poc --check | sed 's|^|    |'
+result=$?
 j_msg "-${notice}" -p -n "Checks done; result:"
-handle_result $? "" "" "$notice"
+handle_result "$result" "" "" "$notice"
 
 separator "${PN}-${BUILD}" "(available methods)"
+j_msg "-${notice}" -p "Running \"dbus introspection\" with: ${BBon}qdbus6 ${BMon}\$bus \$path${Boff}"
 qdbus6 "$bus" "$path" | sed 's|^|    |'
+result=$?
+j_msg "-${notice}" -p -n "dbus introspection done; result:"
+handle_result "$result" "" "" "$notice"
 
 j_msg "-${notice}" -p -n "Returning to [$old_dir]"
 cd "$old_dir" || die "failed to cd $old_dir"
@@ -96,7 +116,16 @@ right_status 0
 
 j_msg "-${notice}" -mp ""
 j_msg "-${notice}" -p "Make these abbreviation assignments to facilitate use of these methods"
-j_msg "-${notice}" -mp "bus=\"$bus\""
-j_msg "-${notice}" -mp "path=\"$path\""
+j_msg "-${notice}" -mp "bus=\"$bus\";  path=\"$path\""
+j_msg "-${notice}" -mp "kbus=\"$kbus\";  kpath=\"$kpath\""
 j_msg "-${notice}" -mp ""
-j_msg "-${notice}" -p "Example: qdbus6 \$bus \$path \$bus.ListManaged | jq ."
+j_msg "-${notice}" -p "Use these to list all interface/methods for each service"
+j_msg "-${notice}" -mp "qdbus6 \$bus \$path"
+j_msg "-${notice}" -mp "qdbus6 \$kbus \$kpath"
+j_msg "-${notice}" -mp ""
+j_msg "-${notice}" -p "Use these for more focused queries in the joetoo KWinBridge service"
+j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.ListManaged"
+j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.RegistryStatus"
+j_msg "-${notice}" -mp ""
+j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.ListManaged | jq ."
+j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.RegistryStatus | jq ."

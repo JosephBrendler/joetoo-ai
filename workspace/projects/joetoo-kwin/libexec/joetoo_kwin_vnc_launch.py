@@ -9,6 +9,7 @@ these applications. All control sockets and status files live in a private runti
 directory. No SSH backgrounding, -via shell command, shared master or credentials.
 """
 import json
+import secrets
 import os
 import re
 from pathlib import Path
@@ -28,8 +29,8 @@ BUS='org.joetoo.KWinBridge'
 PATH='/org/joetoo/KWinBridge'
 
 
-def dbus(method, *args, timeout):
-    r=subprocess.run(['qdbus6',BUS,PATH,BUS+'.'+method,*map(str,args)],
+def dbus(method, *args, timeout, destination=BUS):
+    r=subprocess.run(['qdbus6',destination,PATH,BUS+'.'+method,*map(str,args)],
                      capture_output=True,text=True,timeout=timeout,check=False)
     if r.returncode:
         # D-Bus stderr can contain untrusted remote text or argument echoes.
@@ -50,6 +51,30 @@ def dbus(method, *args, timeout):
                     'Unclassified broker rejection; inspect the broker log')
         raise RuntimeError('Broker call failed: '+method+' ['+(name.group(0) if name else 'D-Bus error')+']: '+detail)
     return r.stdout.strip()
+
+
+def broker_owner(timeout):
+    r=subprocess.run(['qdbus6','org.freedesktop.DBus','/org/freedesktop/DBus',
+        'org.freedesktop.DBus.GetNameOwner',BUS],capture_output=True,text=True,timeout=timeout,check=True)
+    name=r.stdout.strip()
+    if not re.fullmatch(r':[0-9]+\.[0-9]+',name): raise RuntimeError('Broker owner unavailable')
+    return name
+
+
+def read_status(folder):
+    fd=os.open(folder/'status',os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    try:
+        st=os.fstat(fd)
+        if (not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or
+            stat.S_IMODE(st.st_mode)!=0o600 or st.st_nlink!=1 or st.st_size>65536):
+            raise RuntimeError('Unsafe VNC status')
+        raw=os.read(fd,65537)
+        if len(raw)>65536: raise RuntimeError('VNC status budget exceeded')
+        value=json.loads(raw)
+        if not isinstance(value,dict) or value.get('state') not in ('pending','completed','failed','cancelled','unresolved'):
+            raise ValueError('Invalid VNC status schema')
+        return value
+    finally: os.close(fd)
 
 
 def ssh_argv(endpoint, control):
@@ -89,7 +114,9 @@ def stop_owned(process, timeout):
 
 def write_status(folder, payload):
     temporary=folder/'status.tmp'
-    temporary.write_text(json.dumps(payload));temporary.replace(folder/'status')
+    fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
+    with os.fdopen(fd,'w') as stream: json.dump(payload,stream)
+    temporary.replace(folder/'status')
 
 
 class Supervisor:
@@ -97,6 +124,7 @@ class Supervisor:
         self.job=job;self.folder=folder;self.bounds=settings(job)
         self.endpoint=target(job['target']);self.ssh=None;self.viewer=None
         self.registration='';self.placement='';self.registered=False;self.interrupted=False
+        self.owner=None;self.source=None;self.protected=False
         self.control=folder/'ssh';self.parent_fd=os.pidfd_open(job['frontend_pid'])
 
     def cancelled(self):
@@ -107,7 +135,10 @@ class Supervisor:
         time.sleep(self.bounds['vnc_supervisor_poll_interval_ms']/1000)
 
     def call(self, method, *args):
-        return dbus(method,*args,timeout=self.bounds['vnc_dbus_timeout_ms']/1000)
+        timeout=self.bounds['vnc_dbus_timeout_ms']/1000
+        if self.owner is None or broker_owner(timeout)!=self.owner:
+            raise RuntimeError('Broker owner changed or unavailable')
+        return dbus(method,*args,timeout=timeout,destination=self.owner)
 
     def start_tunnel(self):
         self.ssh=subprocess.Popen(ssh_argv(self.endpoint,self.control),stdin=subprocess.DEVNULL,
@@ -139,6 +170,11 @@ class Supervisor:
         outcome=dict(state='failed',detail='Viewer did not start',registration_request_id='',placement_request_id='')
         handed_off=False
         try:
+            self.owner=broker_owner(self.bounds['vnc_dbus_timeout_ms']/1000)
+            initial=json.loads(self.call('RegistryStatus'))
+            if initial['observation']['synchronized'] is not True:
+                raise RuntimeError('Observation unavailable')
+            self.source=initial['observation']['source']
             spec={key:self.job[key] for key in ('desktop','slot','x','y','width','height')}
             spec.update(self.bounds)
             ids=json.loads(self.call('SubmitManagedViewerLaunch',json.dumps(spec)))
@@ -183,31 +219,65 @@ class Supervisor:
             # Never echo raw command output, credentials or target input.
             outcome=dict(state='failed',detail=str(exc) if isinstance(exc,RuntimeError) else 'VNC launch operation failed')
         finally:
+            cleanup=dict(eligible=False,broker_terminal=False,children_reaped=False)
             if not self.registered:
-                cleanup_known=True
+                cleanup_known=False
                 try:
-                    if self.registration: self.call('CancelManagedViewerLaunch',self.registration)
-                except (OSError,RuntimeError,subprocess.SubprocessError): cleanup_known=False
-                # One cleanup failure must not prevent attempting the other
-                # owned child's cleanup. Unknown cleanup stops orchestration.
-                for process in (self.viewer,self.ssh):
-                    try: stop_owned(process,self.bounds['vnc_cleanup_timeout_ms']/1000)
-                    except (OSError,RuntimeError,subprocess.SubprocessError): cleanup_known=False
-                self.ssh=None
-                if not cleanup_known:
+                    if not self.registration: raise RuntimeError('No owned broker request')
+                    self.call('CancelManagedViewerLaunch',self.registration)
+                    terminal=json.loads(self.call('PollManagedLaunch',self.registration))
+                    if terminal.get('state')=='registered':
+                        # Never kill a viewer enrolled before a lost/cancelled reply.
+                        self.registered=True
+                        raise RuntimeError('Cancellation raced viewer registration')
+                    status=self.call('Status',self.placement)
+                    snapshot=json.loads(self.call('RegistryStatus'))
+                    windows=json.loads(self.call('ListManaged'))['windows']
+                    cleanup_known=(terminal.get('request_id')==self.registration and
+                        terminal.get('state') in ('failed','timeout') and
+                        terminal.get('detail') in (
+                            'Viewer launch cancelled or exited before readiness; cause unverified',
+                            'Viewer readiness timed out; authentication outcome unknown') and
+                        status.startswith('ERROR') and
+                        snapshot['observation']['synchronized'] is True and
+                        snapshot['observation']['source']==self.source and
+                        snapshot.get('viewer_cleanup_uncertain') is False and
+                        snapshot.get('initial_layout_active') is False and
+                        snapshot['request_counts']['pending']==snapshot['request_counts']['running']==0 and
+                        snapshot['presence_counts']['uncertain']==0 and
+                        snapshot['placement_transaction']['state'] in ('IDLE','OK','ERROR') and
+                        not any(w['intended']==dict(desktop=self.job['desktop'],slot=self.job['slot']) for w in windows))
+                    cleanup.update(broker_terminal=cleanup_known,terminal=terminal,
+                        registration_request_id=self.registration,placement_request_id=self.placement,
+                        broker_owner=self.owner,source=self.source)
+                except (OSError,RuntimeError,ValueError,KeyError,subprocess.SubprocessError):
+                    self.protected=self.viewer is not None
+                # Attempt both owned children, even when broker evidence is lost.
+                reaped=True
+                if not self.registered and not self.protected:
+                    for process in (self.viewer,self.ssh):
+                        try:
+                            stop_owned(process,self.bounds['vnc_cleanup_timeout_ms']/1000)
+                            if process is not None and process.returncode is None: reaped=False
+                        except (OSError,RuntimeError,subprocess.SubprocessError): reaped=False
+                    self.ssh=None  # Both cleanup attempts finished; uncertainty stays explicit.
+                else: reaped=False
+                cleanup.update(children_reaped=reaped,eligible=cleanup_known and reaped)
+                if not cleanup['eligible']:
                     outcome=dict(state='unresolved',detail='Owned VNC cleanup or broker cancellation is uncertain')
             elif not handed_off:
                 # Never close an enrolled viewer because placement/reporting
                 # failed. Stop subsequent launches until broker state is known.
                 outcome=dict(state='unresolved',detail='Registered viewer retained; layout finalization uncertain')
-            outcome.update(registration_request_id=self.registration,placement_request_id=self.placement,
+            outcome.update(cleanup=cleanup,nonce=self.job.get('nonce'),worker_pid=os.getpid(),
+                registration_request_id=self.registration,placement_request_id=self.placement,
                 viewer_pid=self.viewer.pid if self.viewer else None,
                 ssh_pid=self.ssh.pid if self.ssh else None,
                 desktop_readiness="verified" if self.registered else "not_verified",
                 vnc_authentication="unverified", remote_session_usability="unverified")
             write_status(self.folder,outcome)
         try:
-            if self.registered and self.viewer is not None:
+            if (self.registered or self.protected) and self.viewer is not None:
                 # No more broker dependence after handoff. Signals to this
                 # detached worker mean explicit cancellation, not broker stop.
                 os.close(self.parent_fd);self.parent_fd=None
@@ -243,20 +313,28 @@ def launch(job):
         raise RuntimeError('Private user runtime directory required')
     folder=Path(tempfile.mkdtemp(prefix='joetoo-vnc-',dir=runtime))
     job['frontend_pid']=os.getpid()
+    job['nonce']=secrets.token_hex(16)
     worker=subprocess.Popen([sys.executable,__file__,'--worker',str(folder)],stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True,close_fds=True,text=True)
     worker.stdin.write(json.dumps(job));worker.stdin.close()
     bounds=settings(job)
+    # Include pinned-owner lookups, startup/last-poll RPCs and terminal cleanup
+    # in the frontend envelope; each individual mechanical call keeps its bound.
     deadline=time.monotonic()+(bounds['vnc_ssh_start_timeout_ms']+bounds['vnc_viewer_ready_timeout_ms']+
-        bounds['vnc_cleanup_timeout_ms']*2+bounds['vnc_dbus_timeout_ms']*3+bounds['vnc_placement_timeout_ms'])/1000
+        bounds['vnc_cleanup_timeout_ms']*2+bounds['vnc_dbus_timeout_ms']*20+bounds['vnc_placement_timeout_ms'])/1000
     result=None
     def interrupt(signum,frame): raise KeyboardInterrupt
     for sig in (signal.SIGINT,signal.SIGTERM,signal.SIGHUP): signal.signal(sig,interrupt)
     try:
         while time.monotonic()<deadline:
-            try: result=json.loads((folder/'status').read_text())
-            except (OSError,ValueError): result=None
-            if result and result['state']!='pending': break
+            try: result=read_status(folder)
+            except FileNotFoundError: result=None
+            except (OSError,ValueError,RuntimeError):
+                result=dict(state='unresolved',detail='VNC status unavailable or invalid');break
+            if result and result['state']!='pending':
+                if result.get('nonce')!=job['nonce'] or result.get('worker_pid')!=worker.pid:
+                    result=None
+                break
             if worker.poll() is not None: break
             time.sleep(bounds['vnc_supervisor_poll_interval_ms']/1000)
     except KeyboardInterrupt:
@@ -264,12 +342,44 @@ def launch(job):
         try: worker.wait(timeout=(bounds['vnc_cleanup_timeout_ms']*2+bounds['vnc_dbus_timeout_ms'])/1000)
         except subprocess.TimeoutExpired: pass
         try:
-            final=json.loads((folder/'status').read_text())
-            result=dict(final,state='cancelled',detail='Configured launch cancelled; owned cleanup reported complete') if final['state'] not in ('pending','unresolved') else None
+            final=read_status(folder)
+            if final.get('nonce')!=job['nonce'] or final.get('worker_pid')!=worker.pid: raise ValueError('Foreign VNC outcome')
+            result=dict(final,state='cancelled',detail='Configured launch interrupted; consult registration and cleanup evidence') if final['state'] not in ('pending','unresolved') else None
         except (OSError,ValueError): result=None
     if not result or result['state']=='pending':
         (folder/'cancel').touch()
         result=dict(state='unresolved',detail='VNC supervisor final outcome unavailable; subsequent launches must stop')
+    result['continuation_eligible']=False
+    c=result.get('cleanup',{})
+    if not isinstance(c,dict):
+        result=dict(state='unresolved',detail='Invalid VNC cleanup schema',continuation_eligible=False);c={}
+    if c.get('eligible') is True:
+        try:
+            t=c.get('terminal',{})
+            if (result.get('state') not in ('failed','cancelled') or
+                any(c.get(k) is not True for k in ('broker_terminal','children_reaped')) or
+                t.get('request_id')!=result.get('registration_request_id') or
+                c.get('registration_request_id')!=result.get('registration_request_id') or
+                c.get('placement_request_id')!=result.get('placement_request_id') or
+                t.get('state') not in ('failed','timeout') or
+                t.get('detail') not in ('Viewer launch cancelled or exited before readiness; cause unverified',
+                    'Viewer readiness timed out; authentication outcome unknown') or
+                not c.get('source') or c.get('broker_owner')!=broker_owner(bounds['vnc_dbus_timeout_ms']/1000)):
+                raise RuntimeError('Invalid VNC cleanup receipt')
+            if worker.wait(timeout=bounds['vnc_cleanup_timeout_ms']/1000)!=0: raise RuntimeError('Worker cleanup exit failed')
+            if not (folder/'worker-exited').is_file(): raise RuntimeError('Worker exit unavailable')
+            snapshot=json.loads(dbus('RegistryStatus',timeout=bounds['vnc_dbus_timeout_ms']/1000,destination=c['broker_owner']))
+            windows=json.loads(dbus('ListManaged',timeout=bounds['vnc_dbus_timeout_ms']/1000,destination=c['broker_owner']))['windows']
+            if (snapshot['observation']['source']!=c['source'] or snapshot['observation']['synchronized'] is not True or
+                snapshot.get('viewer_cleanup_uncertain') is not False or snapshot.get('initial_layout_active') is not False or
+                snapshot['request_counts']['pending'] or snapshot['request_counts']['running'] or
+                snapshot['presence_counts']['uncertain'] or snapshot['placement_transaction']['state'] not in ('IDLE','OK','ERROR') or
+                any(w['intended']==dict(desktop=job['desktop'],slot=job['slot']) for w in windows) or
+                broker_owner(bounds['vnc_dbus_timeout_ms']/1000)!=c['broker_owner']):
+                raise RuntimeError('VNC cleanup session unavailable')
+            result['continuation_eligible']=True
+        except (OSError,RuntimeError,ValueError,KeyError,subprocess.SubprocessError):
+            result=dict(state='unresolved',detail='VNC cleanup receipt unavailable',continuation_eligible=False)
     (folder/'ack').touch()
     if (folder/'worker-exited').exists(): shutil.rmtree(folder,ignore_errors=True)
     print(json.dumps(result))

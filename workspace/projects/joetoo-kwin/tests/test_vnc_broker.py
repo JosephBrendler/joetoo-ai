@@ -50,7 +50,7 @@ class ViewerBrokerTests(TestCase):
         self.assertNotIn(AUTH,self.b.registry.managed_windows);self.assertTrue(self.observer.closed)
 
     def test_timeout_cleanup_and_no_late_registration(self):
-        self.now+=121
+        self.now+=301
         self.assertEqual(json.loads(self.b.PollManagedLaunch(self.rid))['state'],'timeout')
         self.assertTrue(self.observer.closed);self.assertEqual(self.b.TakeManagedViewer('source'),'')
 
@@ -97,7 +97,7 @@ class ViewerBrokerTests(TestCase):
         self.b._viewer_schedule_expiry(c);old=callbacks[-1][1]
         self.now+=1;self.b._viewer_schedule_expiry(c)
         old();self.assertEqual(c['state'],'PENDING')
-        self.now+=121;callbacks[-1][1]()
+        self.now+=301;callbacks[-1][1]()
         self.assertTrue(self.observer.closed)
         self.assertEqual(json.loads(self.b.PollManagedLaunch(self.rid))['state'],'timeout')
 

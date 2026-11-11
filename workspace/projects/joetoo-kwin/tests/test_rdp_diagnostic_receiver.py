@@ -621,7 +621,7 @@ elif sys.argv[1]=='--verify':
 else: sys.exit(1)
 ''')
         x11.with_suffix('.js').write_text('// companion template fixture\n')
-        proof = self.tools/'rdp_identity-security_proof.sh'
+        proof = self.tools/'rdp_identity-security_proof'
         proof.write_text(r'''#!/bin/bash
 python3 - "$@" <<'PROOF'
 import json, os, pathlib, sys, time

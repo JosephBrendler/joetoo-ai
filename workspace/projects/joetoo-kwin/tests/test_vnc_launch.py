@@ -72,11 +72,21 @@ class SupervisorTests(unittest.TestCase):
         self.worker.cancelled=lambda:False;self.worker.pause=lambda:None
         self.worker.start_tunnel=MagicMock(side_effect=lambda:setattr(self.worker,'ssh',self.ssh) or 4444)
         self.calls=[]
+        self.broker_cancelled=False
+        owner=patch.object(m,'broker_owner',return_value=':1.20');owner.start();self.addCleanup(owner.stop)
+        self.snapshot=dict(observation=dict(synchronized=True,source='source'),
+            viewer_cleanup_uncertain=False,initial_layout_active=False,request_counts=dict(pending=0,running=0),
+            presence_counts=dict(uncertain=0),placement_transaction=dict(state='ERROR'))
         def call(method,*args):
             self.calls.append((method,args))
             if method=='SubmitManagedViewerLaunch':return json.dumps(dict(registration_request_id='reg',placement_request_id='place'))
-            if method=='PollManagedLaunch':return json.dumps(dict(state='registered',managed_id='win-1',window_uuid='uuid'))
-            if method=='Status':return 'OK geometry verified'
+            if method=='RegistryStatus':return json.dumps(self.snapshot)
+            if method=='ListManaged':return '{"windows":[]}'
+            if method=='CancelManagedViewerLaunch':self.broker_cancelled=True;return ''
+            if method=='PollManagedLaunch':
+                if self.broker_cancelled:return json.dumps(dict(state='failed',request_id='reg',detail='Viewer launch cancelled or exited before readiness; cause unverified'))
+                return json.dumps(dict(state='registered',managed_id='win-1',window_uuid='uuid'))
+            if method=='Status':return 'ERROR cancelled' if self.broker_cancelled else 'OK geometry verified'
             return ''
         self.worker.call=call
 
@@ -134,12 +144,68 @@ class SupervisorTests(unittest.TestCase):
         result=json.loads((self.folder/'status').read_text());self.assertEqual(result['state'],'unresolved')
 
     def test_readiness_timeout_cleans_both_children_without_claiming_auth_failure(self):
-        with patch.object(m.time,'monotonic',side_effect=[100.,221.]):
+        with patch.object(m.time,'monotonic',side_effect=[100.,401.]):
             result,_,stop=self.run_worker()
         self.assertEqual(result['state'],'failed')
         self.assertIn('timed out',result['detail']);self.assertIn('unverified',result['detail'])
         self.assertEqual([call.args[0] for call in stop.call_args_list], [self.viewer,self.ssh])
         self.assertIn(('CancelManagedViewerLaunch',('reg',)),self.calls)
+
+    def test_real_pending_viewer_and_tunnel_reaped_before_clean_receipt(self):
+        import sys
+        children=[subprocess.Popen([sys.executable,'-c','import sys;sys.stdin.read()'],
+            stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True) for _ in range(2)]
+        try:
+            viewer,tunnel=children
+            self.worker.start_tunnel=lambda:setattr(self.worker,'ssh',tunnel) or 4444
+            with patch.object(m.subprocess,'Popen',return_value=viewer),patch.object(m.time,'monotonic',side_effect=[100.,401.]),patch.object(m.os,'close'):
+                self.worker.run()
+            result=json.loads((self.folder/'status').read_text())
+            self.assertTrue(result['cleanup']['eligible'])
+            self.assertTrue(result['cleanup']['broker_terminal'])
+            self.assertTrue(result['cleanup']['children_reaped'])
+            self.assertTrue(all(c.returncode is not None for c in children))
+        finally:
+            for child in children:
+                if child.poll() is None: child.kill();child.wait(timeout=3)
+                child.stdin.close()
+
+    def test_cancel_reply_failure_cannot_be_clean(self):
+        previous=self.worker.call
+        def call(method,*args):
+            if method=='CancelManagedViewerLaunch': raise RuntimeError('Reply unavailable')
+            return previous(method,*args)
+        self.worker.call=call
+        self.worker.start_tunnel=MagicMock(side_effect=RuntimeError('Transport failed'))
+        result,_,_=self.run_worker()
+        self.assertEqual(result['state'],'unresolved')
+        self.assertFalse(result['cleanup']['eligible'])
+
+    def test_source_loss_uncertain_observer_or_active_placement_cannot_be_clean(self):
+        previous=self.worker.call
+        baseline=json.loads(json.dumps(self.snapshot))
+        for field,key,value in (('observation','source','replaced'),(None,'viewer_cleanup_uncertain',True),
+                                 ('placement_transaction','state','RUNNING')):
+            with self.subTest(key=key):
+                self.snapshot=json.loads(json.dumps(baseline));self.broker_cancelled=False
+                def call(method,*args):
+                    if method=='CancelManagedViewerLaunch':
+                        (self.snapshot if field is None else self.snapshot[field])[key]=value
+                    return previous(method,*args)
+                self.worker.call=call
+                self.worker.start_tunnel=MagicMock(side_effect=RuntimeError('No viewer'))
+                result,_,_=self.run_worker()
+                self.assertFalse(result['cleanup']['eligible'])
+                self.assertEqual(result['state'],'unresolved')
+
+    def test_broker_calls_are_pinned_and_owner_replacement_is_rejected(self):
+        self.worker.owner=':1.20'
+        with patch.object(m,'dbus',return_value='{}') as send:
+            m.Supervisor.call(self.worker,'RegistryStatus')
+            self.assertEqual(send.call_args.kwargs['destination'],':1.20')
+        with patch.object(m,'broker_owner',return_value=':1.21'),patch.object(m,'dbus') as send:
+            with self.assertRaises(RuntimeError):m.Supervisor.call(self.worker,'RegistryStatus')
+            send.assert_not_called()
 
     def test_worker_removes_private_directory_and_control_path_after_frontend_ack(self):
         # Model a residual control-socket pathname; no SSH process or listener.
@@ -191,23 +257,35 @@ class FrontendTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.runtime=Path(self.tmp.name);self.runtime.chmod(0o700)
-        self.job=dict(target='ssh://Alias/display/2')
+        self.job=dict(target='ssh://Alias/display/2',desktop=2,slot=1)
 
-    def execute(self,cancel=False,worker_exited=False):
-        worker=MagicMock();worker.poll.return_value=None
+    def execute(self,cancel=False,worker_exited=False,clean=False,forged=False,source_lost=False,reap_failure=False):
+        worker=MagicMock();worker.pid=1234;worker.poll.return_value=None
         def write_final(*args, **kwargs):
             folder=next(self.runtime.iterdir())
-            m.write_status(folder,dict(state='failed' if cancel else 'completed',detail='mock outcome'))
+            value=dict(state='failed' if cancel or clean else 'completed',detail='mock outcome',
+                nonce=self.job['nonce'],worker_pid=worker.pid,registration_request_id='reg',placement_request_id='place')
+            if clean:
+                value['cleanup']=dict(eligible=True,broker_terminal=True,children_reaped=not forged,
+                    registration_request_id='reg',placement_request_id='place',broker_owner=':1.20',source='source',
+                    terminal=dict(state='failed',request_id='reg',detail='Viewer launch cancelled or exited before readiness; cause unverified'))
+                (folder/'worker-exited').touch()
+            m.write_status(folder,value)
             if worker_exited:
                 (folder/'ssh').touch()
                 (folder/'worker-exited').touch()
+            return 0
         worker.stdin.close.side_effect=None if cancel else write_final
-        worker.wait.side_effect=write_final
+        worker.wait.side_effect=subprocess.TimeoutExpired('owned worker',1) if reap_failure else write_final
         import io
         output=io.StringIO()
         with patch.dict(os.environ,{'XDG_RUNTIME_DIR':str(self.runtime)}), \
              patch.object(m,'preflight'),patch.object(m.subprocess,'Popen',return_value=worker) as spawn, \
              patch.object(m.signal,'signal'),patch.object(m.sys,'stdout',output), \
+             patch.object(m,'broker_owner',return_value=':1.20'), \
+             patch.object(m,'dbus',side_effect=lambda method,**kw: '{"windows":[]}' if method=='ListManaged' else json.dumps(dict(
+                 observation=dict(source='changed' if source_lost else 'source',synchronized=True),viewer_cleanup_uncertain=False,
+                 initial_layout_active=False,request_counts=dict(pending=0,running=0),presence_counts=dict(uncertain=0),placement_transaction=dict(state='ERROR')))), \
              patch.object(m.time,'sleep',side_effect=KeyboardInterrupt if cancel else None):
             result=m.launch(self.job)
         return result,json.loads(output.getvalue()),spawn,worker
@@ -222,6 +300,23 @@ class FrontendTests(unittest.TestCase):
         result,outcome,_,_=self.execute(worker_exited=True)
         self.assertEqual(result,0);self.assertEqual(outcome['state'],'completed')
         self.assertEqual(list(self.runtime.iterdir()),[])
+
+    def test_verified_clean_failure_is_eligible_only_after_worker_exit(self):
+        code,result,_,worker=self.execute(clean=True)
+        self.assertEqual(code,1)
+        self.assertTrue(result['continuation_eligible'])
+        worker.wait.assert_called_once()
+
+    def test_forged_cleanup_or_unreaped_worker_or_changed_source_stops(self):
+        for kwargs in (dict(forged=True),dict(reap_failure=True),dict(source_lost=True)):
+            with self.subTest(kwargs=kwargs):
+                for path in self.runtime.iterdir():
+                    import shutil
+                    shutil.rmtree(path)
+                code,result,_,_=self.execute(clean=True,**kwargs)
+                self.assertEqual(code,2)
+                self.assertEqual(result['state'],'unresolved')
+                self.assertFalse(result['continuation_eligible'])
 
     def test_frontend_cancellation_requests_owned_cleanup(self):
         result,outcome,spawn,worker=self.execute(cancel=True)
@@ -240,7 +335,7 @@ if '--preflight' in sys.argv: sys.exit(0)
 job=json.load(sys.stdin)
 with open(os.environ['TRACE'],'a') as trace: trace.write('viewer:'+str(job['desktop'])+'\\n')
 state=os.environ.get('VNC_RESULT','completed')
-print(json.dumps(dict(state=state,registration_request_id='reg',placement_request_id='place')))
+print(json.dumps(dict(state=state,registration_request_id='reg',placement_request_id='place',continuation_eligible=state=='failed')))
 sys.exit({'completed':0,'failed':1,'unresolved':2}[state])
 ''')
         self.write_config(['1|vncviewer|ssh|ssh://joe@Alias/display/2','2|konsole|local|btop'])
@@ -249,6 +344,23 @@ sys.exit({'completed':0,'failed':1,'unresolved':2}[state])
         self.assertEqual(self.execute(),['confirm','viewer:1','launch:1:2'])
         self.calls.unlink();self.env['VNC_RESULT']='failed';self.env['REG_STATE']='failed';self.env['PLACEMENT_STATE']='ERROR'
         self.assertEqual(self.execute(1),['confirm','viewer:1','launch:1:2'])
+
+    def test_partial_desktop_cohort_and_counts_after_clean_vnc_failure(self):
+        self.env['VNC_RESULT']='failed'
+        trace=self.folder/'cohort';self.env['COHORT']=str(trace)
+        self.client.write_text(self.client.read_text().replace(
+            'launch_registration_id=reg; launch_placement_id=place',
+            'launch_registration_id=reg-$2; launch_placement_id=place-$2').replace(
+            "*.SubmitInitialLayout) printf 'initial-layout-id\\n' ;;",
+            "*.SubmitInitialLayout) printf '%s\\n' \"$4\" >> \"$COHORT\"; printf 'initial-layout-id\\n' ;;"))
+        self.write_config(['1|konsole|local|btop|panel','1|vncviewer|ssh|ssh://Alias/display/2|under',
+                           '1|konsole|local|btop|over'])
+        run=subprocess.run(['bash',str(self.client),'-o','-f',str(self.config)],env=self.env,capture_output=True,text=True)
+        self.assertEqual(run.returncode,1,run.stdout+run.stderr)
+        self.assertIn('completed [2], failed [1], skipped [0]',run.stdout)
+        cohort,=[json.loads(row) for row in trace.read_text().splitlines()]
+        self.assertEqual(cohort['entries'],[dict(registration_request_id='reg-1',layer='panel'),
+                                            dict(registration_request_id='reg-3',layer='over')])
 
     def test_uncertain_viewer_finalization_stops_subsequent_entries(self):
         self.env['VNC_RESULT']='unresolved'
