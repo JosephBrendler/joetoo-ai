@@ -45,6 +45,9 @@ usage() {
     j_msg "-${notice}" -p "       ${PN} test-multi-launch  (TEST ONLY: register 4 local Konsoles)"
     j_msg "-${notice}" -p "       ${PN} -h"
     j_msg "-${notice}" -p "       ${PN} -o [-f CONFIG] (confirm and initialize configured desktop groups)"
+    j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -L DESKTOP PROGRAM MODE TARGET [over] (one managed window; omitted layer is over)"
+    j_msg "-${notice}" -p "       -L panel/under are not implemented yet; existing windows are never rearranged"
+    j_msg "-${notice}" -p "       ${PN} [-v|-q ...] -l (read-only managed inventory, including missing reservations)"
 }
 
 # Retain the positional move/test grammar. getopts handles common options and
@@ -67,7 +70,7 @@ parse_cmdline() {
             c|m|o|h|L|x|d|s|S|l|i)
                 [[ -z $cli_operation ]] || { bad_args 'select exactly one operation'; return 2; }
                 cli_operation=-$_pc_opt
-                [[ $_pc_opt != m ]] || break ;;
+                [[ $_pc_opt != m && $_pc_opt != L ]] || break ;;
             :) bad_args "option -${OPTARG} requires a value"; return 2 ;;
             *) bad_args "unknown option -${OPTARG}"; return 2 ;;
         esac
@@ -75,13 +78,34 @@ parse_cmdline() {
     shift "$((OPTIND - 1))"
     cli_args=("$@")
     [[ -n $cli_operation ]] || { bad_args 'select an operation'; return 2; }
-    if [[ $CONFIG_SELECTED && $cli_operation != -c && $cli_operation != -o && $cli_operation != -m ]]; then
-        bad_args '-f is supported only with -c, -o or layout movement'; return 2
+    if [[ $CONFIG_SELECTED && $cli_operation != -c && $cli_operation != -o && $cli_operation != -m && $cli_operation != -L ]]; then
+        bad_args '-f is supported only with -c, -o, -L or layout movement'; return 2
     fi
-    if [[ $cli_operation != -m && $# != 0 ]]; then
+    if [[ $cli_operation == -L ]]; then
+        validate_single_operands "$@" || return $?
+    elif [[ $cli_operation != -m && $# != 0 ]]; then
         bad_args 'unexpected operands'; return 2
     fi
     return 0
+}
+
+# Structural checks protect the shared pipe-recipe representation. Semantic
+# recipe/target validation remains in validate_plan and launch_preflight.
+validate_single_operands() {
+    local _so_name _so_value _so_i=0
+    local -a _so_names=(DESKTOP PROGRAM MODE TARGET LAYER)
+    (( $# == 4 || $# == 5 )) || { bad_args '-L requires DESKTOP PROGRAM MODE TARGET [over] as separate arguments'; return 2; }
+    for _so_value in "$@"; do
+        _so_name=${_so_names[$_so_i]}; _so_i=$((_so_i + 1))
+        if [[ $_so_value == *'|'* || $_so_value == *[$'\001'-$'\037'$'\177']* ]]; then
+            bad_args "-L: $_so_name is redacted; expected one recipe field without pipe/control characters"; return 2
+        fi
+    done
+    case ${5-over} in
+        over) ;;
+        panel|under) bad_args "-L: layer '${5}' is not implemented yet; use 'over' or omit LAYER"; return 2 ;;
+        *) bad_args '-L: invalid LAYER (redacted); expected over or omission'; return 2 ;;
+    esac
 }
 
 config_path_present() {
@@ -187,7 +211,7 @@ report_action() {
 }
 
 check_plan() {
-    local _cp_script_dir _cp_layer
+    local _cp_script_dir _cp_layer _cp_single_slot _cp_record
     _cp_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
     # Candidate helper is colocated under libexec; no installed-file changes.
     # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-plan-functions
@@ -201,7 +225,17 @@ check_plan() {
         source "$_cp_layer" || { j_msg "-${err}" -p "Configuration source failed [$_cp_layer]"; return 2; }
     done
     apply_cli_verbosity || return $?
+    # -L retains all selected configuration settings, replacing recipe intent only.
+    if [[ ${_op_single:-} ]]; then
+        printf -v _cp_record '%s|%s|%s|%s|over' "${_op_single_fields[@]:0:4}"
+        desktop_session_list=("$_cp_record")
+    fi
     plan_stage "$notice" 'Validating configured launch intent' validate_plan || return $?
+    if [[ ${_op_single:-} ]]; then
+        validate_launch_recipe_pair "${planned_program[0]}" "${planned_mode[0]}" || return $?
+        _cp_single_slot=$(list_managed_windows slot "${planned_desktop[0]}") || return $?
+        next_slot[${planned_desktop[0]}]=$((_cp_single_slot - 1))
+    fi
     plan_stage "$info" 'Calculating shared geometry' calculate_plan || return $?
     # Explicit varlist avoids unrelated workflow/status-file initialization.
     local notice_varlist="PN BUILD rlv.config screen_width screen_height"
@@ -576,6 +610,86 @@ test_multi_launch() {
     return 0
 }
 
+# ListManaged is the authority: never enumerate or adopt merely observed windows.
+# Validate the entire snapshot before printing rows; optional/private fields are
+# deliberately omitted. Listing does not source executable configuration files.
+list_managed_windows() {
+    local _lm_snapshot
+    if ! command -v qdbus6 >/dev/null || ! command -v python3 >/dev/null; then
+        j_msg "-${err}" -p 'Managed inventory requires qdbus6 and python3'; return 2
+    fi
+    _lm_snapshot=$(qdbus6 "$bus" "$path" "$iface.ListManaged" 2>/dev/null) || {
+        j_msg "-${err}" -p 'Managed inventory unavailable: broker ListManaged failed'; return 2; }
+    python3 - "${1:-table}" "${2:-}" 3<<< "$_lm_snapshot" <<'PY_LIST_MANAGED'
+import json
+import os
+import re
+import sys
+import uuid
+
+
+def unique_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate JSON key')
+        result[key] = value
+    return result
+
+
+try:
+    with os.fdopen(3) as stream:
+        inventory = json.load(stream, object_pairs_hook=unique_keys)
+    if (not isinstance(inventory, dict) or type(inventory.get('count')) is not int
+            or not isinstance(inventory.get('windows'), list)
+            or inventory['count'] != len(inventory['windows'])):
+        raise ValueError('invalid inventory')
+    rows = []
+    ids, uuids, slots = set(), set(), set()
+    for record in inventory['windows']:
+        identifier = record['managed_id']
+        window_uuid = record['window_uuid']
+        desktop, slot = record['intended']['desktop'], record['intended']['slot']
+        presence, placement = record['presence'], record['placement']
+        if (not isinstance(identifier, str) or not re.fullmatch(r'win-[0-9]+', identifier)
+                or int(identifier[4:]) < 1 or type(desktop) is not int or type(slot) is not int
+                or not 1 <= desktop <= 256 or not 1 <= slot <= 256
+                or not isinstance(window_uuid, str) or str(uuid.UUID(window_uuid)) != window_uuid
+                or presence not in ('present', 'missing', 'uncertain')
+                or placement not in ('not_requested', 'pending', 'succeeded', 'failed')
+                or identifier in ids or window_uuid in uuids or (desktop, slot) in slots):
+            raise ValueError('inconsistent record')
+        ids.add(identifier); uuids.add(window_uuid); slots.add((desktop, slot))
+        rows.append((identifier, desktop, slot, presence, placement, window_uuid))
+    rows.sort(key=lambda row: (row[1], row[2], int(row[0][4:])))
+except (ValueError, TypeError, KeyError, AttributeError, OSError, RecursionError):
+    print('joetoo-kwin: malformed or inconsistent managed inventory; no rows displayed', file=sys.stderr)
+    sys.exit(2)
+
+if sys.argv[1] == 'slot':
+    # Missing records reserve slots; uncertainty never grants launch eligibility.
+    if any(row[3] == 'uncertain' for row in rows):
+        print('-L: managed inventory is uncertain; no slot selected', file=sys.stderr)
+        sys.exit(2)
+    desktop = int(sys.argv[2])  # Already validated by the shared recipe validator.
+    occupied = {row[2] for row in rows if row[1] == desktop}
+    slot = next((n for n in range(1, 257) if n not in occupied), None)
+    if slot is None:
+        print(f'-L: desktop {desktop} has no unused logical slot in 1..256 (including missing reservations)', file=sys.stderr)
+        sys.exit(2)
+    print(slot)
+    sys.exit(0)
+
+if not rows:
+    print('No managed windows (no retained managed reservations).')
+else:
+    headers = ('MANAGED_ID', 'DESKTOP', 'SLOT', 'PRESENCE', 'PLACEMENT', 'WINDOW_UUID')
+    widths = [max(len(headers[i]), *(len(str(row[i])) for row in rows)) for i in range(len(headers))]
+    for row in [headers, *rows]:
+        print('  '.join(str(value).ljust(width) for value, width in zip(row, widths)).rstrip())
+PY_LIST_MANAGED
+}
+
 #-----[ main script ]----------------------------------------------------------------------------------
 
 # run as regular user, not root
@@ -585,7 +699,7 @@ checknotroot
 parse_cmdline "$@" || exit $?
 # -c loads configuration before applying these overrides; other operations do
 # not need layout configuration and retain their existing operational behavior.
-if [[ $cli_operation != -c && $cli_operation != -o && $cli_operation != -m && $cli_operation != move ]]; then apply_cli_verbosity || exit $?; fi
+if [[ $cli_operation != -c && $cli_operation != -o && $cli_operation != -L && $cli_operation != -m && $cli_operation != move ]]; then apply_cli_verbosity || exit $?; fi
 set -- "$cli_operation" "${cli_args[@]}"
 case ${1:-} in
     -m|move)
@@ -606,10 +720,11 @@ case ${1:-} in
         # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-plan-functions
         source "$launch_dir/libexec/joetoo-kwin-launch-functions" || exit 1
         open_plan ;;
-    -L) action="launch";   # launch (open) one window [maybe with mode (e.g. ssh_wrapper) and target]
-                           # note: this may be a separate executable (see test-launch prototype)
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
+    -L) action="launch";
+        shift
+        # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-launch-functions
+        source "$(dirname -- "${BASH_SOURCE[0]}")/libexec/joetoo-kwin-launch-functions" || exit 1
+        open_plan "$@" ;;
     -x) action="exit/close";   # close all managed windows
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
         exit 2 ;;
@@ -627,8 +742,7 @@ case ${1:-} in
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
         exit 2 ;;
     -l) action="list";   # list managed windows
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
+        list_managed_windows ;;
     -i) action="info";   # info on one window
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
         exit 2 ;;

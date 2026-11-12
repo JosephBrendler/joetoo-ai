@@ -8,7 +8,7 @@ const implementation = source.slice(source.indexOf('function initialLayoutFromBr
 function harness(layers, current=3, nativeIds=false) {
     const desktop = {x11DesktopNumber:3};
     const windows = layers.map((layer,i) => ({internalId:nativeIds ?
-        'abcdef00-0000-4000-8000-'+String(i+1).padStart(12,'0') : 'w'+i, layer, deleted:false, tile:null,
+        'abcdef00-0000-4000-8000-'+String(i+1).padStart(12,'0') : 'w'+i, layer, normalWindow:true, deleted:false, tile:null,
         maximizeMode:0, fullScreen:false, keepAbove:false, keepBelow:false, desktops:[desktop], onAllDesktops:false,
         frameGeometry:{x:i*100,y:0,width:100,height:100}}));
     const unrelated = {internalId:'unrelated'};
@@ -245,4 +245,29 @@ test('effective observation timing and the remaining transaction lease both boun
     const short=harness(['panel']);short.delayActivation();short.context.initialLayoutFromBroker();
     short.reply({remaining_ms:40});short.advance(40);
     assert.match(short.result.error,/expired/);assert.equal(short.activationRequests,1);short.assertClean();
+});
+
+
+test('single over raises only the owned UUID above earlier normal windows without moving peers',()=>{
+    const h=harness(['over']);
+    h.windows[0].normalWindow=true;
+    const peer={internalId:'previous',normalWindow:true,deleted:false,desktops:h.windows[0].desktops,
+        onAllDesktops:false,frameGeometry:{x:21,y:30,width:800,height:600},keepAbove:false};
+    h.workspace.stackingOrder=[h.windows[0],peer];
+    const before=JSON.stringify(peer);const calls=[];const raise=h.workspace.raiseWindow;
+    h.workspace.raiseWindow=function(w){calls.push(w.internalId);raise.call(this,w);};
+    h.context.initialLayoutFromBroker();h.reply({single_raise:true});
+    assert.deepEqual(calls,['w0']);assert.deepEqual(h.result.raise_order,['previous','w0']);
+    assert.equal(JSON.stringify(peer),before);assert.equal(h.result.error,undefined);
+    assert.equal(h.result.geometry_unchanged,true);h.assertClean();
+});
+
+test('single raise reports failure when a prior normal window remains above it',()=>{
+    const h=harness(['over'],1);h.windows[0].normalWindow=true;
+    const peer={internalId:'previous',normalWindow:true,deleted:false,desktops:h.windows[0].desktops,
+        onAllDesktops:false,keepAbove:true,frameGeometry:{x:0,y:0,width:200,height:200}};
+    h.workspace.stackingOrder=[h.windows[0],peer];h.workspace.raiseWindow=()=>{};
+    h.context.initialLayoutFromBroker();h.reply({single_raise:true});
+    assert.match(h.result.error,/raise did not verify/);assert.equal(peer.keepAbove,true);
+    assert.deepEqual(h.result.raise_order,['w0','previous']);assert.equal(h.activationRequests,0);
 });

@@ -365,3 +365,58 @@ Selection/verbosity: `joetoo-kwin` (`select_config`, `check_plan`,
 RDP identity bounds: `libexec/joetoo_kwin_rdp_launch.py`.
 These are checkout paths; the shipped reference is self-contained and does not
 require production hosts to have the source tree.
+
+## Managed inventory (`-l`)
+
+`joetoo-kwin -l` queries only the broker's `ListManaged` inventory. It does not
+source a plan/defaults file, launch an application, activate a window or change
+geometry. One fixed-column row shows each managed ID, intended desktop/slot,
+presence, placement and full UUID. Rows sort by desktop, slot, then managed ID;
+column widths expand for long IDs rather than truncating them. Missing and
+uncertain records remain visible because absence does not release reservations.
+An empty registry is reported explicitly; an unavailable broker or inconsistent
+response returns nonzero rather than an empty-success result. No remote login,
+TLS/connection state, target or private log path is inferred or printed.
+
+## Single managed launch (`-L`)
+
+`joetoo-kwin [-v|-q ...] [-f FILE] -L DESKTOP PROGRAM MODE TARGET [over]`
+accepts separate shell arguments, not a pipe-delimited string or raw application
+argv. Omitted layer means **over for `-L` only**. Explicit `over` is supported;
+`panel`, `under` and unknown/blank explicit layers are rejected before launch.
+Configured `-o` retains its implicit/blank **panel** default and all three layers.
+
+The ordinary configuration layers still supply screen dimensions, security,
+backend, geometry and mechanical limits. The selected per-run file's recipe
+array is replaced only for this invocation by the command-line recipe; its other
+settings remain effective. `-f` selects that settings/plan file normally and never
+changes a selected profile. Options precede `-L`; quote an empty TARGET for
+Dolphin's local home directory. Supported executable pairs are Konsole local/ssh,
+Dolphin local/sftp, TigerVNC ssh and SDL FreeRDP rdp, with their existing validators.
+
+The launch chooses an unused logical slot in 1..256 from authoritative retained
+reservations, including missing windows. Uncertain/malformed inventory or Busy
+state fails closed. The displayed one-entry plan uses the configured graphical
+region, without panel allocation, peer cascade or reflow. Confirmation precedes
+application/network launch and desktop provisioning. The same serial adapters
+positively register and place only the new UUID; state/slot checks repeat before
+submission and the broker independently guards reservation. A newly conflicting
+slot is rejected, not silently changed after confirmation.
+
+A one-entry initial-layout transaction raises only that UUID once and verifies it
+above the other observed normal application windows on the requested desktop.
+It also verifies unchanged existing-peer geometry and membership. No persistent
+keep-above flag or existing-window move is used. Special shell/dock layers are
+not ordinary application stacking; an existing normal keep-above window can
+prevent successful verification, which is reported as failure rather than forced
+through. An inactive desktop is not switched automatically; focus follows the
+existing initial-layout policy. Placement, one-shot stack/focus and remote login
+remain separate outcomes; an incomplete raise may leave a valid placed viewer
+and returns failure without closing it or releasing its reservation.
+
+`-L` requires a matching broker/resident advertising `single_raise_protocol=1`;
+an older pair is rejected before confirmation. The existing `-o` protocol remains
+compatible. Live-desktop reflow is withdrawn from Step 1.5d; the earlier
+[source review](../task_step1.5/step1.5d-managed-inventory-and-live-layout-review.md)
+is historical, not an active implementation requirement. See the
+[current headless candidate and native matrix](../task_step1.5/step1.5d-single-recipe-headless-candidate.md).

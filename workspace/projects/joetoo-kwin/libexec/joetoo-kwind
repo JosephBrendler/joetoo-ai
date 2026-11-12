@@ -141,6 +141,7 @@ class Broker(dbus.service.Object):
         self.observation_synced = False
         self.initial_layout = None
         self.initial_layout_protocol = 0
+        self.single_raise_protocol = 0
         self.viewer_protocol = 0
         self.move_protocol = 0  # Advertised by the synchronized resident, not inferred.
         # Step 1.3b diagnostic-only: one pending correlation probe. This is
@@ -1715,9 +1716,14 @@ class Broker(dbus.service.Object):
             if len(payload) > 65536:
                 raise ValueError("layout payload too large")
             message = json.loads(payload)
-            if (not {"entries"} <= set(message) <= {"entries", "focus_timeout_ms", "focus_poll_interval_ms"}
+            if (not {"entries"} <= set(message) <= {"entries", "focus_timeout_ms", "focus_poll_interval_ms", "single_raise"}
                     or not 1 <= len(message["entries"]) <= 256):
                 raise ValueError("invalid cohort")
+            single_raise = message.get("single_raise", False)
+            if "single_raise" in message and (single_raise is not True or self.single_raise_protocol != 1):
+                raise ValueError("single-window raise capability unavailable or invalid")
+            if single_raise and (len(message["entries"]) != 1 or message["entries"][0].get("layer") != "over"):
+                raise ValueError("single-window raise requires exactly one over registration")
             # Defaults retain old callers; new launchers convey effective user
             # configuration explicitly. Never assume daemon environment values.
             focus_timeout = message.get("focus_timeout_ms", 500)
@@ -1755,6 +1761,13 @@ class Broker(dbus.service.Object):
                                    source=self.observation_source, deadline=time.monotonic() + 10,
                                    focus_timeout_ms=focus_timeout, focus_poll_interval_ms=focus_interval,
                                    geometry="placed", stacking="pending", focus="pending", detail="")
+        if single_raise:
+            self.initial_layout["single_raise"] = True
+            desktop = entries[0]["desktop"]
+            self.initial_layout["raise_peers"] = {
+                key: deepcopy({name: value[name] for name in ("geometry", "desktops", "on_all_desktops")})
+                for key, value in self.observed_windows.items() if key != entries[0]["uuid"]
+                and (value["on_all_desktops"] or desktop in value["desktops"])}
         return self.initial_layout["id"]
 
     @dbus.service.method(IFACE, in_signature="s", out_signature="s")
@@ -1767,7 +1780,8 @@ class Broker(dbus.service.Object):
         r["state"] = "RUNNING"
         return json.dumps({key: r[key] for key in ("id", "entries", "order", "preferred_uuid", "source",
                                                  "focus_timeout_ms", "focus_poll_interval_ms")} |
-                          {"remaining_ms": max(0, int((r["deadline"] - time.monotonic()) * 1000))})
+                          {"remaining_ms": max(0, int((r["deadline"] - time.monotonic()) * 1000))} |
+                          ({"single_raise": True} if r.get("single_raise") else {}))
 
     @dbus.service.method(IFACE, in_signature="ss", out_signature="")
     def CompleteInitialLayout(self, request_id, payload):
@@ -1798,6 +1812,23 @@ class Broker(dbus.service.Object):
                             and observed.get("on_all_desktops") == e["on_all_desktops"]
                             for e, observed in observations)
             stack_ok = result.get("order") == r["order"] and result.get("geometry_unchanged") is True and unchanged
+            if r.get("single_raise"):
+                # Resident evidence must cover the full normal-window stack on this
+                # desktop, not the vacuous ordering of a one-element cohort.
+                order = result.get("raise_order")
+                desktop = r["entries"][0]["desktop"]
+                expected = {key for key, value in self.observed_windows.items()
+                            if value["on_all_desktops"] or desktop in value["desktops"]}
+                peers_unchanged = all(self.observed_windows.get(key) is not None and
+                    all(self.observed_windows[key][name] == value[name] for name in value)
+                    for key, value in r["raise_peers"].items())
+                raise_ok = (isinstance(order, list) and all(isinstance(key, str) for key in order)
+                            and len(order) == len(set(order)) and set(order) == expected
+                            and bool(order) and order[-1] == r["order"][0] and peers_unchanged)
+                stack_ok = stack_ok and raise_ok
+                if not raise_ok and not result.get("error"):
+                    result["error"] = "Single-window raise or existing-peer geometry did not verify"
+
             visible = (r["preferred_uuid"] is not None and result.get("current_desktop") == r["entries"][0]["desktop"])
             if r["preferred_uuid"] is None:
                 focus_ok = result.get("focus_attempted") is False and result.get("active_uuid") == result.get("before_active_uuid")
@@ -2476,6 +2507,7 @@ class Broker(dbus.service.Object):
         self.observation_revision = revision
         self.observation_synced = True
         self.initial_layout_protocol = (1 if type(message.get("initial_layout_protocol")) is int and message.get("initial_layout_protocol") == 1 else 0)
+        self.single_raise_protocol = (1 if type(message.get("single_raise_protocol")) is int and message.get("single_raise_protocol") == 1 else 0)
         self.viewer_protocol = (1 if type(message.get("viewer_protocol")) is int and message.get("viewer_protocol") == 1 else 0)
         self.move_protocol = move_protocol
         # Do not invent "removed" events for entries absent in the snapshot:
@@ -2597,6 +2629,7 @@ class Broker(dbus.service.Object):
             "viewer_protocol": self.viewer_protocol,
             "viewer_cleanup_uncertain": bool(self._managed_correlation and self._managed_correlation.get("observer_cleanup_uncertain")),
             "initial_layout_protocol": self.initial_layout_protocol,
+            "single_raise_protocol": self.single_raise_protocol,
             "initial_layout_active": self._initial_layout_active(),
             "managed_count": len(self.registry.managed_windows),
             "presence_counts": presence,

@@ -371,7 +371,7 @@ modifiable by unrelated processes.
 | --- | --- |
 | `-c [-f CONFIG]` | Validate config and display a colorized dry-run plan without launching |
 | `-o [-f CONFIG]` | Confirm then launch and positively register/position managed windows |
-| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | Confirm then launch and positively register/position one managed window |
+| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | Confirm then launch one managed window above existing windows; `over` is the only implemented layer (also the default), no live-desktop reflow |
 | `-m l|r` | Two-panel active-window geometry on current desktop |
 | `-m DESKTOP` | Change active window's desktop, preserve geometry |
 | `-m DESKTOP l|r` | Two-panel placement on specified desktop |
@@ -381,11 +381,54 @@ modifiable by unrelated processes.
 | `-x` | Gracefully close all positively managed windows, not unrelated ones (future 1.6) |
 | `-a` | Add one managed window (future; syntax TBD) |
 | `-d MANAGED_ID` | Close one safely validated managed window (future 1.6) |
-| `-l`, `-i MANAGED_ID`, `-s` | Readable registry/detail/application-status interfaces as supported |
+| `-l` | List broker-managed windows read-only, one record per fixed-width table row, including stable managed ID, desktop/slot, presence, placement and UUID (Step 1.5d) |
+| `-i MANAGED_ID`, `-s` | Additional detail/application-status interfaces, not implemented in Step 1.5d |
 | `-S` | Export reusable layout (future 1.8) |
 | `-r` | Restore a saved last-good layout using new instances (future 1.8) |
 | `-f FILE` | Explicit configuration precedence, no implicit symlink edits |
 | `-v`, `-q` | Adjust verbosity using established joetoo CLI conventions |
+
+**Step 1.5d CLI decisions (maintainer, revised 2026-11-11).** The `-L` operands
+are the same logical fields as one `-o` recipe, but supplied as **separate
+positional arguments**, not a single pipe-delimited argument:
+`DESKTOP PROGRAM MODE TARGET [LAYER]`. **Only `over` is implemented for `-L`**:
+an omitted LAYER defaults to `over`; explicit `over` is supported; explicit
+`panel` or `under` must be rejected before launch with a helpful diagnostic
+such as `-L: layer 'panel' is not implemented yet; use 'over' or omit LAYER`.
+Do not promise a release/version for unsupported layers. Crucially, `-o`
+retains its accepted `under`/`panel`/`over` layers and implicit `panel` default.
+
+`-L` launches **one** new window, using the existing program/mode/target
+validators, graphical-region geometry, confirmation, broker reservation,
+positive exact-UUID registration, placement and cleanup machinery. It chooses
+an unused logical slot without modifying any existing or retained reservation;
+there is no sixth SLOT operand. It places the new window on its requested
+desktop and performs a bounded, verified **one-shot raise** so it appears above
+existing windows, without a permanent keep-above rule. It must not change the
+geometry, ownership or identity of existing managed **or unmanaged** windows,
+and must not perform live-desktop panel reflow, peer recascading or a new
+application-independent managed-ID geometry transaction. Before launching or
+contacting a remote endpoint, report the specific invalid field/requirement
+(desktop/program/mode/target/layer), safely redacting sensitive input.
+Preserve already-accepted `-o` behavior and fail-closed Busy/source/identity
+requirements. If a one-shot raise cannot be positively targeted and verified
+on both KWin backends, report the constraint instead of adopting a different
+window or weakening ownership.
+
+The formerly proposed live-desktop reflow and broker/resident transaction
+extension remain historical design research, **not** Step 1.5d requirements.
+See the source review under `task_step1.5/` for that earlier investigation.
+
+The `-l` command displays the broker's **managed** inventory read-only as
+aligned, fixed-width columns, **one row per managed record**. At minimum
+include `MANAGED_ID`, `DESKTOP`, `SLOT`, `PRESENCE`, `PLACEMENT` and the
+full `WINDOW_UUID`, clearly showing retained missing records and original
+desktop/slot reservation. Human operators need the stable ID to refer to
+other managed windows in future `-d`/close commands; listing must not
+silently select, activate, or change any window. Preserve authoritative
+broker status without inventing remote connection or authentication state;
+distinguish an empty registry from unavailable or inconsistent broker state.
+Additional fields may be shown if actually exposed and safe.
 
 Retain `j_msg`, announce/act/report, `separator`, color styling, effective
 `varlist`/`show_config`, and the script-header joetoo CLI conventions. A
@@ -435,8 +478,8 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.5a** | Dolphin SFTP integration | Accepted and closed; managed X11/Wayland launches and remote browsing demonstrated; optional post-confirmation NSS/TCP advisories remain non-enforcing diagnostics |
 | **1.5c.5b** | TigerVNC viewer over authenticated SSH | Accepted and retained as a peer-level managed graphical remote-access option; native X11 and Wayland/XWayland identity, placement, SSH tunnel and teardown demonstrated |
 | **1.5c.5c** | Comparative RDP feasibility and decision | **Closed:** affirmative feasibility accepted; SDL3 FreeRDP selected for first RDP implementation, not as a preferred/default client |
-| **1.5c.5d** | Managed RDP, beginning with SDL FreeRDP | **In progress, incrementally gated:** native-Wayland and X11 registration accepted; X11 placement demonstrated; Wayland placement/timing and size acceptance remain open; configured serial launch and security acceptance remain future work |
-| **1.5d** | add -L, -l; conduct integrated native X11/Wayland regression of completed Step 1.5 capabilities | Cross-feature ownership, Busy, focus, desktop membership, failures and completeness; not an implicit feature-development gate |
+| **1.5c.5d** | Managed SDL FreeRDP under configured `-o` | **ACCEPTED, CLOSED AND MERGED (2026-11-11, PR #29)**: exact UUID/placement/lifecycle on native X11/Wayland, layered configuration, bounded clean-failure continuation, strict `/sec:nla /cert:deny` defaults, successful trusted GDM connection and automatic invalid-certificate refusal with verified cleanup; see final Increment 5 evidence |
+| **1.5d** | Implement `-L` one-recipe single-window launch (`over` only; no reflow), retain read-only `-l` inventory; run integrated native X11/Wayland regression | **IN PROGRESS**: Codex reports `-l` candidate and tests implemented; `-L` remains to implement under simplified scope. Preserve field-specific validation, safe logical-slot reservation, exact-UUID placement, one-shot raise, existing-window geometry and accepted `-o` semantics |
 | **1.6** | Managed `-a`, `-d`, `-x` | Selective safe close, never unrelated windows |
 | **1.7** | Runtime JSON checkpoint and same-session reconciliation | Broker restart and exact source/UUID reconciliation |
 | **1.8** | Restorable `.conf` snapshot, `-S`, `-r` | New-window recovery from validated last-good intent |
@@ -544,6 +587,31 @@ shared managed-window infrastructure. Do not impose SDL-specific identity
 assumptions on VNC or other RDP clients or introduce a speculative plugin
 framework. Preserve the accepted TigerVNC behavior.
 
+**1.5c completed milestone — accepted baseline (2026-11-11).** Steps
+1.5c.1–1.5c.5d are complete and maintainer-accepted. The final SDL FreeRDP
+increment added serial configured managed RDP for X11 and Wayland, verified
+exact-UUID placement/stacking, five-minute readiness and known-clean failure
+continuation, system/user/per-run configuration layering, optional non-root
+user-owned `eselect` profiles, configuration reference, and two validated
+security-policy settings. Built-in `rdp_security_protocol=nla` maps to
+`/sec:nla` (the alternate `negotiate` omits `/sec:`), and
+`rdp_certificate_policy=strict` maps to `/cert:deny` (the alternate
+`prompt` omits `/cert:`). Native `gmki91` verified the strict trusted-name
+connection and automatic certificate-name mismatch refusal, including
+verified terminal broker/child cleanup; native `q552u01` Wayland RDP
+interoperability and managed placement were accepted earlier. Final source
+landed in `main` via [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29)
+(merge `3e9c4bf311bc65b32d332a00d3b50163a9043303`). See
+[final Increment 5 evidence](task_step1.5/step1.5c5d-increment5-final-native-acceptance-2026-11-11.md)
+and [current task HANDOFF](task_step1.5/HANDOFF.md).
+
+**Historical design material below:** The earlier Wayland-placement diagnostic,
+Option C proposal and historical gate sequence document decisions *before*
+completion; statements there that placement/security/configured launch remain
+unimplemented are superseded by this accepted milestone. Option D's
+multi-pending-client proposal remains deliberately deferred. Do not interpret
+historical work-in-progress language as reopening accepted Step 1.5c.
+
 **1.5c.5d — Managed RDP implementation (phased).** SDL FreeRDP is the first
 RDP client. Its native-Wayland and native-X11 registration selectors are
 implemented and have separate native acceptance evidence; they distinguish
@@ -624,14 +692,16 @@ reported `mc` build has `-sftp`; do not assume SFTP support without
 rebuilding or inspecting capabilities. Availability does **not** establish
 that these candidates belong in the immediate implementation tranche.
 
-**Security and sequencing:** The affirmative feasibility result does not
+**Historical pre-production security rationale (superseded by accepted Increment 5):** The affirmative feasibility result did not
 establish production TLS certificate trust, server identity or secure
 negotiation policy. Validate those for each client/endpoint; do not infer
 them from `tls`, NLA or successful remote use, and do not weaken certificate
 checks to obtain a passing demonstration. Preserve TigerVNC's independently
-approved SSH tunnel/host-key protections. Step 1.5c.5d precedes the
-separately authorized Step 1.5d integrated X11/Wayland regression; this
-architecture grants no source, native-execution or publication authority.
+approved SSH tunnel/host-key protections. Increment 5 subsequently implemented
+and natively verified strict NLA/certificate-refusal defaults, as recorded above.
+Step 1.5c.5d is accepted and merged; Step 1.5d integrated X11/Wayland
+regression remains subsequent work. This architecture grants no source,
+native-execution or publication authority.
 
 ### Phase 2 — Optimization and refinement
 

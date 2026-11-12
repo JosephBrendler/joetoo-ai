@@ -214,6 +214,33 @@ class LauncherTests(unittest.TestCase):
         self.assertTrue(receipts[0]['child_reaped'])
         self.assertEqual(json.loads(self.f.b.ListManaged())['count'], 0)
 
+    def test_owned_nla_diagnostic_does_not_change_real_child_cleanup_or_terminal_result(self):
+        self.mode='deadline';receipts=[];diagnostics=[]
+        def rejected(duration):
+            # Only this child's original stdout FD is used; no /tmp search.
+            path='/proc/%d/fd/1' % self.child.pid
+            with open(path,'ab') as stream:
+                stream.write(('[09:11:16:000] [%d:0000abcd] [ERROR][com.freerdp.core] - [nla_recv_pdu]: ERRCONNECT_LOGON_FAILURE [0x00020014]\n' % self.child.pid).encode())
+            self.child.stdin.close();self.child.wait(timeout=3);self.f.loop.tick()
+        self.wait=rejected
+        with self.assertRaisesRegex(RuntimeError,'Child exited before registration'):
+            self.run_launcher(on_cleanup=receipts.append,on_diagnostic=diagnostics.append)
+        self.assertEqual(diagnostics,['rdp_nla_logon_rejected'])
+        self.assertTrue(receipts[0]['eligible']);self.assertTrue(receipts[0]['child_reaped'])
+        self.assertEqual(receipts[0]['terminal']['reason'],'child_identity_rejected')
+        self.assertNotIn('diagnostic',receipts[0])
+        self.assertTrue(receipts[0]['resources_released'])
+
+    def test_registered_success_is_not_reclassified_from_a_log_error(self):
+        diagnostics=[]
+        def exited(duration):
+            with open('/proc/%d/fd/1' % self.child.pid,'ab') as stream:
+                stream.write(('[09:11:16:000] [%d:0000abcd] [ERROR][com.freerdp.core] - [nla_recv_pdu]: ERRCONNECT_LOGON_FAILURE [0x00020014]\n' % self.child.pid).encode())
+            self.child.stdin.close();self.child.wait(timeout=3)
+        self.wait=exited
+        self.assertEqual(self.run_launcher(on_diagnostic=diagnostics.append),0)
+        self.assertEqual(diagnostics,[])
+
     def test_unknown_cancel_reply_retains_real_owned_child_without_clean_claim(self):
         self.mode = 'deadline'
         receipts = []
