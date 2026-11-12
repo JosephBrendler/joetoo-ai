@@ -365,3 +365,18 @@ Selection/verbosity: `joetoo-kwin` (`select_config`, `check_plan`,
 RDP identity bounds: `libexec/joetoo_kwin_rdp_launch.py`.
 These are checkout paths; the shipped reference is self-contained and does not
 require production hosts to have the source tree.
+
+## Managed inventory (`-l`)
+
+`joetoo-kwin -l` queries only the broker's `ListManaged` inventory. It does not
+source a plan/defaults file, launch an application, activate a window or change
+geometry. One fixed-column row shows each managed ID, intended desktop/slot,
+presence, placement and full UUID. Rows sort by desktop, slot, then managed ID;
+column widths expand for long IDs rather than truncating them. Missing and
+uncertain records remain visible because absence does not release reservations.
+An empty registry is reported explicitly; an unavailable broker or inconsistent
+response returns nonzero rather than an empty-success result. No remote login,
+TLS/connection state, target or private log path is inferred or printed.
+
+The live-desktop `-L` reflow contract is not implemented by the inventory change;
+see the [Step 1.5d source review](../task_step1.5/step1.5d-managed-inventory-and-live-layout-review.md).

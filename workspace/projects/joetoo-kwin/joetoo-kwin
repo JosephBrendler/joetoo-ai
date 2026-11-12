@@ -45,6 +45,7 @@ usage() {
     j_msg "-${notice}" -p "       ${PN} test-multi-launch  (TEST ONLY: register 4 local Konsoles)"
     j_msg "-${notice}" -p "       ${PN} -h"
     j_msg "-${notice}" -p "       ${PN} -o [-f CONFIG] (confirm and initialize configured desktop groups)"
+    j_msg "-${notice}" -p "       ${PN} [-v|-q ...] -l (read-only managed inventory, including missing reservations)"
 }
 
 # Retain the positional move/test grammar. getopts handles common options and
@@ -576,6 +577,72 @@ test_multi_launch() {
     return 0
 }
 
+# ListManaged is the authority: never enumerate or adopt merely observed windows.
+# Validate the entire snapshot before printing rows; optional/private fields are
+# deliberately omitted. Listing does not source executable configuration files.
+list_managed_windows() {
+    local _lm_snapshot
+    if ! command -v qdbus6 >/dev/null || ! command -v python3 >/dev/null; then
+        j_msg "-${err}" -p 'Managed inventory requires qdbus6 and python3'; return 2
+    fi
+    _lm_snapshot=$(qdbus6 "$bus" "$path" "$iface.ListManaged" 2>/dev/null) || {
+        j_msg "-${err}" -p 'Managed inventory unavailable: broker ListManaged failed'; return 2; }
+    python3 - 3<<< "$_lm_snapshot" <<'PY_LIST_MANAGED'
+import json
+import os
+import re
+import sys
+import uuid
+
+
+def unique_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate JSON key')
+        result[key] = value
+    return result
+
+
+try:
+    with os.fdopen(3) as stream:
+        inventory = json.load(stream, object_pairs_hook=unique_keys)
+    if (not isinstance(inventory, dict) or type(inventory.get('count')) is not int
+            or not isinstance(inventory.get('windows'), list)
+            or inventory['count'] != len(inventory['windows'])):
+        raise ValueError('invalid inventory')
+    rows = []
+    ids, uuids, slots = set(), set(), set()
+    for record in inventory['windows']:
+        identifier = record['managed_id']
+        window_uuid = record['window_uuid']
+        desktop, slot = record['intended']['desktop'], record['intended']['slot']
+        presence, placement = record['presence'], record['placement']
+        if (not isinstance(identifier, str) or not re.fullmatch(r'win-[0-9]+', identifier)
+                or int(identifier[4:]) < 1 or type(desktop) is not int or type(slot) is not int
+                or not 1 <= desktop <= 256 or not 1 <= slot <= 256
+                or not isinstance(window_uuid, str) or str(uuid.UUID(window_uuid)) != window_uuid
+                or presence not in ('present', 'missing', 'uncertain')
+                or placement not in ('not_requested', 'pending', 'succeeded', 'failed')
+                or identifier in ids or window_uuid in uuids or (desktop, slot) in slots):
+            raise ValueError('inconsistent record')
+        ids.add(identifier); uuids.add(window_uuid); slots.add((desktop, slot))
+        rows.append((identifier, desktop, slot, presence, placement, window_uuid))
+    rows.sort(key=lambda row: (row[1], row[2], int(row[0][4:])))
+except (ValueError, TypeError, KeyError, AttributeError, OSError, RecursionError):
+    print('joetoo-kwin: malformed or inconsistent managed inventory; no rows displayed', file=sys.stderr)
+    sys.exit(2)
+
+if not rows:
+    print('No managed windows (no retained managed reservations).')
+else:
+    headers = ('MANAGED_ID', 'DESKTOP', 'SLOT', 'PRESENCE', 'PLACEMENT', 'WINDOW_UUID')
+    widths = [max(len(headers[i]), *(len(str(row[i])) for row in rows)) for i in range(len(headers))]
+    for row in [headers, *rows]:
+        print('  '.join(str(value).ljust(width) for value, width in zip(row, widths)).rstrip())
+PY_LIST_MANAGED
+}
+
 #-----[ main script ]----------------------------------------------------------------------------------
 
 # run as regular user, not root
@@ -627,8 +694,7 @@ case ${1:-} in
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
         exit 2 ;;
     -l) action="list";   # list managed windows
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
+        list_managed_windows ;;
     -i) action="info";   # info on one window
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
         exit 2 ;;
