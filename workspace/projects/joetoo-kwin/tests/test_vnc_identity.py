@@ -59,18 +59,34 @@ class IdentityPrototypeTests(unittest.TestCase):
         import socket
         import os
         import threading
+        import time
         from unittest.mock import patch
+        original=m.C.CDLL
+        native=original(m.ctypes_library())
+        native.xcb_connect_to_fd.argtypes=[C.c_int,C.c_void_p]
+        native.xcb_connect_to_fd.restype=C.c_void_p
         client,server=socket.socketpair()
-        server.settimeout(2)
+        deadline=time.monotonic()+2
         errors=[];masks=[]
+        phase='setup'
+        def remaining():
+            timeout=deadline-time.monotonic()
+            if timeout<=0: raise TimeoutError('Fake X11 peer deadline: '+phase)
+            server.settimeout(timeout)
         def exact(count):
             result=b''
             while len(result)<count:
+                remaining()
                 part=server.recv(count-len(result))
                 if not part: raise EOFError
                 result+=part
             return result
+        def send(data):
+            remaining()
+            self.assertEqual(os.write(server.fileno(),data),len(data),
+                             'Short fake X11 write: '+phase)
         def peer():
+            nonlocal phase
             try:
                 hello=exact(12)
                 order='<' if hello[0]==ord('l') else '>'
@@ -80,30 +96,37 @@ class IdentityPrototypeTests(unittest.TestCase):
                     1,0x200000,0x1fffff,0,0,65535,1,0,0,0,32,32,8,255)
                 screen=struct.pack(order+'IIIIIHHHHHHIBBBB',1,2,0xffffff,0,0,
                     1920,1080,500,300,1,1,3,0,0,24,0)
-                os.write(server.fileno(),setup+screen)
-                sequence=0;sent=False
+                send(setup+screen)
+                sequence=0;selection_sequence=None;sent=False
                 while True:
+                    phase='request header'
                     header=exact(4);opcode=header[0];size=struct.unpack_from(order+'H',header,2)[0]*4
+                    phase='request '+str(opcode)
                     data=header+exact(size-4);sequence+=1
                     if opcode==16:
-                        os.write(server.fileno(),struct.pack(order+'BBHII20x',1,0,sequence,0,9))
+                        send(struct.pack(order+'BBHII20x',1,0,sequence,0,9))
                     elif opcode==2:
                         masks.append(struct.unpack_from(order+'I',data,12)[0])
+                        selection_sequence=sequence
                     elif opcode==43:
-                        os.write(server.fileno(),struct.pack(order+'BBHII20x',1,0,sequence,0,1))
+                        reply=struct.pack(order+'BBHII20x',1,0,sequence,0,1)
                         if not sent:
-                            os.write(server.fileno(),self.event());sent=True
+                            self.assertIsNotNone(selection_sequence)
+                            event=bytearray(self.event())
+                            struct.pack_into(order+'H',event,2,selection_sequence)
+                            # NativeObserver.select() waits in xcb_request_check.
+                            # Put the event BEFORE its subsequent sync reply:
+                            # libxcb must queue it before completing that wait.
+                            # Its sequence is the select request, not the later
+                            # reply (which could prematurely satisfy the check).
+                            send(event+reply);sent=True
+                        else: send(reply)
                     else: raise AssertionError('Unexpected X11 request '+str(opcode))
             except EOFError: pass
             except Exception as exc:
                 import traceback
-                errors.append(traceback.format_exc())
+                errors.append('Fake X11 peer phase='+phase+'\n'+traceback.format_exc())
             finally: server.close()
-        thread=threading.Thread(target=peer,daemon=True);thread.start()
-        original=m.C.CDLL
-        native=original(m.ctypes_library())
-        native.xcb_connect_to_fd.argtypes=[C.c_int,C.c_void_p]
-        native.xcb_connect_to_fd.restype=C.c_void_p
         def connect(display,screen):
             C.cast(screen,C.POINTER(C.c_int)).contents.value=0
             return native.xcb_connect_to_fd(client.detach(),None)
@@ -111,6 +134,7 @@ class IdentityPrototypeTests(unittest.TestCase):
             xcb_connect=staticmethod(connect)
             def __getattr__(self,name):return getattr(native,name)
         observer=None
+        thread=threading.Thread(target=peer,daemon=True);thread.start()
         try:
             with patch.dict(m.os.environ,{'DISPLAY':':99'}), \
                  patch.object(m.C,'CDLL',side_effect=lambda name: original(None) if name is None else Proxy()):
@@ -122,7 +146,8 @@ class IdentityPrototypeTests(unittest.TestCase):
         finally:
             if observer: observer.close()
             client.close();thread.join(timeout=3)
-        self.assertFalse(thread.is_alive());self.assertEqual(errors,[])
+            self.assertFalse(thread.is_alive(),'Fake X11 peer did not exit: '+phase)
+            self.assertEqual(errors,[])
 
     def test_broker_pipe_wrapper_drains_and_closes_only_its_observer(self):
         from unittest.mock import patch
