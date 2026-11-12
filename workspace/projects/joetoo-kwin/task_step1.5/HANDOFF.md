@@ -20,7 +20,7 @@
 
 ## Next actor and Step 1.5d preparation
 
-**Current actor: maintainer**, followed by a separately issued bounded Codex Step 1.5d assignment. The old PR-readiness / Increment 5 implementation drafts are historical, not current tasks.
+**Current actor: maintainer**, followed by a separately issued bounded Codex Step 1.5d assignment. A [focused Step 1.5d Codex prompt](step1.5d-codex-task-DRAFT.md) is prepared for review; it does not itself authorize implementation. The old PR-readiness / Increment 5 implementation drafts are historical, not current tasks.
 
 1. **Local Git readiness:** on `gmki91`, the maintainer already confirmed clean `main` at the merge commit. On `q552u01`, fetch/prune, inspect local changes, fast-forward `main`, then switch off the merged task branch; remove that local task branch only if merged and clean. The old remote task branch may be deleted after confirming PR #29 and merge history; do not force-delete a unique/unmerged branch. Runtime services, managed windows and OpenRC state do not need resetting for Git cleanup.
 2. **Step 1.5d source contract:** read current [architecture milestone table](../ARCHITECTURE.md) and the actual CLI `-L`/`-l` stubs and existing launcher/read-only broker interfaces. Establish minimal argument/target/selection semantics for one-window `-L`, presentation/filters and meaning of `-l`, and truthful failed/partial outcomes. Reuse `-o` preflight, confirmation, configured modes, broker identity and already accepted security rules; **do not infer that `-L` is a shorthand for a whole `-o` file**. If an essential UX choice remains open, put one concise source-grounded proposal before the maintainer; avoid inventing a new architecture or submilestones.
@@ -42,3 +42,4 @@
 - [Pre-strict-policy X11/Wayland evidence](step1.5c5d-increment5-production-native-security-evidence-2026-11-11.md)
 - [Increment 4 Stage 4 acceptance](step1.5c5d-increment4-stage4-native-acceptance-2026-11-11.md)
 - [PR #29 — merged milestone](https://github.com/JosephBrendler/joetoo-ai/pull/29)
+- [Draft Step 1.5d Codex implementation assignment](step1.5d-codex-task-DRAFT.md)
