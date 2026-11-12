@@ -222,6 +222,13 @@ class WorkerTests(unittest.TestCase):
                 ['/sec:nla'] if self.job['settings']['rdp_security_protocol'] == 'nla' else [])
             self.assertEqual([a for a in args if a.startswith('/cert:')],
                 ['/cert:deny'] if self.job['settings']['rdp_certificate_policy'] == 'strict' else [])
+            if self.outcome in ('nla_rejected', 'nla_unresolved', 'foreign_diagnostic'):
+                kw['on_diagnostic']('rdp_nla_logon_rejected' if self.outcome != 'foreign_diagnostic' else 'UNTRUSTED PASSWORD')
+                if self.outcome == 'nla_unresolved':raise ValueError('private error')
+                receipt = clean_receipt(self.job)
+                receipt['terminal'].update(state='failed',reason='child_identity_rejected')
+                kw['emit'](json.dumps(receipt['terminal']));kw['on_cleanup'](receipt)
+                return 1
             if self.outcome == 'certificate_refusal':
                 receipt = clean_receipt(self.job)
                 receipt['terminal'].update(state='failed', reason='child_identity_rejected')
@@ -295,6 +302,15 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue(result['cleanup_confirmed'])
         self.assertEqual(result['remote_session'], 'unverified')
         self.assertNotIn('placement', result)
+
+    def test_allowlisted_diagnostic_preserves_failed_and_unresolved_cleanup_states(self):
+        for outcome, state, clean in (('nla_rejected','failed',True),('nla_unresolved','unresolved',False),('foreign_diagnostic','failed',True)):
+            self.outcome=outcome
+            result=self.run_worker()
+            self.assertEqual(result['state'],state);self.assertEqual(result['cleanup_confirmed'],clean)
+            self.assertEqual(result['remote_session'],'unverified')
+            self.assertEqual(result.get('diagnostic'),None if outcome=='foreign_diagnostic' else 'rdp_nla_logon_rejected')
+            self.assertNotIn('UNTRUSTED',json.dumps(result))
 
     def test_one_registration_one_placement_and_bound_terminal_result(self):
         result = self.run_worker()
@@ -413,6 +429,7 @@ if mode.startswith('clean'):
   terminal=dict(protocol=1,request_id='a'*32,state='timeout',reason='expired',placement='not_requested',remote_session='unverified')))
  value.pop('registration');value.pop('placement')
  if mode=='clean_forged': value['cleanup']['source']='foreign'
+ if mode=='clean_nla': value['diagnostic']='rdp_nla_logon_rejected'
  r._private_json(p/'status',value)
  if mode!='clean_unreaped':
   r._private_json(p/'worker_exited',dict(nonce=e['nonce'],worker_pid=os.getpid(),worker_start=value['worker_start']))
@@ -448,6 +465,14 @@ sys.stdin.read()
         folder, = self.runtime.glob('joetoo-rdp-*')
         self.assertEqual(rdp._read_private_json(folder / 'ack')['nonce'], result['nonce'])
         self.assertEqual((folder / 'fd9').read_text(), 'False')
+
+    def test_diagnostic_survives_authenticated_frontend_receipt_without_changing_cleanup(self):
+        self.mode='clean_nla'
+        result=rdp.configured_frontend(resolved_job(),spawn=self.spawn,verify_cleanup=lambda c:True)
+        self.assertEqual(result['state'],'timeout')
+        self.assertEqual(result['diagnostic'],'rdp_nla_logon_rejected')
+        self.assertTrue(result['cleanup_confirmed']);self.assertTrue(result['continuation_eligible'])
+        self.assertEqual(result['remote_session'],'unverified')
 
     def test_clean_failure_waits_for_real_worker_reaping_and_session_verification(self):
         self.mode='clean'
@@ -606,6 +631,7 @@ else:
   windows.append(dict(managed_id='win-foreign',presence='missing',intended=dict(desktop=j['desktop'],slot=j['slot']+1)))
  p.write_text(json.dumps(windows))
  if os.environ.get('AFTER_RDP_HEALTH'): Path(os.environ['BROKER_HEALTH']).write_text(os.environ['AFTER_RDP_HEALTH'])
+if os.environ.get('RDP_DIAGNOSTIC'): result['diagnostic']=os.environ['RDP_DIAGNOSTIC']
 print(json.dumps(result)); sys.exit(2 if result['state']!='completed' else 0)
 '''
         helper.write_text('from rdp_contract import settings, DEFAULTS, X11_DEFAULTS, X11_PROFILE\n' +
@@ -620,7 +646,8 @@ qdbus6() {
 import json,os
 from pathlib import Path
 p=Path(os.environ['RDP_RESERVATIONS'])
-print(json.dumps(dict(windows=json.loads(os.environ['MANAGED'])['windows']+(json.loads(p.read_text()) if p.exists() else []))))
+windows=json.loads(os.environ['MANAGED'])['windows']+(json.loads(p.read_text()) if p.exists() else [])
+print(json.dumps(dict(count=len(windows),windows=windows)))
 INNER
     elif [[ $3 == *.GetManaged ]]; then
         python3 - "$4" <<'INNER'
@@ -718,6 +745,27 @@ INNER
                     path.unlink(missing_ok=True)
                 self.assertEqual(self.execute(1), ['confirm', 'rdp:1:1'])
                 self.assertFalse(self.trace.exists())
+
+    def test_allowlisted_nla_console_diagnostic_in_o_and_L_preserves_incomplete_cleanup_flow(self):
+        state=json.loads(self.env['BROKER_STATE']);state['single_raise_protocol']=1
+        self.env['BROKER_STATE']=json.dumps(state)
+        self.env['RDP_CLEAN_FAIL_SLOT']='1'
+        self.write_config(['1|sdl-freerdp|rdp|rdp://joe@host|over'])
+        for operation in (['-o'],['-L','1','sdl-freerdp','rdp','rdp://joe@host']):
+            for code in ('rdp_nla_logon_rejected','other_error'):
+                self.env['RDP_DIAGNOSTIC']=code
+                for path in (self.calls,self.reservations,self.health,self.preflights,self.trace):path.unlink(missing_ok=True)
+                run=subprocess.run(['bash',str(self.client),'-f',str(self.config),*operation],env=self.env,capture_output=True,text=True,timeout=10)
+                output=run.stdout+run.stderr
+                self.assertEqual(run.returncode,1,output)
+                message='SDL RDP connection failed: remote NLA logon rejected (ERRCONNECT_LOGON_FAILURE 0x00020014)'
+                if code=='rdp_nla_logon_rejected':
+                    self.assertIn(message,output)
+                    self.assertLess(output.index(message),output.index('Window failed; layout is incomplete'))
+                else:self.assertNotIn(message,output)
+                self.assertIn('Owned pending mission ended cleanly',output)
+                self.assertIn('[20261112-09:11:16] Starting owned SDL RDP viewer',output)
+                self.assertFalse(self.reservations.exists())
 
     def test_clean_rdp_failure_continues_and_finalizes_only_successes(self):
         self.env['RDP_CLEAN_FAIL_SLOT']='2'

@@ -60,3 +60,6 @@ d_do() {
     return 0
 }
 die() { printf '%s\n' "$1" >&2; exit 1; }
+
+# Deterministic stand-in; installed-header integration exercises the real helper.
+timestamp() { printf '%s\n' '20261112-09:11:16'; }

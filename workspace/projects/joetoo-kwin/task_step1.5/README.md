@@ -18,6 +18,13 @@ This is the **historical task record**, not execution authority. For current act
 
 **Later ebuild to-do (not Increment 5):** install `/etc/joetoo-kwin/BUILD` from package `$PVR`; have CLI source its own BUILD rather than `joetoolkit` BUILD, with an appropriate development fallback.
 
+**Step 1.5d candidate:** revised over-only `-L` reuses serial launch/placement with
+retained-slot selection and opt-in one-shot raise verification; existing `-l`
+inventory is preserved. Headless results and the reserved native X11/Wayland
+matrix are in the [candidate record](step1.5d-single-recipe-headless-candidate.md).
+This is candidate implementation, not native milestone acceptance; the earlier
+live-reflow proposal is historical and withdrawn from this scope.
+
 ## Accepted increment outcomes
 
 | Increment | Accepted outcome / limitation | Primary evidence |

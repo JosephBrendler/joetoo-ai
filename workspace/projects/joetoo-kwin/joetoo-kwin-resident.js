@@ -414,6 +414,7 @@ function reportExistingWindows() {
     callDBus(BRIDGE, PATH, BRIDGE, "SyncInventory", JSON.stringify({
         source: observerSource, revision: ++observerRevision, windows: snapshots, move_protocol: 1,
         viewer_protocol: typeof workspace.getClient === "function" ? 1 : 0,
+        single_raise_protocol: typeof workspace.raiseWindow === "function" && workspace.stackingOrder ? 1 : 0,
         initial_layout_protocol: typeof workspace.raiseWindow === "function" && workspace.stackingOrder &&
             workspace.currentDesktop && Number.isInteger(Number(workspace.currentDesktop.x11DesktopNumber)) &&
             typeof workspace.activeWindow !== "undefined" ? 1 : 0
@@ -568,6 +569,11 @@ function initialLayoutFromBroker() {
             result.active_uuid = layoutUUID(workspace.activeWindow);
             result.current_desktop = Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber);
             result.order = workspace.stackingOrder.map(layoutUUID).filter(id => r.order.includes(id));
+            if (r.single_raise === true) {
+                result.raise_order = workspace.stackingOrder.filter(w => !w.deleted && w.normalWindow &&
+                    (w.onAllDesktops || (w.desktops || []).some(d => Number(d.x11DesktopNumber) === r.entries[0].desktop)))
+                    .map(layoutUUID);
+            }
             // Keep geometry and stack evidence even when focus never converges.
             const windows = workspace.stackingOrder;
             result.geometry_unchanged = r.entries.every(e => {
@@ -583,7 +589,12 @@ function initialLayoutFromBroker() {
             cleanup();
             result.focus_observation = phase;
             result.focus_elapsed_ms = focusStarted === null ? 0 : Math.max(0, Date.now() - focusStarted);
-            try { readback(); } catch (err) { reason = reason || String(err); }
+            try {
+                readback();
+                if (r.single_raise === true && (!result.raise_order.length ||
+                    result.raise_order[result.raise_order.length - 1] !== r.order[0]))
+                    reason = reason || "Single-window raise did not verify above existing normal windows";
+            } catch (err) { reason = reason || String(err); }
             const invalid = contextError();
             if (invalid) reason = invalid;
             if (reason) result.error = reason;

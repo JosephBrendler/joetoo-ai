@@ -546,5 +546,62 @@ class SmokeClientTests(unittest.TestCase):
         self.assertIsNone(self.fixture.b.registry._active_request_id)
 
 
+
+class LogonDiagnosticTests(unittest.TestCase):
+    def setUp(self):
+        self.log = tempfile.NamedTemporaryFile('w+b')
+        self.addCleanup(self.log.close)
+        os.fchmod(self.log.fileno(), 0o600)
+        self.identity = os.fstat(self.log.fileno())
+        self.line = b'[09:11:16:000] [42:0000abcd] [ERROR][com.freerdp.core] - [nla_recv_pdu]: ERRCONNECT_LOGON_FAILURE [0x00020014]\n'
+
+    def classify(self, data, **kwargs):
+        self.log.seek(0); self.log.truncate(); self.log.write(data); self.log.flush()
+        return adapter.owned_logon_failure(self.log, self.identity, 1024, 42, **kwargs)
+
+    def test_exact_owned_signature_returns_only_the_allowlisted_code(self):
+        value = self.classify(b'private password must not be exported\n' + self.line)
+        self.assertEqual(value, 'rdp_nla_logon_rejected')
+        self.assertNotIn('password', value)
+        self.log.seek(0);self.assertIn(b'private password',self.log.read())
+
+    def test_absent_different_forged_partial_and_contradictory_errors_are_generic(self):
+        for data in (b'ordinary log\n', self.line.replace(b'LOGON_FAILURE',b'TLS_CONNECT_FAILED'),
+            self.line.replace(b'00020014',b'00020008'), self.line.replace(b'[42:',b'[43:'),
+            self.line[:-1], b'ERRCONNECT_LOGON_FAILURE [0x00020014]\n',
+            b'\x00'+self.line, b'\xff'+self.line,
+            self.line+self.line.replace(b'LOGON_FAILURE',b'CONNECT_TRANSPORT_FAILED').replace(b'00020014',b'0002000D')):
+            with self.subTest(data=data):self.assertIsNone(self.classify(data))
+
+    def test_unlinked_or_concurrently_changed_evidence_is_generic(self):
+        with tempfile.NamedTemporaryFile('w+b',delete=False) as missing:
+            missing.write(self.line);missing.flush();identity=os.fstat(missing.fileno())
+            os.unlink(missing.name)
+            self.assertIsNone(adapter.owned_logon_failure(missing,identity,1024,42))
+        self.classify(self.line)
+        pread=os.pread
+        def raced(fd, size, offset):
+            data=pread(fd,size,offset)
+            self.log.seek(0,2);self.log.write(b'changed\n');self.log.flush()
+            return data
+        with patch.object(adapter.os,'pread',side_effect=raced):
+            self.assertIsNone(adapter.owned_logon_failure(self.log,self.identity,1024,42))
+
+    def test_oversized_truncated_exposed_substituted_and_unreadable_evidence_is_generic(self):
+        self.assertIsNone(self.classify(b'x'*1025+self.line))
+        self.assertIsNone(self.classify(self.line, minimum_size=1000))
+        self.classify(self.line);os.fchmod(self.log.fileno(),0o644)
+        self.assertIsNone(adapter.owned_logon_failure(self.log,self.identity,1024,42))
+        os.fchmod(self.log.fileno(),0o600)
+        with tempfile.NamedTemporaryFile('w+b') as other:
+            other.write(self.line);other.flush()
+            self.assertIsNone(adapter.owned_logon_failure(other,self.identity,1024,42))
+        with patch.object(adapter.os,'pread',side_effect=PermissionError()):
+            self.assertIsNone(adapter.owned_logon_failure(self.log,self.identity,1024,42))
+        with patch.object(adapter.os,'fstat',side_effect=FileNotFoundError()):
+            self.assertIsNone(adapter.owned_logon_failure(self.log,self.identity,1024,42))
+        self.log.close()
+        self.assertIsNone(adapter.owned_logon_failure(self.log,self.identity,1024,42))
+
 if __name__ == "__main__":
     unittest.main()

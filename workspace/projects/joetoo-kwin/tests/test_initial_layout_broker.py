@@ -160,6 +160,38 @@ class InitialLayoutBrokerTests(queries.ReadOnlyManagedQueryTests):
         self.assertIn(self.uuids[1], state['detail'])
 
 
+    def test_single_raise_requires_capability_and_one_owned_over_window(self):
+        payload=dict(entries=[dict(registration_request_id=self.ids[0],layer='over')],single_raise=True)
+        with self.assertRaises(self.module.dbus.DBusException):self.broker.SubmitInitialLayout(json.dumps(payload))
+        self.broker.single_raise_protocol=1
+        for change in (dict(single_raise=False),dict(single_raise=1),dict(entries=[dict(registration_request_id=self.ids[0],layer='panel')])):
+            with self.assertRaises(self.module.dbus.DBusException):self.broker.SubmitInitialLayout(json.dumps(dict(payload,**change)))
+        rid=self.broker.SubmitInitialLayout(json.dumps(payload))
+        claim=json.loads(self.broker.TakeInitialLayout(queries.SOURCE));self.assertTrue(claim['single_raise'])
+        state=self.complete(rid,raise_order=[self.uuids[1],self.uuids[0]])
+        self.assertEqual(state['state'],'SUCCEEDED')
+
+    def test_singleton_cohort_order_alone_is_not_proof_of_raising(self):
+        self.broker.single_raise_protocol=1
+        for evidence in (None,[self.uuids[0]],[self.uuids[0],self.uuids[1]],
+                         [self.uuids[1],self.uuids[0],self.uuids[0]]):
+            rid=self.broker.SubmitInitialLayout(json.dumps(dict(single_raise=True,
+                entries=[dict(registration_request_id=self.ids[0],layer='over')])))
+            self.broker.TakeInitialLayout(queries.SOURCE)
+            state=self.complete(rid,raise_order=evidence)
+            self.assertEqual(state['state'],'FAILED')
+            self.assertEqual(state['stacking'],'failed')
+
+    def test_single_raise_cannot_hide_existing_peer_geometry_changes(self):
+        self.broker.single_raise_protocol=1
+        rid=self.broker.SubmitInitialLayout(json.dumps(dict(single_raise=True,
+            entries=[dict(registration_request_id=self.ids[0],layer='over')])))
+        self.broker.TakeInitialLayout(queries.SOURCE)
+        self.broker.observed_windows[self.uuids[1]]['geometry']['x']+=1
+        state=self.complete(rid,raise_order=[self.uuids[1],self.uuids[0]])
+        self.assertEqual(state['state'],'FAILED')
+
+
 for _name in dir(queries.ReadOnlyManagedQueryTests):
     if _name.startswith('test_') and _name not in InitialLayoutBrokerTests.__dict__:
         setattr(InitialLayoutBrokerTests, _name, None)

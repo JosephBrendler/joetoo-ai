@@ -465,10 +465,45 @@ def placement_available(status):
                  or transaction['state'] in ('OK', 'ERROR')))
 
 
+def owned_logon_failure(log, identity, byte_limit, pid, minimum_size=0):
+    """Best-effort allowlisted diagnosis from the held mission FD, never a path.
+
+    This is client-reported evidence inside the trusted same-user boundary, not
+    independent attestation of authentication or authority to change cleanup.
+    Any incomplete/changed/unsafe evidence is simply unavailable for diagnosis.
+    """
+    try:
+        fd = log.fileno()
+        before = os.fstat(fd)
+        key = lambda info: (info.st_dev, info.st_ino, info.st_uid, info.st_mode,
+                            info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        if (type(pid) is not int or pid <= 0 or not stat.S_ISREG(before.st_mode)
+                or (before.st_dev, before.st_ino) != (identity.st_dev, identity.st_ino)
+                or before.st_uid != os.geteuid() or stat.S_IMODE(before.st_mode) != 0o600
+                or before.st_nlink != 1 or not minimum_size <= before.st_size <= byte_limit):
+            return None
+        data = os.pread(fd, before.st_size, 0)
+        if len(data) != before.st_size or key(os.fstat(fd)) != key(before) or not data.endswith(b'\n'):
+            return None
+        if b'\x00' in data:
+            return None
+        data.decode('utf-8')  # Malformed evidence is unavailable, never repaired.
+        # Fixed WLOG layout, originating child PID, complete ERROR record and
+        # exact symbolic/numeric pair. Never forward the matched line itself.
+        prefix = (rb'^\[[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{3}\] \[' + str(pid).encode() +
+                  rb':[0-9A-Fa-f]+\] \[ERROR\]\[com\.freerdp\.core\] - \[[A-Za-z_][A-Za-z0-9_]*\]: ')
+        errors = re.findall(prefix + rb'(ERRCONNECT_[A-Z_]+) \[(0x[0-9A-Fa-f]{8})\]\r?$', data, re.M)
+        if errors and all(value == (b'ERRCONNECT_LOGON_FAILURE', b'0x00020014') for value in errors):
+            return 'rdp_nla_logon_rejected'
+    except (OSError, ValueError, AttributeError):
+        pass
+    return None
+
+
 def launch_registration(bus, interface, unix_fd, adapter, host, port, username, desktop, slot,
            bounds, call_timeout=3., emit=print, spawn=subprocess.Popen,
            sleep=time.sleep, clock=time.monotonic, cancelled=lambda: False, profile=None, on_registered=None,
-           argv_builder=None, connection_factory=None, on_cleanup=None, registered_cancelled=None):
+           argv_builder=None, connection_factory=None, on_cleanup=None, registered_cancelled=None, on_diagnostic=None):
     """Injectable orchestration; real broker enforces all identity/ownership rules.
 
     Registration is reported promptly, then supervision continues until child
@@ -482,11 +517,14 @@ def launch_registration(bus, interface, unix_fd, adapter, host, port, username, 
     registered = False
     termination_requested = False
     stage = 'registration'
+    diagnostic_log_floor = 0
     def check_log():
+        nonlocal diagnostic_log_floor
         current = os.fstat(log.fileno())
         require(stat.S_IMODE(current.st_mode) == 0o600 and current.st_nlink == 1
                 and current.st_uid == os.geteuid() and current.st_size <= bounds['rdp_backend_log_byte_limit'],
                 'Private log integrity/budget lost')
+        diagnostic_log_floor = max(diagnostic_log_floor, current.st_size)
     def supervision_report(**fields):
         # Reporting is best effort after enrollment, never authority to kill.
         value = dict(state='unresolved', phase='supervision', supervision='degraded',
@@ -722,6 +760,15 @@ def launch_registration(bus, interface, unix_fd, adapter, host, port, username, 
                 receipt['eligible'] = True
             except Exception:
                 receipt['eligible'] = False
+        if (not registered and on_diagnostic is not None and child is not None
+                and child.returncode is not None and log is not None and 'inode' in locals()):
+            try:
+                diagnosis = owned_logon_failure(log, inode, bounds['rdp_backend_log_byte_limit'],
+                                               child.pid, diagnostic_log_floor)
+                if diagnosis is not None:
+                    on_diagnostic(diagnosis)
+            except Exception:
+                pass  # Optional diagnostics never change terminal/cleanup evidence.
         for resource, close in ((bus, lambda b: b.close()), (pidfd, os.close), (log, lambda f: f.close())):
             if resource is not None:
                 try: close(resource)
@@ -988,7 +1035,13 @@ def configured_worker(folder, bus_factory, interface, unix_fd):
         if (folder / 'cancel').exists():
             cancel = _read_private_json(folder / 'cancel').get('nonce') == nonce
         return explicit_stop[0] or cancel or (not published and _exited(parent_fd))
+    diagnostic = {}
+    def diagnosed(code):
+        if code == 'rdp_nla_logon_rejected':
+            diagnostic['diagnostic'] = code
     def publish(state, **fields):
+        if not registered and fields.get('phase') == 'registration' and state != 'pending':
+            fields.update(diagnostic)
         _private_json(folder / 'status', dict(state=state, nonce=nonce, worker_pid=os.getpid(),
             worker_start=own_start, remote_session='unverified', **fields))
     def connection_factory(bus, iface, timeout):
@@ -1083,7 +1136,7 @@ def configured_worker(folder, bus_factory, interface, unix_fd):
             call_timeout=job['mechanical']['call_timeout_ms'] / 1000,
             emit=emitted, on_registered=registered_callback, profile=profile,
             argv_builder=lambda h, p, u, m: configured_argv(h, p, u, m, job['settings']),
-            connection_factory=connection_factory, on_cleanup=cleaned, registered_cancelled=lambda: explicit_stop[0],
+            connection_factory=connection_factory, on_cleanup=cleaned, on_diagnostic=diagnosed, registered_cancelled=lambda: explicit_stop[0],
             cancelled=lambda: explicit_stop[0] if registered else pending_cancel())
         if not published:
             terminal = registration_events[-1] if registration_events else {}
