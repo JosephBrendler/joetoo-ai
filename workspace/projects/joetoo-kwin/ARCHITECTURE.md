@@ -371,7 +371,7 @@ modifiable by unrelated processes.
 | --- | --- |
 | `-c [-f CONFIG]` | Validate config and display a colorized dry-run plan without launching |
 | `-o [-f CONFIG]` | Confirm then launch and positively register/position managed windows |
-| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | Confirm then launch one validated recipe as separate positional arguments, preserving the `-o` field contract and managed registration/placement |
+| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | Confirm then launch one managed window above existing windows; `over` is the only implemented layer (also the default), no live-desktop reflow |
 | `-m l|r` | Two-panel active-window geometry on current desktop |
 | `-m DESKTOP` | Change active window's desktop, preserve geometry |
 | `-m DESKTOP l|r` | Two-panel placement on specified desktop |
@@ -388,15 +388,36 @@ modifiable by unrelated processes.
 | `-f FILE` | Explicit configuration precedence, no implicit symlink edits |
 | `-v`, `-q` | Adjust verbosity using established joetoo CLI conventions |
 
-**Step 1.5d CLI decisions (maintainer, 2026-11-11).** The `-L` operands are
-the five existing `-o` recipe fields, **not** a single pipe-delimited
-argument: `DESKTOP PROGRAM MODE TARGET [LAYER]`; omission of LAYER uses the
-existing recipe default. Do not add a sixth SLOT operand. Reuse one authoritative
-recipe validator, the shared managed launch/geometry/preflight, confirmation
-and reservation mechanisms. Before spawning or contacting a remote endpoint,
-identify the particular invalid field (desktop/program/mode/target/layer) and
-expected grammar, with redaction of unsafe/sensitive target content. Do not
-degrade existing `-o` validation or hard-code a new arbitrary-command path.
+**Step 1.5d CLI decisions (maintainer, revised 2026-11-11).** The `-L` operands
+are the same logical fields as one `-o` recipe, but supplied as **separate
+positional arguments**, not a single pipe-delimited argument:
+`DESKTOP PROGRAM MODE TARGET [LAYER]`. **Only `over` is implemented for `-L`**:
+an omitted LAYER defaults to `over`; explicit `over` is supported; explicit
+`panel` or `under` must be rejected before launch with a helpful diagnostic
+such as `-L: layer 'panel' is not implemented yet; use 'over' or omit LAYER`.
+Do not promise a release/version for unsupported layers. Crucially, `-o`
+retains its accepted `under`/`panel`/`over` layers and implicit `panel` default.
+
+`-L` launches **one** new window, using the existing program/mode/target
+validators, graphical-region geometry, confirmation, broker reservation,
+positive exact-UUID registration, placement and cleanup machinery. It chooses
+an unused logical slot without modifying any existing or retained reservation;
+there is no sixth SLOT operand. It places the new window on its requested
+desktop and performs a bounded, verified **one-shot raise** so it appears above
+existing windows, without a permanent keep-above rule. It must not change the
+geometry, ownership or identity of existing managed **or unmanaged** windows,
+and must not perform live-desktop panel reflow, peer recascading or a new
+application-independent managed-ID geometry transaction. Before launching or
+contacting a remote endpoint, report the specific invalid field/requirement
+(desktop/program/mode/target/layer), safely redacting sensitive input.
+Preserve already-accepted `-o` behavior and fail-closed Busy/source/identity
+requirements. If a one-shot raise cannot be positively targeted and verified
+on both KWin backends, report the constraint instead of adopting a different
+window or weakening ownership.
+
+The formerly proposed live-desktop reflow and broker/resident transaction
+extension remain historical design research, **not** Step 1.5d requirements.
+See the source review under `task_step1.5/` for that earlier investigation.
 
 The `-l` command displays the broker's **managed** inventory read-only as
 aligned, fixed-width columns, **one row per managed record**. At minimum
@@ -458,7 +479,7 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.5b** | TigerVNC viewer over authenticated SSH | Accepted and retained as a peer-level managed graphical remote-access option; native X11 and Wayland/XWayland identity, placement, SSH tunnel and teardown demonstrated |
 | **1.5c.5c** | Comparative RDP feasibility and decision | **Closed:** affirmative feasibility accepted; SDL3 FreeRDP selected for first RDP implementation, not as a preferred/default client |
 | **1.5c.5d** | Managed SDL FreeRDP under configured `-o` | **ACCEPTED, CLOSED AND MERGED (2026-11-11, PR #29)**: exact UUID/placement/lifecycle on native X11/Wayland, layered configuration, bounded clean-failure continuation, strict `/sec:nla /cert:deny` defaults, successful trusted GDM connection and automatic invalid-certificate refusal with verified cleanup; see final Increment 5 evidence |
-| **1.5d** | Integrate `-L` one-recipe positional launch, `-l` readable managed-window inventory; run cross-feature native X11/Wayland regression | **NEXT, not yet implemented**: shared recipe validation with field-specific errors, safe slot reservation, one row per broker-managed window with stable identifiers; preserve cross-feature ownership, Busy/focus/desktop/failure contracts |
+| **1.5d** | Implement `-L` one-recipe single-window launch (`over` only; no reflow), retain read-only `-l` inventory; run integrated native X11/Wayland regression | **IN PROGRESS**: Codex reports `-l` candidate and tests implemented; `-L` remains to implement under simplified scope. Preserve field-specific validation, safe logical-slot reservation, exact-UUID placement, one-shot raise, existing-window geometry and accepted `-o` semantics |
 | **1.6** | Managed `-a`, `-d`, `-x` | Selective safe close, never unrelated windows |
 | **1.7** | Runtime JSON checkpoint and same-session reconciliation | Broker restart and exact source/UUID reconciliation |
 | **1.8** | Restorable `.conf` snapshot, `-S`, `-r` | New-window recovery from validated last-good intent |
