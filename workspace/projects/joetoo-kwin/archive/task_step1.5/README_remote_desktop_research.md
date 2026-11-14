@@ -728,7 +728,7 @@ contrary to its stale README NLA-only claim. Record actual Ubuntu negotiation.
 Use existing restricted LAN/VPN access; no Internet forwarding or VPN gate.
 An SSH-carried RDP alternative would still need certificate-name/redirection tests.
 
-Source anchors: current [VNC supervisor](../libexec/joetoo_kwin_vnc_launch.py)
+Source anchors: current [VNC supervisor](../../libexec/joetoo_kwin_vnc_launch.py)
 ssh_argv/control_argv; broker _poll_correlation requires new source-consistent
 UUID/exact PID and rejects ambiguity. [KRDC main](https://github.com/KDE/krdc/blob/v26.04.3/main.cpp),
 [KRDP security](https://github.com/KDE/krdp/blob/v6.7.5/src/RdpConnection.cpp),
@@ -877,7 +877,7 @@ Codex-operated GUI/network activity or production RDP integration. The earlier
 research and native-evidence records above remain historical; this entry does
 not repeat interoperability testing or declare a desktop-role discriminator.
 
-- [Observer](../tools/joetoo-rdp-window-diagnostic.js) records bounded, sequenced
+- [Observer](../../tools/joetoo-rdp-window-diagnostic.js) records bounded, sequenced
   creation/property/activation/move-resize/removal evidence. Unsupported fields
   are explicit. Captions are filtered to the generated proof marker; unrelated
   captions, input contents, credentials and certificate contents are excluded.
@@ -887,7 +887,7 @@ not repeat interoperability testing or declare a desktop-role discriminator.
   console-log capture was established. Exact local KWin X11 6.7.5/Qt 6.11.2
   sources were inspected. KWin's asynchronous `callDBus` suppresses JavaScript
   callbacks on D-Bus errors, requiring an independent acknowledgement deadline.
-- [Temporary receiver](../tools/joetoo-rdp-diagnostic-receiver.py) uses the existing
+- [Temporary receiver](../../tools/joetoo-rdp-diagnostic-receiver.py) uses the existing
   Unix session bus, pins KWin's unique owner/UID, and writes private exclusive
   evidence. `Append` acknowledges only after persistence. `Probe` confirms
   observing/draining and receipt of the end acknowledgement; `Status` exposes
@@ -902,7 +902,7 @@ not repeat interoperability testing or declare a desktop-role discriminator.
   that is not native throughput evidence. Overflow and interrupted output remain
   explicitly incomplete. `transport_complete`, `sender_confirmed_end_ack` and
   `internal_capture_intact` are distinct; native lifecycle coverage is unassessed.
-- [Maintainer runner](../tools/joetoo-rdp-diagnostic-run.sh) uses the installed
+- [Maintainer runner](../../tools/joetoo-rdp-diagnostic-run.sh) uses the installed
   joetoo header/AAR and pseudo-boolean conventions, confirms the native action,
   creates private storage, owns one receiver, refuses an existing diagnostic,
   gates the unchanged proof on persisted readiness, exports/verifies, unloads

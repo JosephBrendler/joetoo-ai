@@ -1,6 +1,6 @@
 # Step 1.5d — inventory candidate and live-layout transaction boundary
 
-> **Scope disposition (maintainer, 2026-11-11):** The shared live-layout reflow extension below is **NOT approved for current Step 1.5d**. Its analysis is retained as historical engineering evidence. The approved `-L` operation launches only a new managed window with omitted or explicit `over`, rejecting `panel`/`under` as "not implemented yet"; it does not move existing windows. The independent `-l` inventory candidate and tests remain in scope. Current authority is [HANDOFF](HANDOFF.md) and [ARCHITECTURE](../ARCHITECTURE.md).
+> **Scope disposition (maintainer, 2026-11-11):** The shared live-layout reflow extension below is **NOT approved for current Step 1.5d**. Its analysis is retained as historical engineering evidence. The approved `-L` operation launches only a new managed window with omitted or explicit `over`, rejecting `panel`/`under` as "not implemented yet"; it does not move existing windows. The independent `-l` inventory candidate and tests remain in scope. Current authority is [HANDOFF](HANDOFF.md) and [ARCHITECTURE](../../ARCHITECTURE.md).
 
 **Candidate; Step 1.5d is incomplete.** Reviewed branch
 `task/joetoo-kwin-step1.5d-integrated-regression`, initially clean at

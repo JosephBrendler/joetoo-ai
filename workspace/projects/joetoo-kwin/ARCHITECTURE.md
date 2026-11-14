@@ -3,8 +3,8 @@
 This is the project-specific design record for `joetoo-ai/workspace/projects/joetoo-kwin/`.
 It distinguishes accepted requirements, implemented and accepted contracts, proposed
 future capabilities, and open design questions. The [project README](README.md)
-records current implementation status. The [active Step 1.5c.5 handoff](task_step1.5/HANDOFF.md)
-records current task permissions, while [Step 1.5c.4 native closure](task_step1.5/step1.5c4-native-acceptance.md)
+records current implementation status. The [active Step 1.6 handoff](task_step1.6/HANDOFF.md)
+records current task permissions, while [Step 1.5c.4 native closure](archive/task_step1.5/step1.5c4-native-acceptance.md)
 and other task evidence retain the earlier acceptance history.
 
 Repository-root, workspace and project `AGENTS.md` instructions govern AI collaboration.
@@ -115,7 +115,7 @@ with legacy four-field entries. Supported values are `under`, `panel`, `over`.
 An explicit `panel` entry is different from an implicit panel for ordinary
 layout-budget accounting where the current policy distinguishes them.
 
-**(rdp is Increment 4 proposed)**
+**The following recipe combinations include accepted configured RDP support.**
 
 ```bash
 desktop_session_list=(
@@ -153,7 +153,7 @@ layer-based stacking reordering; moving a window never changes its slot.
 | `dolphin\|local` | `[DIRECTORY]` | Empty means home; absolute directories are literal; relative directories resolve against home. No port. |
 | `dolphin\|sftp` | `sftp://[USER@]HOST[:PORT][/ABSOLUTE/PATH]` | Optional SFTP endpoint port; omitted uses Dolphin/KIO/SSH configuration (ordinarily SSH port 22). Missing path requests login directory; `/` requests remote root. |
 | `vncviewer\|ssh` | `ssh://[USER@]HOST[:SSH_PORT]/display/N` or `ssh://[USER@]HOST[:SSH_PORT]/port/P` | `[:SSH_PORT]` selects the **SSH** port, not VNC. `/display/N` reaches remote VNC TCP `5900+N`; `/port/P` names remote VNC TCP `P`. The worker allocates the local loopback forwarding port, never the recipe. |
-| `sdl-freerdp\|rdp` **(Increment 4 proposed)** | `rdp://USER@HOST[:PORT]` | Explicit username required; omitted port means RDP TCP 3389. No password, query, fragment, path or arbitrary client switches. This pair is **not yet implemented** in configured `-o`. |
+| `sdl-freerdp\|rdp` | `rdp://USER@HOST[:PORT]` | Explicit username required; omitted port means RDP TCP 3389. No password, query, fragment, path or arbitrary client switches. This pair is accepted and implemented in configured `-o` and single-recipe `-L`. |
 
 URI parsers validate hosts (including bracketed IPv6 literals where supported), port ranges, user information and path rules **before** launch. They must reject embedded passwords and avoid reflecting untrusted targets or credentials in error messages. SFTP path encoding and VNC forwarding behavior remain client-specific. A `TARGET` URI does not supply the desktop, derived slot, layer or final geometry; those remain common planner responsibilities.
 
@@ -480,10 +480,10 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.5c** | Comparative RDP feasibility and decision | **Closed:** affirmative feasibility accepted; SDL3 FreeRDP selected for first RDP implementation, not as a preferred/default client |
 | **1.5c.5d** | Managed SDL FreeRDP under configured `-o` | **ACCEPTED, CLOSED AND MERGED (2026-11-11, PR #29)**: exact UUID/placement/lifecycle on native X11/Wayland, layered configuration, bounded clean-failure continuation, strict `/sec:nla /cert:deny` defaults, successful trusted GDM connection and automatic invalid-certificate refusal with verified cleanup; see final Increment 5 evidence |
 | **1.5d** | Implement `-L` one-recipe single-window launch (`over` only; no reflow), retain read-only `-l` inventory; run integrated native X11/Wayland regression | **ACCEPTED, CLOSED AND MERGED (2026-11-12, PR #30)**: `-l` implemented; `-L` implemented under simplified scope, preserving field-specific validation, safe logical-slot reservation, exact-UUID placement, one-shot raise, existing-window geometry and accepted `-o` semantics |
-| **1.6** | Managed `-a`, `-d`, `-x` | **Now active** Selective safe close, never unrelated windows |
+| **1.6** | Managed `-a`, `-d`, `-x` | **Active milestone; detailed implementation scope unapproved.** Next engineering activity: separately authorized read-only source/contract review; selective safe close must never affect unrelated windows |
 | **1.7** | Runtime JSON checkpoint and same-session reconciliation | Broker restart and exact source/UUID reconciliation |
 | **1.8** | Restorable `.conf` snapshot, `-S`, `-r` | New-window recovery from validated last-good intent |
-| **1.9** | `eselect`, installation/ebuild and complete integration | Maintainer-led joetoo/joetoo-upstream packaging, template guidance and version 1 lifecycle |
+| **1.9** | Packaging of the accepted optional `eselect` selector, installation/ebuild and complete integration | Maintainer-led joetoo/joetoo-upstream packaging, template guidance and version 1 lifecycle |
 
 ### 1.5c.5 — Remote resource and desktop integration (incrementally authorized)
 
@@ -573,7 +573,7 @@ shows successive marker-bearing temporary and persistent windows, requiring
 a separate positive role discriminator. These are observation results, not
 production registration, placement or certificate-trust acceptance. Fresh-client
 connection does not establish in-process reconnect or remote-session identity.
-See the [Step 1.5 HANDOFF](task_step1.5/HANDOFF.md) for evidence and limitations.
+See the [Step 1.5 HANDOFF](archive/task_step1.5/HANDOFF.md) for evidence and limitations.
 
 **Peer-capability policy.** Managed TigerVNC-over-SSH, SDL FreeRDP
 (the first RDP client), and any later authorized RDP clients are independent,
@@ -602,8 +602,8 @@ verified terminal broker/child cleanup; native `q552u01` Wayland RDP
 interoperability and managed placement were accepted earlier. Final source
 landed in `main` via [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29)
 (merge `3e9c4bf311bc65b32d332a00d3b50163a9043303`). See
-[final Increment 5 evidence](task_step1.5/step1.5c5d-increment5-final-native-acceptance-2026-11-11.md)
-and [current task HANDOFF](task_step1.5/HANDOFF.md).
+[final Increment 5 evidence](archive/task_step1.5/step1.5c5d-increment5-final-native-acceptance-2026-11-11.md)
+and [archived Step 1.5 closure](archive/task_step1.5/HANDOFF.md).
 
 **Historical design material below:** The earlier Wayland-placement diagnostic,
 Option C proposal and historical gate sequence document decisions *before*
@@ -654,7 +654,7 @@ cleanup; Busy, unresolved ownership or an active transaction still blocks
 subsequent launches. Mechanical identity, placement, and cleanup remain
 separately bounded and fail closed. TigerVNC was unchanged by Option C;
 Increment 4 may align its viewer-readiness default without a general VNC
-refactor. See [authoritative Increment 4 decisions](task_step1.5/step1.5c5d_Increment_4_decisions.md).
+refactor. See [authoritative Increment 4 decisions](archive/task_step1.5/step1.5c5d_Increment_4_decisions.md).
 
 **Option D — later, separately authorized lifecycle objective.** Extend broker
 bookkeeping to support multiple independently keyed pending remote launches,
@@ -673,7 +673,7 @@ concurrency and RDP/VNC lifecycle design/authorization. Documentation here
 expresses requirements and roadmap, not permission for code, deployment,
 publication or native testing.
 
-**Implementation scope:** The [Step 1.5c.5 implementation scope](task_step1.5/Step1.5c5_implementation_scope.md) elaborates the proposed remote-access increments and their acceptance gates. It does not supersede this architecture or independently authorize implementation; current task permissions are controlled by the separately approved `HANDOFF.md`.
+**Implementation scope:** The [Step 1.5c.5 implementation scope](archive/task_step1.5/Step1.5c5_implementation_scope.md) records the completed remote-access increments and their historical acceptance gates. It does not supersede this architecture or independently authorize implementation; current task permissions are identified by the [Step 1.6 HANDOFF](task_step1.6/HANDOFF.md).
 
 **Broader application inventory (evaluation, not automatic implementation):**
 Newly installed on `gmki91` as reported by the maintainer: QTerminal 2.4.0,
@@ -699,9 +699,12 @@ them from `tls`, NLA or successful remote use, and do not weaken certificate
 checks to obtain a passing demonstration. Preserve TigerVNC's independently
 approved SSH tunnel/host-key protections. Increment 5 subsequently implemented
 and natively verified strict NLA/certificate-refusal defaults, as recorded above.
-Step 1.5c.5d is accepted and merged; Step 1.5d integrated X11/Wayland
-regression remains subsequent work. This architecture grants no source,
-native-execution or publication authority.
+Step 1.5c.5d and Step 1.5d are accepted and merged through PRs #29 and
+[#30](https://github.com/JosephBrendler/joetoo-ai/pull/30), respectively.
+Step 1.5d merge: `f72407278fa0a9c923079f3b38ce834440d2fef2`.
+Step 1.5 history is retained in [the archive](archive/task_step1.5/README.md);
+Step 1.6 is the active milestone with detailed scope awaiting approval.
+This architecture grants no source, native-execution or publication authority.
 
 ### Phase 2 — Optimization and refinement
 

@@ -1,12 +1,43 @@
+# Step 1.5 — Closed and archived
+
+**Closure recorded 2026-11-14.** Step 1.5 is complete. Step 1.5c.5d merged
+through [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29) at
+`3e9c4bf311bc65b32d332a00d3b50163a9043303`; Step 1.5d was accepted and
+merged through [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30)
+at `f72407278fa0a9c923079f3b38ce834440d2fef2`. The reviewed post-merge
+baseline is `231e3c3c7e77839ef9220cf1c128f7a1572726d0`.
+
+The [native acceptance record](step1.5d-native-acceptance-2026-11-12.md)
+retains the original `iota01` 948/949 Python result and eleven passing reruns.
+The [published fixture addendum](step1.5d-xcb-evidence-addendum.md) records
+the final 7 focused Python, 1,000/1,000 stress repetitions, 100 additional
+leak-check repetitions, 949 full Python and 163 JavaScript passes, plus syntax
+and whitespace checks. These are recorded results, not reruns during archival.
+The fixture correction preserved production nonblocking libxcb behavior.
+
+This complete historical directory is now `archive/task_step1.5/`.
+The dated content below is preserved, apart from mechanical navigation repairs.
+Statements there that work, fixture hardening or publication remain pending
+describe their original dates and are superseded by this closure notice.
+They confer no current execution authority.
+
+Active milestone: [Step 1.6 HANDOFF](../../task_step1.6/HANDOFF.md) and
+[task index](../../task_step1.6/README.md). The next engineering activity is a
+**separately authorized read-only source/contract review**. Detailed `-a`,
+`-d` and `-x` implementation scope, destructive operations, native testing
+and publication remain unapproved.
+
+---
+
 # Step 1.5 — Task history, decisions and verification index
 
-This is the **historical task record**, not execution authority. For current actor/scope/approval see [HANDOFF](HANDOFF.md), for engineering requirements see [Step 1.5c.5 scope](Step1.5c5_implementation_scope.md), and for architecture see [project ARCHITECTURE](../ARCHITECTURE.md). Source, records and tests described below remain separate from authorization to act.
+This is the **historical task record**, not execution authority. For current actor/scope/approval see [HANDOFF](HANDOFF.md), for engineering requirements see [Step 1.5c.5 scope](Step1.5c5_implementation_scope.md), and for architecture see [project ARCHITECTURE](../../ARCHITECTURE.md). Source, records and tests described below remain separate from authorization to act.
 
 ## Merged Step 1.5c.5d milestone and Step 1.5d transition (2026-11-11)
 
 **MERGED — PR [#29](https://github.com/JosephBrendler/joetoo-ai/pull/29)** completed Step **1.5c.5d** on `main` at merge commit **`3e9c4bf311bc65b32d332a00d3b50163a9043303`**. All five Increment acceptance decisions, including Increment 5's native strict-security refusal, remain final. The maintainer reported `gmki91` clean on synchronized `main`, and `git log -1 --show-signature` showed a good GitHub GPG signature for the merge. This is source publication evidence, **not** proof that every other workstation/installed runtime was updated.
 
-**Next Step 1.5d:** implement the existing `-L` single-window launch and `-l` managed listing CLI stubs and run a bounded integrated native X11/Wayland regression of accepted Step 1.5 features; see [current HANDOFF](HANDOFF.md) and [architecture milestone table](../ARCHITECTURE.md). Design details of `-L` operands, supported modes and `-l` display/filter behavior must be source-grounded before implementation; preserve current `-o` and D-Bus ownership contracts. The new preparatory branch `task/joetoo-kwin-step1.5d-integrated-regression` is based on the accepted merge. Separate future steps include destructive managed close (1.6), runtime reconciliation (1.7), restore (1.8) and packaging (1.9). `/etc/joetoo-kwin/BUILD` from ebuild `$PVR` remains on the packaging backlog.
+**Next Step 1.5d:** implement the existing `-L` single-window launch and `-l` managed listing CLI stubs and run a bounded integrated native X11/Wayland regression of accepted Step 1.5 features; see [current HANDOFF](HANDOFF.md) and [architecture milestone table](../../ARCHITECTURE.md). Design details of `-L` operands, supported modes and `-l` display/filter behavior must be source-grounded before implementation; preserve current `-o` and D-Bus ownership contracts. The new preparatory branch `task/joetoo-kwin-step1.5d-integrated-regression` is based on the accepted merge. Separate future steps include destructive managed close (1.6), runtime reconciliation (1.7), restore (1.8) and packaging (1.9). `/etc/joetoo-kwin/BUILD` from ebuild `$PVR` remains on the packaging backlog.
 
 **Accepted evidence pointers:** [Increment 5 final native acceptance](step1.5c5d-increment5-final-native-acceptance-2026-11-11.md), [pre-strict native X11/Wayland](step1.5c5d-increment5-production-native-security-evidence-2026-11-11.md), [Increment 4 Stage 4](step1.5c5d-increment4-stage4-native-acceptance-2026-11-11.md). The historical discussion and draft tasks below remain chronology, not new work authorization. Any older `1.5c.5d OPEN` or `1.5d FUTURE` text in historical sources is superseded by this current accepted status and HANDOFF.
 
@@ -29,11 +60,11 @@ live-reflow proposal is historical and withdrawn from this scope.
 
 | Increment | Accepted outcome / limitation | Primary evidence |
 | --- | --- | --- |
-| 1.5a–b | Configured planning and interactive forms, preserving existing session behavior | [Project README](../README.md) and historical HANDOFF |
-| 1.5c.1–c.3 | Confirmed launch planning, safe managed registration, original local Bash/SSH continuity | [Project README](../README.md), historical HANDOFF |
+| 1.5a–b | Configured planning and interactive forms, preserving existing session behavior | [Project README](../../README.md) and historical HANDOFF |
+| 1.5c.1–c.3 | Confirmed launch planning, safe managed registration, original local Bash/SSH continuity | [Project README](../../README.md), historical HANDOFF |
 | 1.5c.4 | Desktop capacity, local Dolphin, layers, grouping and bounded initial stack/focus accepted on native X11/Wayland | [Native acceptance](step1.5c4-native-acceptance.md), [review](step1.5c4-review.md) |
 | 1.5c.5a | Dolphin SFTP, independent connectivity advisories and safe managed placement accepted | [SFTP acceptance](step1.5c5a-native-acceptance.md) |
-| 1.5c.5b | TigerVNC over owned authenticated SSH tunnel, exact viewer UUID placement and tunnel teardown accepted | [Project README](../README.md), historical HANDOFF |
+| 1.5c.5b | TigerVNC over owned authenticated SSH tunnel, exact viewer UUID placement and tunnel teardown accepted | [Project README](../../README.md), historical HANDOFF |
 | 1.5c.5c | Affirmative RDP feasibility; SDL3 FreeRDP chosen **first by implementation order**, not as default over TigerVNC | [PR #28](https://github.com/JosephBrendler/joetoo-ai/pull/28), [research](README_remote_desktop_research.md) |
 | 1.5c.5d / Increment 1 | **ACCEPTED**: native-Wayland SDL registration-only, no placement | [Native-Wayland evidence](step1.5c5d-increment1-native-wayland-acceptance-2026-11-07.md) |
 | 1.5c.5d / Increment 2 | **ACCEPTED (2026-11-08)**: native-KWin-X11 stock SDL registration-only with `auto` and `software`; same exact UUID retained when closed; 644 Python and 145 JavaScript regressions passed on the implementation baseline. The 500 ms X11 persistence heuristic has a known counterexample; no automatic placement or general production-RDP security acceptance. | [Native X11 registration evidence, including `software` closeout](step1.5c5d-increment2-native-x11-registration-2026-11-08.md) |
@@ -146,7 +177,7 @@ The original historical HANDOFF records **Codex iterations 0–45** and **cloud 
 - [Remote Desktop research](README_remote_desktop_research.md) and [GNOME study](README_gnome_remote_desktop.md)
 - [RDP private PKI / GRD system Remote Login evidence](step1.5c5d-gnome-remote-login-pki-evidence-2026-11-07.md)
 - [1.5c.4 native acceptance](step1.5c4-native-acceptance.md); [SFTP native acceptance](step1.5c5a-native-acceptance.md)
-- [1.5c.5 implementation scope](Step1.5c5_implementation_scope.md); [project architecture](../ARCHITECTURE.md)
+- [1.5c.5 implementation scope](Step1.5c5_implementation_scope.md); [project architecture](../../ARCHITECTURE.md)
 - [Authoritative Increment 4 maintainer decisions](step1.5c5d_Increment_4_decisions.md); [superseded historical strategy](step1.5c5d-increment3-strategy-decision.md)
 
 ## Record policy

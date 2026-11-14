@@ -417,6 +417,10 @@ and returns failure without closing it or releasing its reservation.
 `-L` requires a matching broker/resident advertising `single_raise_protocol=1`;
 an older pair is rejected before confirmation. The existing `-o` protocol remains
 compatible. Live-desktop reflow is withdrawn from Step 1.5d; the earlier
-[source review](../task_step1.5/step1.5d-managed-inventory-and-live-layout-review.md)
+[source review](../archive/task_step1.5/step1.5d-managed-inventory-and-live-layout-review.md)
 is historical, not an active implementation requirement. See the
-[current headless candidate and native matrix](../task_step1.5/step1.5d-single-recipe-headless-candidate.md).
+[historical headless candidate and native matrix](../archive/task_step1.5/step1.5d-single-recipe-headless-candidate.md),
+[accepted native X11/Wayland record](../archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md)
+and [post-fix regression evidence](../archive/task_step1.5/step1.5d-xcb-evidence-addendum.md).
+Step 1.5d is accepted and merged through PR #30. Step 1.6 managed operations
+are the next milestone; detailed scope and implementation are not yet approved.
