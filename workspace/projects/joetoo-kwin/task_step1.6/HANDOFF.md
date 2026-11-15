@@ -42,9 +42,11 @@ Transition validation:
 - Runtime code, tests, installers and configuration behavior unchanged.
 - Complete rename-aware diff, file-mode checks, whitespace validation and reverse-apply consistency check prepared for review, including all new files.
 
-**Current publication state:** The documentation transition is locally prepared and checkpointed by the maintainer; this round's final HANDOFF/README edits remain uncommitted and unstaged. Remote publication state is not asserted. Final file review and explicit authorization to commit, push, create a PR and merge remain required; Codex has performed none of those actions.
+Current publication state (2026-11-14): The Step 1.5 archive / Step 1.6 initialization transition is committed and pushed to branch task/joetoo-kwin-step1.5-archive-step1.6-init. The initial transition checkpoint is cfb3a7b13276a31a9092b70f2f0a7334443f33d5; the final HANDOFF/README review changes were committed at 9b7868f987acc43de127352aff4154fa146fddb3.
 
-Upon PR merge, record the final merge commit and update this status to reflect the accepted documentation baseline.
+The transition is ready for documentation PR review, subject to the maintainer's final approval. PR creation and merge remain separately controlled. Step 1.6 source/contract review and implementation remain unauthorized.
+
+Upon PR merge, record the final merge commit and update this HANDOFF to identify the accepted documentation baseline.
 
 ## 4. Step 1.6 objective
 
