@@ -4,85 +4,55 @@ Development workspace for replacing joetoo's X11 `xdotool_*` window workflows
 with KWin-compatible tools on **X11 and Wayland**. Candidate sources remain
 in `joetoo-ai`, not yet the packaged version 1 application. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for accepted and proposed product contracts,
-including the next remote-access tranche.
+including managed-operation requirements.
 
-## Current status — November 10, 2026
+## Current status — November 14, 2026
 
-**Step 1.5c.4 is accepted and merged.** The tested implementation baseline was
-`a3c50fc`, with maintainers' X11 and Wayland acceptance and subsequent
-closure documentation recorded in the [Step 1.5 handoff](task_step1.5/HANDOFF.md),
-[native acceptance record](task_step1.5/step1.5c4-native-acceptance.md), and
-[merge-readiness audit](task_step1.5/step1.5c4-review.md).
-The merged branch may have a different merge-commit SHA. Do not confuse the
-tested implementation revision with a later documentation or merge commit.
+**Step 1.5 is complete and archived.** Managed configured RDP and its five
+increments were accepted and merged through [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29)
+at `3e9c4bf311bc65b32d332a00d3b50163a9043303`. Step 1.5d was accepted and
+merged through [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30)
+at `f72407278fa0a9c923079f3b38ce834440d2fef2`. The reviewed transition
+baseline is `main` at `231e3c3c7e77839ef9220cf1c128f7a1572726d0`.
 
-**Step 1.5c.5a Dolphin SFTP is accepted and closed.** The task-branch
-implementation includes safe SFTP URI handling and optional, non-enforcing
-post-confirmation NSS/TCP reachability advisories. The maintainer demonstrated
-managed X11 (`gmki91`) and Wayland (`q552u01`) launches, window registration,
-placement and remote browsing. Positive and negative advisory observations are
-recorded in the [Step 1.5 handoff](task_step1.5/HANDOFF.md) and
-[SFTP acceptance record](task_step1.5/step1.5c5a-native-acceptance.md).
-The advisory does not itself establish SSH authentication or SFTP usability.
+**Step 1.6 is the active milestone, with detailed scope not yet approved.**
+The next engineering activity is a **separately authorized read-only source/
+contract review** of managed `-a`, `-d` and `-x`. This status does not authorize
+implementation, destructive operations, native testing or publication.
+See the [active HANDOFF](task_step1.6/HANDOFF.md) and [task index](task_step1.6/README.md).
 
-**Step 1.5c.5b TigerVNC-over-SSH is accepted and merged.** On `gmki91`
-(X11), the maintainer verified an authenticated
-remote viewer, precise managed UUID identity and placement, a separate managed
-Dolphin window, stacking, loopback-only SSH forwarding, and viewer/tunnel
-teardown. On `q552u01` (Wayland/XWayland), a fresh one-window launch placed
-`yorsqui:2` at desktop 10, slot 1, with verified geometry, registry presence,
-1/1 layout completion, visually usable remote desktop, and both viewer and SSH
-processes absent after closing the viewer. The runner reports remote
-session/authentication as unverified; visual use is separate maintainer evidence.
+| Completed capability | Accepted outcome / evidence |
+| --- | --- |
+| Configured planning and launches | Shared geometry, confirmation, original local Bash/SSH placeholders, Dolphin local/SFTP and one-shot group layout; [Step 1.5 history](archive/task_step1.5/README.md) |
+| TigerVNC over SSH | Positive viewer identity, owned forwarding lifecycle and verified placement on X11 and Wayland/XWayland; retained as a supported peer |
+| SDL FreeRDP | Configured serial `-o`, native X11/Wayland registration and exact-UUID placement, finite readiness and verified clean-failure continuation; [final acceptance](archive/task_step1.5/step1.5c5d-increment5-final-native-acceptance-2026-11-11.md) |
+| Configuration | Layered defaults/per-run settings, optional user-owned `eselect` profiles and severity-sensitive display; [configuration acceptance](archive/task_step1.5/step1.5c5d-increment4-stage4-native-acceptance-2026-11-11.md) |
+| Single-window launch and inventory | `-L DESKTOP PROGRAM MODE TARGET [LAYER]` supports `over` only (also the omitted-layer default), retained-slot selection and verified one-shot raise without peer reflow; `-l` lists managed records read-only; [native acceptance](archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md) |
 
-The nine-file user OpenRC installer (including the three VNC helper modules)
-reports all nine components current on both hosts. Its new content-addressed
-backup behavior was checked for unchanged-update stability on `gmki91`.
-Historical timestamped backups were manually relocated out of production
-paths: 171 on `gmki91`, 135 on `q552u01`, retained under the user state
-`legacy-backups/` directory. The unneeded standalone migration utility and
-its tests are retained only in `archive/aborted_backup_migration_tool/`;
-no real migration run was performed.
+**Final recorded fixture/regression evidence:** 7 focused Python tests,
+1,000/1,000 isolated XCB repetitions, an additional 100 leak-check repetitions,
+949 full Python tests and 163 JavaScript tests passed after the fixture fix.
+These are the [published post-fix results](archive/task_step1.5/step1.5d-xcb-evidence-addendum.md),
+not tests rerun for this documentation transition. The earlier
+`iota01` 948/949 result and eleven passing reruns remain preserved in the
+native record. Production nonblocking libxcb behavior was unchanged.
 
-**Step 1.5c.5c — Affirmative RDP feasibility accepted by the
-maintainer.** [PR #28](https://github.com/JosephBrendler/joetoo-ai/pull/28)
-merged at `be8eb276`. GNOME Remote Login interoperability and client comparison
-led to SDL3 FreeRDP as the first RDP implementation target. Native-Wayland
-evidence distinguishes the launch-owned marked viewer from credentials and
-covers cancellation, failed NLA, connection failure and an unrelated viewer.
-X11 has a distinct temporary/persistent marked-window lifecycle requiring its
-own role discriminator. The existing KWin observations support the Wayland
-identity contract without an additional user-interaction observer. Detailed
-provenance and qualifications remain in the [handoff](task_step1.5/HANDOFF.md).
-
-**Step 1.5c.5d — Managed RDP implementation in candidate development.** Native-Wayland registration, native-X11 registration and serial X11 operator placement were accepted in earlier gates. Following Option C serial consolidation (`df01e0c`), development-only smart sizing (`54df85f`) and an immediate-placement harness (`599f7f3`), the maintainer demonstrated **one automatic native Wayland exact-frame placement** without waiting for GDM content. Increment 3 repeat/X11 regression and formal acceptance remain open; configured RDP `-o` is not implemented. Fresh-client connection does not establish server-session continuity, and local viewer registration/placement is not proof of TLS trust, GDM login or remote usability. See [new evidence](task_step1.5/step1.5c5d-increment3-native-wayland-smart-sizing-immediate-placement-2026-11-10.md).
-
-| Increment | Work | Status |
-| --- | --- | --- |
-| 1.5c.5a | Dolphin SFTP, safe URI handling and independent placement/remote outcomes | Accepted and closed; X11/Wayland native evidence |
-| 1.5c.5b | Positively identified TigerVNC viewer over owned authenticated SSH tunnel | Accepted and merged; supported peer capability |
-| 1.5c.5c | RDP interoperability, client comparison and viewer identity feasibility | Closed; affirmative maintainer decision; PR #28 |
-| 1.5c.5d | Managed SDL RDP registration and deliberate placement; next configured `-o` integration | Candidate Option C implemented; native Wayland immediate placement verified once at `599f7f3`; repeat/X11/security and `-o` gates remain |
-| 1.5d | Broader integrated regression and `-L`/`-l` | Subsequent separate gate |
-
-**Latest RDP native evidence (2026-11-10):** The maintainer ran the `599f7f3` immediate-placement harness on `q552u01` (Wayland), with 789 Python and 161 JavaScript headless tests passing. Registration-to-placement submission took **6.43 ms** and the broker verified exact `(1,1) 800×628` at **116.16 ms**, while GDM content appeared later. This is a **single-run** development result; production `-o`, repeated Wayland launches, X11 smart-sizing regression, and remote-security outcomes remain separate. [Detailed evidence](task_step1.5/step1.5c5d-increment3-native-wayland-smart-sizing-immediate-placement-2026-11-10.md) · [task chronology](task_step1.5/README.md) · [active HANDOFF](task_step1.5/HANDOFF.md).
-**Implementation scope:** See [Step 1.5c.5 implementation scope and outline](task_step1.5/Step1.5c5_implementation_scope.md) for detailed objectives, program/mode contracts, investigation requirements, security constraints, acceptance criteria, and increment boundaries. The scope document guides planning and review; implementation authorization and execution controls are established separately in `task_step1.5/HANDOFF.md`.
-
-Additional installed RDP clients may now be evaluated deliberately, but are not
-automatically scheduled for implementation. The original 1.5c.4 scope outline
-is historical; later layer/group/focus approvals and accepted source supersede
-its obsolete ordering/protrusion assumptions.
+Native Step 1.5d acceptance used `gmki91` X11 and `iota01` Wayland;
+earlier RDP acceptance also used `q552u01` Wayland. Those historical results
+are not Step 1.6 acceptance. Local registration/placement does not establish
+remote TLS trust, authentication, GDM login or usability. RDP's accepted
+built-in defaults remain `/sec:nla` and `/cert:deny`.
 
 ### Completed development evidence
 
 | Gate | Delivered capability | Evidence |
 | --- | --- | --- |
 | 1.2a–1.3b | OpenRC user broker, resident KWin lifecycle, observation, PID/UUID correlation | [Archive](archive/README.md), [PR #16](https://github.com/JosephBrendler/joetoo-ai/pull/16), [PR #17](https://github.com/JosephBrendler/joetoo-ai/pull/17) |
-| 1.4a–1.4d | Managed registry, UUID-based reconciliation, public read-only queries and multiwindow placement | [Step 1.4 closure](task_step1.4/HANDOFF.md), PRs #19–#22 |
-| 1.5a | Configurable planner/shared geometry, colorized descriptive `-c` | [Step 1.5 history](task_step1.5/HANDOFF.md), PR #23 |
-| 1.5b | Interactive `-m` operands, independent preservation, native X11/Wayland acceptance | [Step 1.5 history](task_step1.5/HANDOFF.md), PR #24 |
-| 1.5c.1–1.5c.3 | Confirmation before launch, safe coordinated managed slots and original Bash/SSH placeholders | [Step 1.5 history](task_step1.5/HANDOFF.md), PR #25 |
-| 1.5c.4 | KWin desktop capacity, Dolphin local, application-independent layers, group finalization, bounded initial stack/focus, XDG discovery | [Native closure](task_step1.5/step1.5c4-native-acceptance.md), [audit](task_step1.5/step1.5c4-review.md) |
+| 1.4a–1.4d | Managed registry, UUID-based reconciliation, public read-only queries and multiwindow placement | [Step 1.4 closure](archive/step1.4/HANDOFF.md), PRs #19–#22 |
+| 1.5a | Configurable planner/shared geometry, colorized descriptive `-c` | [Step 1.5 history](archive/task_step1.5/HANDOFF.md), PR #23 |
+| 1.5b | Interactive `-m` operands, independent preservation, native X11/Wayland acceptance | [Step 1.5 history](archive/task_step1.5/HANDOFF.md), PR #24 |
+| 1.5c.1–1.5c.3 | Confirmation before launch, safe coordinated managed slots and original Bash/SSH placeholders | [Step 1.5 history](archive/task_step1.5/HANDOFF.md), PR #25 |
+| 1.5c.4 | KWin desktop capacity, Dolphin local, application-independent layers, group finalization, bounded initial stack/focus, XDG discovery | [Native closure](archive/task_step1.5/step1.5c4-native-acceptance.md), [audit](archive/task_step1.5/step1.5c4-review.md) |
 
 The maintainer ran **287 Python tests and 50 JavaScript tests** on
 `q552u01` at tested baseline `a3c50fc`; syntax and lint checks also passed.
@@ -98,29 +68,38 @@ local Bash** in the same managed Konsole. These were maintainer-executed
 native tests, not AI-run host operations. They are not universal timing or
 multi-monitor guarantees.
 
-## Current Step 1.5c.5d status (2026-11-10–11)
+## Accepted configuration and lifecycle baseline
 
-**Increment 4 Stage 3 accepted:** the maintainer observed 869 Python and 161 JavaScript regressions passing on `gmki91`; native `gmki91` X11 and `q552u01` Wayland tests both proved serial Konsole success → verified clean RDP failure → Konsole success, success-only stack/focus and correct incomplete `2/3` result. RDP registration and VNC viewer-readiness defaults are now 300000 ms, with validated overrides. See [Stage 3 native acceptance and operator excerpts](task_step1.5/step1.5c5d-increment4-stage3-native-acceptance-2026-11-10-11.md).
+RDP registration and VNC viewer-readiness defaults are 300000 ms, with validated
+overrides and independently bounded mechanical operations. Serial continuation
+requires positive broker/process cleanup evidence; Busy or uncertain ownership
+still stops the plan. See the [Stage 3 native record](archive/task_step1.5/step1.5c5d-increment4-stage3-native-acceptance-2026-11-10-11.md).
 
-**Next: Stage 4A authorized for preparation, not yet dispatched to Codex.** Develop a short per-run template and separate annotated settings reference; keep today's CLI lookup untouched. Loader layering (Stage 4B) and optional user-owned `eselect` plan selector are independently gated. See [current HANDOFF](task_step1.5/HANDOFF.md) and [draft Stage 4A task](task_step1.5/step1.5c5d-increment4-stage4A-codex-task-DRAFT.md).
+The short [per-run template](joetoo-kwin-per-run-template.conf) and
+[configuration reference](docs/configuration-reference.md) describe the accepted
+layering and optional user-owned profile selector. Packaging remains Step 1.9.
 
 ## Window configuration at a glance
 
 `desktop_session_list` is an indexed Bash array of pipe-delimited recipes - see ARCHITECTURE.md
 
-The optional `LAYER` is `under`, `panel`, or `over`; omitted means `panel`.
+For configured `-o`, the optional `LAYER` is `under`, `panel`, or `over`; omitted means `panel`.
 **`slot` is not an array field**: the planner derives the one-based entry
 number per desktop, including entries of every application/layer. Desktop
 groups are executed in first-appearance order and retain within-desktop
 configuration order; initial stack order is `under → panel → over`. This is
 a one-time layout and does not override later manual KWin operations.
 
-The explicit `-f` configuration path takes priority; otherwise the XDG user
-file at `${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf`
-precedes `/etc/joetoo-kwin/joetoo-kwin.conf`. Users do not need to set
-`XDG_CONFIG_HOME`; packaging templates and install guidance are future 1.9 work.
+Configuration precedence is built-in defaults, optional
+`/etc/joetoo-kwin/defaults.conf`, optional XDG user `joetoo-kwin/defaults.conf`,
+selected per-run plan, then supported CLI overrides. Explicit `-f FILE` selects
+the per-run plan without suppressing defaults. Otherwise the XDG user
+`joetoo-kwin/joetoo-kwin.conf` precedes `/etc/joetoo-kwin/joetoo-kwin.conf`.
+`XDG_CONFIG_HOME` defaults to `$HOME/.config`. See the configuration reference
+for validation and optional profile selection. OpenRC service configuration
+remains separate.
 
-## Candidate applications available for the next evaluation
+## Historical application-evaluation inventory
 
 The maintainer reported the following **installed on `gmki91`** (November 1,
 2026); the corresponding `q552u01` installation and real launch behavior
@@ -138,17 +117,21 @@ managed-launch implementations.
 | Midnight Commander (`mc`) | 4.8.33 (`-sftp`) | **Text-mode** file manager; assess utility through a managed terminal, not as a separate KWin GUI |
 
 The subsequent RDP comparison included KRDC, Remmina, `xfreerdp` and SDL
-FreeRDP; see the [GNOME interoperability study](task_step1.5/README_gnome_remote_desktop.md)
-and [feasibility record](task_step1.5/HANDOFF.md). Installed candidates are not
+FreeRDP; see the [GNOME interoperability study](archive/task_step1.5/README_gnome_remote_desktop.md)
+and [feasibility record](archive/task_step1.5/HANDOFF.md). Installed candidates are not
 automatically managed capabilities. Each future integration needs its own
 launch, identity, lifecycle and security contract; TigerVNC remains fully supported.
 
 ## Development and validation platforms
 
-| Host | Relevant system | Native KWin backend |
+| Host | Current maintainer-designated role | Native KWin backend |
 | --- | --- | --- |
-| `gmki91` | GMKtec NucBox M3 PLUS, Intel i9-12900HK, Gentoo x86_64 | X11 |
-| `q552u01` | ASUS Q552UB, Intel i7-6500U, Gentoo x86_64 | Wayland |
+| `q552u01` | Initial Step 1.6 development/acceptance host | Wayland |
+| `slim2` | Subsequent native X11 testing | X11 |
+| `gmki91` | Additional native X11 validation | X11 |
+
+These roles do not authorize native execution. Step 1.5d's `iota01` Wayland
+acceptance remains attributed to that host in the archived evidence.
 
 The completed graphical-layer acceptance used 1920×1080 configured displays;
 this does **not** constitute autodetection or a universal display requirement.
@@ -164,8 +147,9 @@ this does **not** constitute autodetection or a universal display requirement.
 - `joetoo-kwin-template.conf`: documented defaults.
 - `user-init.d/`, `user-conf.d/`, `conf.d/` and `poc-user-conf.d/`:
   user OpenRC and development configuration assets.
-- `tests/`: headless regression suites; `archive/`: historical POCs;
-  `task_step1.4/`, `task_step1.5/`: acceptance and handoffs.
+- `tests/`: headless regression suites; `archive/`: historical POCs and
+  completed tasks, including `archive/step1.4/` and `archive/task_step1.5/`.
+- `task_step1.6/`: active managed-operations dispatch and task index.
 - `tools/joetoo-kwind-install-poc`: user-owned installation/checking helper.
 
 From the project directory, suitable headless checks include:
@@ -188,11 +172,11 @@ or separately authorized, consistent with applicable repository policy.
 - [Architecture and version 1 requirements](ARCHITECTURE.md)
 - [Project AI collaboration instructions](AGENTS.md)
 - [Historical POCs and probes](archive/README.md)
-- [Step 1.4 completion](task_step1.4/HANDOFF.md)
-- [Step 1.5c.4 closure and historical authorization](task_step1.5/HANDOFF.md)
-- [Step 1.5c.4 native evidence](task_step1.5/step1.5c4-native-acceptance.md)
-- [Step 1.5c.4 merge-readiness audit](task_step1.5/step1.5c4-review.md)
+- [Step 1.4 completion](archive/step1.4/HANDOFF.md)
+- [Step 1.5 closure and historical dispatch](archive/task_step1.5/HANDOFF.md)
+- [Step 1.5c.4 native evidence](archive/task_step1.5/step1.5c4-native-acceptance.md)
+- [Step 1.5c.4 merge-readiness audit](archive/task_step1.5/step1.5c4-review.md)
 
 Historical proposals and illustrative targets do not authorize new work.
-The active Step 1.5c.5 HANDOFF records the accepted SFTP and native-tested VNC
-outcomes; RDP evaluation and Step 1.5d remain separately gated.
+The [Step 1.6 HANDOFF](task_step1.6/HANDOFF.md) identifies current authority
+and the next actor. Archived task instructions confer no new authorization.

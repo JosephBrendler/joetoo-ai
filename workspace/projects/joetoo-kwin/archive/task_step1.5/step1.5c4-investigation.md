@@ -11,7 +11,7 @@ nemo, remmina or wlfreerdp. These are environment-local observations, not verifi
 package/version inventories on gmki91 or q552u01. Each host's current package,
 executable options and identity behavior still needs maintainer verification.
 
-Historical [Step 1.3b report](../archive/step1.3/step1.3b/joetoo-kwin-step1.3b-draft-pr.md)
+Historical [Step 1.3b report](../step1.3/step1.3b/joetoo-kwin-step1.3b-draft-pr.md)
 records Dolphin --new-window exact-PID matches on both hosts. It is historical
 feasibility evidence, not acceptance of the new executor/current versions.
 

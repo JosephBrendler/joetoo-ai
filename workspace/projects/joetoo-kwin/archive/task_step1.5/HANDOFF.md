@@ -1,3 +1,34 @@
+# Step 1.5 — Closed and archived
+
+**Closure recorded 2026-11-14.** Step 1.5 is complete. Step 1.5c.5d merged
+through [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29) at
+`3e9c4bf311bc65b32d332a00d3b50163a9043303`; Step 1.5d was accepted and
+merged through [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30)
+at `f72407278fa0a9c923079f3b38ce834440d2fef2`. The reviewed post-merge
+baseline is `231e3c3c7e77839ef9220cf1c128f7a1572726d0`.
+
+The [native acceptance record](step1.5d-native-acceptance-2026-11-12.md)
+retains the original `iota01` 948/949 Python result and eleven passing reruns.
+The [published fixture addendum](step1.5d-xcb-evidence-addendum.md) records
+the final 7 focused Python, 1,000/1,000 stress repetitions, 100 additional
+leak-check repetitions, 949 full Python and 163 JavaScript passes, plus syntax
+and whitespace checks. These are recorded results, not reruns during archival.
+The fixture correction preserved production nonblocking libxcb behavior.
+
+This complete historical directory is now `archive/task_step1.5/`.
+The dated content below is preserved, apart from mechanical navigation repairs.
+Statements there that work, fixture hardening or publication remain pending
+describe their original dates and are superseded by this closure notice.
+They confer no current execution authority.
+
+Active milestone: [Step 1.6 HANDOFF](../../task_step1.6/HANDOFF.md) and
+[task index](../../task_step1.6/README.md). The next engineering activity is a
+**separately authorized read-only source/contract review**. Detailed `-a`,
+`-d` and `-x` implementation scope, destructive operations, native testing
+and publication remain unapproved.
+
+---
+
 # Step 1.5 — Active task dispatcher
 
 **Current status (2026-11-12): Step 1.5d ACCEPTED; publication/merge pending.** The accepted feature consists of `-L` one managed `over` launch, collision-free logical slot selection, broker-verified one-shot raise preserving existing windows, and read-only `-l` managed inventory. Native X11 on `gmki91` and native Wayland on `iota01` succeeded; the critical multi-window raise scenario was demonstrated on both. The maintainer explicitly accepted Step 1.5d following these results. See [the Step 1.5d native acceptance and regression record](step1.5d-native-acceptance-2026-11-12.md).
@@ -9,7 +40,7 @@
 **Repository:** `JosephBrendler/joetoo-ai`  
 **Project:** `workspace/projects/joetoo-kwin/`  
 **Active Step 1.5d branch:** `task/joetoo-kwin-step1.5d-integrated-regression` (unmerged; verify exact HEAD, local status and origin before altering source).  
-**Authoritative architecture:** [ARCHITECTURE.md](../ARCHITECTURE.md).  
+**Authoritative architecture:** [ARCHITECTURE.md](../../ARCHITECTURE.md).\
 **Task/evidence index:** [README.md](README.md).
 
 ## Accepted 1.5d contract and demonstrated behavior

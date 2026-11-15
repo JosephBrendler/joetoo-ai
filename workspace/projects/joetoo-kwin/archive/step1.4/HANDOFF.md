@@ -61,7 +61,7 @@ Evidence boundary: tests and native execution were **performed/reported by the m
 - Current accepted implementation: merged `joetoo-ai/main`, PRs #19–#22.
 - Legacy POCs and plan/SSH prototypes: `archive/README.md`.
 - AI-generated review ZIPs, patch builders, handoffs and test guides are **development artifacts**, not canonical source. Some older artifacts were never committed. Retain recovered originals with a manifest marking superseded patches; don't replay them against merged `main`.
-- [Project README](../README.md) provides the short current-status summary. [Architecture](../ARCHITECTURE.md) governs design and milestone acceptance.
+- [Project README](../../README.md) provides the short current-status summary. [Architecture](../../ARCHITECTURE.md) governs design and milestone acceptance.
 
 ## 6. Closure and next actor
 
