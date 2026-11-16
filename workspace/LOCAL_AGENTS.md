@@ -1,5 +1,3 @@
-Caveat: This is a preliminary draft - not authoritative until the maintainer approves it and removes this caveat.
-
 # Supplemental role specification — Local implementation agents (including Codex CLI)
 
 ## Purpose and authority

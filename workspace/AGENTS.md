@@ -4,8 +4,10 @@
 
 ## Agent roles and active-task discovery
 
-Caveat: This section and the supplemental role files remain **draft and
-non-authoritative** until the maintainer approves and removes their caveats.
+**Notice: This section and the supplemental role files are now in force.** However,
+they are new - so all ai should immediately alert the maintainer and request clarification
+if their now-authoritative role restricitons will break or impede previously extablished
+roles and workflows.
 
 All contributors obey repository-root, workspace and applicable project
 `AGENTS.md` instructions. Local implementation agents (e.g. Codex CLI) consult
