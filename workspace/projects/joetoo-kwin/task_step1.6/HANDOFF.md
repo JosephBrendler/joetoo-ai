@@ -1,6 +1,6 @@
 # Step 1.6 — Managed operations HANDOFF
 
-**Status (2026-11-16, evening): Step 1.6 candidate pushed, with substantial maintainer-native Wayland/XWayland close evidence. NOT ACCEPTED: the confirmed `-x` operation still retains records/reservations and requires the approved progressive clean-sweep refinement. Remaining native gates and publication are reserved.**
+**Status (2026-11-16, late evening): The focused `-x` progressive clean-sweep correction is implemented as an **uncommitted ten-file Codex candidate** at local `HEAD f26027a0`; q552u01 maintainer-native testing reports **8 verified closes + 1 missing retirement, all 9 records retired, empty `-l` without broker restart**. No code blocker demonstrated. **Step 1.6 not yet finally accepted**: remaining safety/native X11 acceptance and publication are reserved.**
 
 ## 1. Task identity and authority
 
@@ -30,10 +30,16 @@ These completed milestones are accepted foundations, not outstanding work.
 
 PR #31 merged the archive/init transition at `cdcdc9e`; the
 [initial historical HANDOFF](step1.6_initial_historical_HANDOFF.md) preserves
-that work. The maintainer subsequently pushed the Step 1.6 candidate with
-corrected KWin plugin packaging, and executed q552u01 native tests.
-See [2026-11-16 evidence](step1.6-native-wayland-evidence-2026-11-16.md).
-Native evidence does not imply Step 1.6 acceptance or authorize publication.
+that work. The maintainer pushed the initial Step 1.6 candidate with corrected
+KWin plugin packaging and collected the first q552u01 native close evidence.
+A later **locally modified, uncommitted** ten-file correction (Codex) implements
+the approved progressive `-x` semantics. After deploying the corrected user
+broker, the maintainer collected further native success evidence. See
+[original evidence](step1.6-native-wayland-evidence-2026-11-16.md) and
+[progressive-sweep review/native addendum](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md).
+The earlier evidence is retained unchanged; implementation and native results
+in the addendum supersede its old `-x` status. Neither constitutes an automatic
+publication or final milestone acceptance.
 
 ## 4. Step 1.6 objective
 
@@ -56,10 +62,14 @@ Never force-kill, close by title/class/PID alone, or erase uncertain ownership.
 `-D` individual close-and-retire is version 2; no `-a`, `-S`, `-r`, restore,
 new native subsystem or general checkpoint/recovery in Step 1.6.
 
-Current implementation retains all records for `-x`; this is the **first
-remaining coding discrepancy**. See [Codex draft](DRAFT_Codex-Step1.6-x-progressive-sweep.md),
-[evidence](step1.6-native-wayland-evidence-2026-11-16.md) and
-[native adapter design](../native/managed-close/README.md).
+**The reviewed, locally uncommitted candidate now implements this distinction.**
+The q552u01 positive-path test passed with nine total retirements and empty
+`-l` without restart. No further `-x` implementation work is justified by
+that result. See [addendum](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md),
+[unchanged original evidence](step1.6-native-wayland-evidence-2026-11-16.md)
+and [updated native adapter contract](../native/managed-close/README.md).
+The prior [implementation Codex prompt](DRAFT_Codex-Step1.6-x-progressive-sweep.md)
+is completed history, **not a live task**.
 
 ## 5. Invariants and exclusions
 
@@ -83,21 +93,29 @@ Host assignments do not themselves authorize native test execution, service chan
 
 ## 7. Next actor and authorization
 
-**Next actor:** maintainer to review and **explicitly authorize** the bounded
-[`-x` Codex prompt](DRAFT_Codex-Step1.6-x-progressive-sweep.md).
-After that authorization, Codex implements only the registry/retirement,
-aggregate reporting and small CLI-preview correction on the existing task
-branch; runs focused headless regressions; and returns a reviewable diff.
-Codex must not perform native operations, deployment, commit, push or PR
-without separate maintainer authority.
+**Next actor: maintainer (native acceptance and disposition of the local diff).**
+The bounded `-x` correction is implemented, headless validated and positively
+exercised on q552u01. The ten changed source/test/documentation files remain
+**uncommitted/unstaged** at local `HEAD f26027a0` according to Codex. Its fetch
+failed because `.git/FETCH_HEAD` was read-only; the tested local patch and
+source were supplied for review. **No additional Codex coding round is needed
+without a demonstrated defect.**
 
-**First next action:** implement confirmed progressive `-x` record/slot
-retirement without changing `-d` or adding version-2 `-D`.
-**Then:** cloud code/test review; maintainer repeats q552u01 native `-x`
-(mixed already-missing + present, post-run empty `-l`), refusal and
-self-terminal/CLI-loss/worker-cleanup tests. Native X11 on `slim2` (optional
-`gmki91`) remains outstanding, including XID reuse/fence and unsupported
-`WM_DELETE_WINDOW` cases. All these are separate approval/test gates.
+**First next action:** finish only the remaining maintainer-native checks:
+q552u01 declined `-x`/no effects, status query after CLI exit, direct-client
+refusal/known-safe partial cleanup, disposable self-terminal/CLI-loss and
+independent worker/SSH cleanup as feasible; then slim2 native X11 XCB
+fence/unsupported-protocol/reused-XID tests (optional gmki91 coverage).
+See [addendum](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md)
+for what already passed versus what is still unverified.
+
+**After that:** record the final acceptance decision and decide whether to
+publish the reviewed local candidate (commit/push/PR) at a separate maintainer
+publication gate. Do not create another stage or dispatch Codex to repeat
+successful tests. A [conditional defect-only Codex prompt](DRAFT_Codex-Step1.6-conditional-native-defect-fix.md)
+is prepared **only if** a reproducible blocking fault is found. No native
+host/service operation, repo publication, or protected-repo mutation is
+authorized by this handoff.
 
 ## 8. Recent decisions
 
@@ -109,30 +127,43 @@ self-terminal/CLI-loss/worker-cleanup tests. Native X11 on `slim2` (optional
 
 ## 9. Latest candidate result
 
-**Maintainer native on q552u01 (2026-11-16):** corrected compiled effect
-`joetoo_managed_close` discovered, supported and loaded after fresh Wayland
-login; same D-Bus owner as KWin; OpenRC broker started with all close methods.
-Declined `-d` closed nothing. Verified exact-UUID selective closes included
-Dolphin, Konsole, SDL FreeRDP (Wayland) and TigerVNC (local XWayland); repeat
-close was safely excluded. Confirmed `-x` closed **6/6** eligible targets,
-but returned `partial` due to six already-missing exclusions, retained **all
-12** records as `missing` and required a broker restart workaround for empty
-inventory. Nano/Kate attempts were **not** a direct application-refusal test;
-RDP/VNC/SSH worker cleanup and native X11 are not yet verified. Evidence:
-[maintainer-native record](step1.6-native-wayland-evidence-2026-11-16.md).
+**Corrected `-x` native positive-path PASS on q552u01 (2026-11-16):**
+Maintainer ran `./tools/restart_joetoo-kwind t`, updated the 12 user-owned
+broker files, restarted the OpenRC user service, then ran the local full
+regression: **1,016 Python tests OK**, **163 JavaScript PASS** and installer
+check PASS. Three configured plans launched 5/5 + 2/2 + 2/2 managed windows.
+A confirmed `-x` processed **nine** managed registrations: one preexisting
+missing entry (`retire_missing`, `already_missing`) and **eight native verified
+closes** (seven Wayland, one local XWayland); **all nine** returned
+`retired=true`. Transaction `a5ac9323bd95406290e0ac5fe666b433` returned
+`state=succeeded`, no exclusions, both retention flags `false` and
+`./joetoo-kwin -l` immediately returned
+`No managed windows (no retained managed reservations).` **No broker restart
+was needed during/after that sweep.**
 
-**Prior Codex headless candidate (not rerun for this documentation or the
-refinement):** 999 Python tests (998 PASS/1 SKIP due sandbox SO_PASSCRED),
-107 focused (106 PASS/1 SKIP), 163 JavaScript PASS; both KWin 6.7.6 native
-variants compiled; syntax and ShellCheck passed. These are pre-refinement
-results, not evidence for corrected `-x`. See [task README](README.md).
+**Codex headless correction review:** focused 107 tests (106 PASS, 1 sandbox
+SO_PASSCRED SKIP); full 1,016 (1,015 PASS, 1 SKIP); 163 JS PASS; syntax,
+ShellCheck, AST and whitespace PASS. Ten modified tracked files (+374/−33
+per Codex), no new native plugin/XCB/RDP/VNC code. The additional q552u01
+regression was unconfined and printed `Ran 1016 tests ... OK` (no skip shown).
+An intermediate help-test fixture failure was corrected before final green
+runs; failed `git fetch` on read-only `FETCH_HEAD` was a source-sync limitation.
+
+**Not yet demonstrated natively:** directly managed client refusal,
+known-safe partial failure, helper/source uncertainty, self-terminal/CLI-loss,
+remote worker/SSH/tmux cleanup and the separate native X11 compositor.
+The unchanged earlier evidence covers selective `-d` and the old bulk
+retention behavior. Details:
+[2026-11-16 progressive addendum](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md)
+and [original native evidence](step1.6-native-wayland-evidence-2026-11-16.md).
 
 ## 10. Next decision
 
-Review/authorize the focused `-x` implementation; then inspect its diff,
-headless regression and subsequent maintainer-native evidence. Align stale
-`-x` wording in the project architecture and native adapter README when the
-code changes. **Step 1.6 is not yet accepted.** Commit/push/PR/merge and native
-operations are separately reserved; historical records grant no authority.
+**No new coding task is indicated by the successful sweep.** Complete/record
+the limited remaining native acceptance, then decide whether to accept Step 1.6
+and authorize publication of the locally modified candidate. If a **specific
+reproducible defect** blocks acceptance, first capture its exact failing
+native/result evidence and then, if needed, authorize only the smallest
+conditional Codex fix. No speculative redesign or extra implementation stage.
 
 Historical evidence and earlier draft instructions must not override this HANDOFF or subsequent explicit maintainer decisions.
