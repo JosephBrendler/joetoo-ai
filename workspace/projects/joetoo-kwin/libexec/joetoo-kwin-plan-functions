@@ -11,6 +11,13 @@
 # shellcheck disable=SC2034
 plan_defaults() {
     # Work-area discovery is unresolved: dimensions must be supplied explicitly.
+    # Close is independent of launch geometry and remote authentication.
+    managed_close_timeout_ms=15000
+    managed_close_total_timeout_ms=300000
+    managed_close_prepare_timeout_ms=300000
+    managed_close_x11_grab_ms=100
+    managed_close_poll_ms=100
+    managed_close_dbus_timeout_ms=3000
     screen_width=""
     screen_height=""
     desktop_limit=20
@@ -106,6 +113,29 @@ validate_layout_geometry() {
     return 0
 }
 
+# Destructive operations have their own finite mechanical/confirmation budgets.
+# Keep these bounds consistent with the authenticated broker's settings().
+validate_close_settings() {
+    local _cl_name _cl_min _cl_max _cl_value
+    for _cl_name in managed_close_timeout_ms managed_close_total_timeout_ms managed_close_prepare_timeout_ms \
+        managed_close_x11_grab_ms managed_close_poll_ms managed_close_dbus_timeout_ms; do
+        case $_cl_name in
+            managed_close_timeout_ms) _cl_min=100; _cl_max=120000 ;;
+            managed_close_total_timeout_ms) _cl_min=100; _cl_max=600000 ;;
+            managed_close_prepare_timeout_ms) _cl_min=1000; _cl_max=600000 ;;
+            managed_close_x11_grab_ms) _cl_min=10; _cl_max=500 ;;
+            managed_close_poll_ms) _cl_min=10; _cl_max=1000 ;;
+            managed_close_dbus_timeout_ms) _cl_min=100; _cl_max=10000 ;;
+        esac
+        _cl_value=${!_cl_name-}
+        if [[ ! $_cl_value =~ ^[1-9][0-9]{0,6}$ ]] || (( _cl_value < _cl_min || _cl_value > _cl_max )); then
+            plan_error "$_cl_name must be $_cl_min..$_cl_max ms"; return 2
+        fi
+    done
+    (( managed_close_total_timeout_ms >= managed_close_timeout_ms )) || {
+        plan_error 'managed close total timeout must cover per-window timeout'; return 2; }
+}
+
 validate_plan() {
     local _vp_name _vp_value _vp_record _vp_delimiters _vp_declaration
     local _vp_desktop _vp_program _vp_mode _vp_target _vp_layer _vp_explicit _vp_total _vp_sftp_dir _vp_uri _vp_rdp_target
@@ -123,6 +153,7 @@ validate_plan() {
     declare -gA implicit_counts=() total_counts=() terminal_counts=() terminal_slots=() next_slot=()
 
     validate_layout_geometry || return $?
+    validate_close_settings || return $?
     if [[ $sftp_advisory_enabled != "$TRUE" && -n $sftp_advisory_enabled ]] ||
         [[ ! $sftp_advisory_timeout_ms =~ ^[1-9][0-9]{0,4}$ || ! $sftp_advisory_ssh_port =~ ^[1-9][0-9]{0,4}$ ]] ||
         (( sftp_advisory_timeout_ms > 10000 || sftp_advisory_ssh_port > 65535 )); then

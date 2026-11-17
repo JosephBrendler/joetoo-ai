@@ -36,6 +36,7 @@ _libexec_dir = os.path.dirname(os.path.realpath(__file__))
 if _libexec_dir not in sys.path:
     sys.path.insert(0, _libexec_dir)
 from joetoo_kwin_registry import RegistryError, WindowRegistry
+from joetoo_kwin_managed_close import CloseRuntime
 # Lazy factories preserve non-VNC startup when optional deployment files have
 # not yet been installed. VNC preflight reports their absence explicitly.
 def DesktopObserver(bounds):
@@ -157,6 +158,28 @@ class Broker(dbus.service.Object):
         self._sdl_registered = {}  # Metadata only: registration still closes its FDs.
         self._sdl_placement = None
         self._sdl_traces = []  # Diagnostic snapshots only; never transaction authority.
+        self._managed_close = CloseRuntime(self, GLib, dbus)
+
+    def _close_guard(self):
+        if self._managed_close.busy():
+            raise dbus.DBusException("Managed close is active or unresolved", name=IFACE + ".Busy")
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s",
+                         sender_keyword="sender", async_callbacks=("reply", "error"))
+    def PrepareManagedClose(self, payload, sender=None, reply=None, error=None):
+        """Authenticate the operator and preview a fixed native-verified set."""
+        self._managed_close.prepare(payload, sender, reply, error)
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s",
+                         sender_keyword="sender", async_callbacks=("reply", "error"))
+    def CommitManagedClose(self, request_id, sender=None, reply=None, error=None):
+        """Same original bus owner confirms. Accepted work is broker-owned."""
+        self._managed_close.commit(str(request_id), sender, reply, error)
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
+    def ManagedCloseStatus(self, request_id):
+        """Retained redacted results, inspectable from a later console."""
+        return self._managed_close.status(str(request_id))
 
     def _sdl_bus_connection(self):
         address = os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")
@@ -225,6 +248,8 @@ class Broker(dbus.service.Object):
     def BeginSdlRegistration(self, payload, sender=None, reply=None, error=None):
         """Authenticate one persistent launcher asynchronously, then arm intent."""
         from joetoo_kwin_rdp_launch import settings, expected_backend, CallerIdentity, boot_ticks, executable_identity
+        if self._managed_close.busy():
+            return error(self._sdl_error(IFACE + ".Busy"))
         started = time.monotonic()
         def reject(name):
             error(self._sdl_error(name))
@@ -419,6 +444,7 @@ class Broker(dbus.service.Object):
         currently use these methods. Registry serialization is shared with the
         existing managed paths, but their selectors/placement stay unchanged.
         """
+        self._close_guard()
         from joetoo_kwin_rdp_launch import settings, expected_backend, APPLICATION
         limits = settings(bounds, profile)
         if self._sdl_placement and (not self._sdl_placement.get("terminal") or self._sdl_placement.get("cleanup_uncertain")):
@@ -964,6 +990,8 @@ class Broker(dbus.service.Object):
     def SubmitSdlPlacement(self, payload, sender=None, reply=None, error=None):
         """Authenticate a separate same-user operator; never accept a raw UUID."""
         from joetoo_kwin_rdp_launch import CallerIdentity, ChildIdentity, _inode
+        if self._managed_close.busy():
+            return error(self._sdl_error(IFACE + ".Busy"))
         try:
             def unique(pairs):
                 result = {}
@@ -1198,6 +1226,7 @@ class Broker(dbus.service.Object):
         return json.dumps(c["terminal"], sort_keys=True)
 
     def _submit(self, kind, desktop, x, y, width, height, app_class=""):
+        self._close_guard()
         pending = self._sdl_placement
         if pending and (not pending.get("terminal") or pending.get("cleanup_uncertain")) and not pending.get("arming"):
             raise dbus.DBusException("SDL placement is active", name=IFACE + ".Busy")
@@ -1701,6 +1730,7 @@ class Broker(dbus.service.Object):
     @dbus.service.method(IFACE, in_signature="s", out_signature="s")
     def SubmitInitialLayout(self, payload):
         """Freeze broker-owned registrations, never accept launcher-selected UUIDs."""
+        self._close_guard()
         self._advance_placement()
         self._expire_managed_correlation()
         if ((self._sdl_placement and (not self._sdl_placement.get("terminal") or self._sdl_placement.get("cleanup_uncertain")))
@@ -1873,6 +1903,7 @@ class Broker(dbus.service.Object):
     # stays unchanged; no class-qualified placement is armed during authentication.
     @dbus.service.method(IFACE, in_signature="s", out_signature="s")
     def SubmitManagedViewerLaunch(self, payload):
+        self._close_guard()
         observer = None
         previous = self.request
         try:
@@ -2034,6 +2065,7 @@ class Broker(dbus.service.Object):
     @dbus.service.method(IFACE, in_signature="ss", out_signature="s")
     def BeginCorrelation(self, expected_class, title_token):
         """Snapshot KWin identities before the caller launches its command."""
+        self._close_guard()
         expected_class = str(expected_class).strip()
         if (not expected_class or len(expected_class) > 128
                 or len(title_token) > 128):
@@ -2395,6 +2427,7 @@ class Broker(dbus.service.Object):
         identifier = details["uuid"]
         if source_revision is not None:
             source, revision = source_revision
+            self._managed_close.observation(source, revision)
             # A newly loaded resident must establish itself with a complete
             # inventory before we accept its incremental events. Conversely,
             # drop delayed messages belonging to the prior resident instance.
@@ -2492,6 +2525,7 @@ class Broker(dbus.service.Object):
             raise dbus.DBusException("Malformed window inventory",
                                      name=IFACE + ".BadArguments") from exc
 
+        self._managed_close.observation(source, revision)
         if source == self.observation_source and revision <= self.observation_revision:
             c = self._rdp_registration
             if c and c["state"] == "PENDING" and c.get("expected_backend") == "x11":
@@ -2626,6 +2660,8 @@ class Broker(dbus.service.Object):
             # verification. Clients conservatively stop on nonterminal snapshots.
             "placement_transaction": ({"id": self.request["id"], "state": self.request["state"]}
                                       if self.request is not None else {"id": None, "state": "IDLE"}),
+            "managed_close_active": self._managed_close.busy(),
+            "managed_close_protocol": 1,
             "viewer_protocol": self.viewer_protocol,
             "viewer_cleanup_uncertain": bool(self._managed_correlation and self._managed_correlation.get("observer_cleanup_uncertain")),
             "initial_layout_protocol": self.initial_layout_protocol,

@@ -424,3 +424,35 @@ is historical, not an active implementation requirement. See the
 and [post-fix regression evidence](../archive/task_step1.5/step1.5d-xcb-evidence-addendum.md).
 Step 1.5d is accepted and merged through PR #30. Step 1.6 managed operations
 are the next milestone; detailed scope and implementation are not yet approved.
+
+## Managed graceful close (Step 1.6 candidate)
+
+`joetoo-kwin [-f FILE] -d win-001` previews and confirms one managed target;
+`joetoo-kwin [-f FILE] -x` previews a fixed eligible set and confirms it once.
+The ordinary layered configuration is used for the budgets below; an absent
+default per-run plan is optional for close (explicit `-f` must still be valid). Close does
+not consume launch recipes or require valid launch geometry. `-l` stays read-only
+and does not load executable configuration. The exact-version native adapter
+must be installed/loaded separately by the maintainer; absence fails closed.
+
+| Name | Built-in default | Validation / meaning |
+| --- | --- | --- |
+| `managed_close_timeout_ms` | 15000 | 100..120000 ms per target; refusal/no disappearance is not success |
+| `managed_close_total_timeout_ms` | 300000 | 100..600000 ms for accepted fixed set; >= per-target budget |
+| `managed_close_prepare_timeout_ms` | 300000 | 1000..600000 ms for authentication/preview/confirmation |
+| `managed_close_x11_grab_ms` | 100 | 10..500 ms maximum atomic X11 fence/WM_DELETE operation |
+| `managed_close_poll_ms` | 100 | 10..1000 ms status polling |
+| `managed_close_dbus_timeout_ms` | 3000 | 100..10000 ms individual native/frontend IPC |
+
+Closing retains registration, intended desktop/slot reservation and placement
+history. It neither retires a record nor saves/restores a snapshot. Only native
+KWin-authenticated disappearance proves closure. Dispatch, refusal/timeout,
+source loss and unresolved helper cleanup are reported independently. A lost
+frontend does not cancel accepted bulk work; retained results can be queried
+using broker `ManagedCloseStatus(REQUEST_ID)` from another console. Results
+are in-memory and bounded; broker restart recovery is not implemented.
+
+The terminal-membership warning is conditional on authenticated Konsole/session
+and native UUID correlation; uncertain/multi-window identity is not guessed.
+Already-issued graceful requests cannot be recalled. Late disappearance cannot
+revive a terminal timeout. No application force-kill escalation is supplied.

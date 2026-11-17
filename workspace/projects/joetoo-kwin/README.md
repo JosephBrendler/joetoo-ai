@@ -15,10 +15,13 @@ merged through [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30)
 at `f72407278fa0a9c923079f3b38ce834440d2fef2`. The reviewed transition
 baseline is `main` at `231e3c3c7e77839ef9220cf1c128f7a1572726d0`.
 
-**Step 1.6 is the active milestone, with detailed scope not yet approved.**
-The next engineering activity is a **separately authorized read-only source/
-contract review** of managed `-a`, `-d` and `-x`. This status does not authorize
-implementation, destructive operations, native testing or publication.
+**Step 1.6 is an implementation candidate, awaiting review and native acceptance.**
+The archive/init transition merged in [PR #31](https://github.com/JosephBrendler/joetoo-ai/pull/31)
+at `cdcdc9e`. The candidate adds confirmed graceful `-d MANAGED_ID` and
+broker-owned fixed-set `-x`, retaining registrations, reservations and placement
+history. It requires the exact-version [native close adapter](native/managed-close/README.md).
+It adds no retirement, restoration, generic process killing or broker recovery.
+No Step 1.6 native success, installation or publication is claimed.
 See the [active HANDOFF](task_step1.6/HANDOFF.md) and [task index](task_step1.6/README.md).
 
 | Completed capability | Accepted outcome / evidence |
@@ -53,6 +56,7 @@ built-in defaults remain `/sec:nla` and `/cert:deny`.
 | 1.5b | Interactive `-m` operands, independent preservation, native X11/Wayland acceptance | [Step 1.5 history](archive/task_step1.5/HANDOFF.md), PR #24 |
 | 1.5c.1–1.5c.3 | Confirmation before launch, safe coordinated managed slots and original Bash/SSH placeholders | [Step 1.5 history](archive/task_step1.5/HANDOFF.md), PR #25 |
 | 1.5c.4 | KWin desktop capacity, Dolphin local, application-independent layers, group finalization, bounded initial stack/focus, XDG discovery | [Native closure](archive/task_step1.5/step1.5c4-native-acceptance.md), [audit](archive/task_step1.5/step1.5c4-review.md) |
+| 1.5d | `-l` list managed windows, `-L` launch one window | [step 1.5 history](archive/task_step1.5/)
 
 The maintainer ran **287 Python tests and 50 JavaScript tests** on
 `q552u01` at tested baseline `a3c50fc`; syntax and lint checks also passed.

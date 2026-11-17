@@ -372,15 +372,14 @@ modifiable by unrelated processes.
 | `-c [-f CONFIG]` | Validate config and display a colorized dry-run plan without launching |
 | `-o [-f CONFIG]` | Confirm then launch and positively register/position managed windows |
 | `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | Confirm then launch one managed window above existing windows; `over` is the only implemented layer (also the default), no live-desktop reflow |
-| `-m l|r` | Two-panel active-window geometry on current desktop |
+| `-m l\|r` | Two-panel active-window geometry on current desktop |
 | `-m DESKTOP` | Change active window's desktop, preserve geometry |
-| `-m DESKTOP l|r` | Two-panel placement on specified desktop |
+| `-m DESKTOP l\|r` | Two-panel placement on specified desktop |
 | `-m DESKTOP X Y` | Change desktop/position and preserve size |
 | `-m X Y WIDTH HEIGHT` | Change position/size and preserve desktop |
 | `-m DESKTOP X Y WIDTH HEIGHT` | Specify desktop, position and size |
-| `-x` | Gracefully close all positively managed windows, not unrelated ones (future 1.6) |
-| `-a` | Add one managed window (future; syntax TBD) |
-| `-d MANAGED_ID` | Close one safely validated managed window (future 1.6) |
+| `-x` | Confirm a fixed eligible managed set, then broker-owned graceful close; records/slots retained (1.6 candidate) |
+| `-d MANAGED_ID` | Confirm graceful close of one authenticated managed window; record/slot retained (1.6 candidate) |
 | `-l` | List broker-managed windows read-only, one record per fixed-width table row, including stable managed ID, desktop/slot, presence, placement and UUID (Step 1.5d) |
 | `-i MANAGED_ID`, `-s` | Additional detail/application-status interfaces, not implemented in Step 1.5d |
 | `-S` | Export reusable layout (future 1.8) |
@@ -441,7 +440,7 @@ without introducing a second geometry implementation.
 ## 10. Supervision, safety and identity invariants
 
 1. A managed UUID must be correlated to a specific launch and validated against
-   current observation/source before it is eligible for future `-d` or `-x`.
+   current authenticated native UUID/source before it is eligible for `-d` or `-x`.
 2. A raw UUID or readable alias is not a standalone destructive capability.
 3. Broker restart must not relaunch clients; application close must not imply
    broker shutdown.
@@ -480,7 +479,7 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.5c** | Comparative RDP feasibility and decision | **Closed:** affirmative feasibility accepted; SDL3 FreeRDP selected for first RDP implementation, not as a preferred/default client |
 | **1.5c.5d** | Managed SDL FreeRDP under configured `-o` | **ACCEPTED, CLOSED AND MERGED (2026-11-11, PR #29)**: exact UUID/placement/lifecycle on native X11/Wayland, layered configuration, bounded clean-failure continuation, strict `/sec:nla /cert:deny` defaults, successful trusted GDM connection and automatic invalid-certificate refusal with verified cleanup; see final Increment 5 evidence |
 | **1.5d** | Implement `-L` one-recipe single-window launch (`over` only; no reflow), retain read-only `-l` inventory; run integrated native X11/Wayland regression | **ACCEPTED, CLOSED AND MERGED (2026-11-12, PR #30)**: `-l` implemented; `-L` implemented under simplified scope, preserving field-specific validation, safe logical-slot reservation, exact-UUID placement, one-shot raise, existing-window geometry and accepted `-o` semantics |
-| **1.6** | Managed `-a`, `-d`, `-x` | **Active milestone; detailed implementation scope unapproved.** Next engineering activity: separately authorized read-only source/contract review; selective safe close must never affect unrelated windows |
+| **1.6** | Managed `-d`, `-x` | **Active implementation candidate.** Confirmed graceful `-d` / broker-owned fixed-set `-x`; records and reservations retained; native acceptance pending |
 | **1.7** | Runtime JSON checkpoint and same-session reconciliation | Broker restart and exact source/UUID reconciliation |
 | **1.8** | Restorable `.conf` snapshot, `-S`, `-r` | New-window recovery from validated last-good intent |
 | **1.9** | Packaging of the accepted optional `eselect` selector, installation/ebuild and complete integration | Maintainer-led joetoo/joetoo-upstream packaging, template guidance and version 1 lifecycle |
@@ -703,7 +702,23 @@ Step 1.5c.5d and Step 1.5d are accepted and merged through PRs #29 and
 [#30](https://github.com/JosephBrendler/joetoo-ai/pull/30), respectively.
 Step 1.5d merge: `f72407278fa0a9c923079f3b38ce834440d2fef2`.
 Step 1.5 history is retained in [the archive](archive/task_step1.5/README.md);
-Step 1.6 is the active milestone with detailed scope awaiting approval.
+The archive/init transition merged through PR #31 at
+`cdcdc9e8c842d0be04447c06b90a25d3cc59f107`. Step 1.6 implements confirmed
+`-d MANAGED_ID` and fixed-set `-x`, retaining registrations, slots and placement
+history. `-a` is unnecessary because `-L` supplies launch; future `-D` retirement
+is separate. Close does not save, restore or erase snapshots. Accepted bulk work
+belongs to the broker and survives the invoking CLI; it does not survive a
+broker restart under a new recovery contract.
+
+Destructive evidence must come from the authenticated native KWin adapter,
+not unauthenticated observation messages. The exact-version effect resolves
+original UUIDs; Wayland uses ordinary close, while X11/XWayland uses only
+supported `WM_DELETE_WINDOW`, with a fenced short-lived XCB helper preventing
+XID reuse at dispatch. There is no application force-kill escalation. Refusal,
+deadline and unknown cleanup remain distinct from verified disappearance.
+A terminal warning requires positive invoking-terminal membership proof;
+ambiguous Konsole multi-window identity stays unknown. Native acceptance of
+this candidate is pending; existing Step 1.5 behavior remains accepted.
 This architecture grants no source, native-execution or publication authority.
 
 ### Phase 2 — Optimization and refinement
@@ -725,9 +740,9 @@ tasks rather than broad speculative rewrites.
   original slot from current geometry and reordered configuration entries?
 - When should last-good snapshots advance, and how should manually adjusted
   coordinates be represented in reusable configuration?
-- What are the exact syntax and selection safeguards for `-a` and `-S`?
+- What are the exact syntax and selection safeguards for `-S`?
 - Which remote-resource endpoint grammars, connection/credential policies and
-  application lifecycles best fit each 1.5c.5 candidate?
+  application lifecycles best fit each VNC and RDP candidate?
 - How should each managed RDP client establish production certificate trust,
   exact window-role identity and authorized placement release on each KWin
   backend, without claiming remote desktop readiness from local window state?
