@@ -1,13 +1,20 @@
 # Step 1.6 — Task index
 
-**Status (2026-11-16):** Step 1.5 and PR #31's archive/init transition are
-accepted and merged. Step 1.6 is an uncommitted implementation candidate for
-confirmed graceful `-d` and broker-owned fixed-set `-x`. Native acceptance and
-publication remain reserved for the maintainer.
+**Status (2026-11-16, evening):** Step 1.5 and PR #31's transition are
+accepted/merged. The pushed Step 1.6 candidate has substantial q552u01
+Wayland/XWayland native close evidence. **Not yet accepted:** the maintainer
+approved progressive `-x` record/slot retirement; the current candidate still
+retains all reservations. Remaining tests and publication remain gated.
 
 ## Current task and design
 
-- [Native adapter, safety contract and acceptance matrix](../native/managed-close/README.md).
+- [Native evidence (2026-11-16)](step1.6-native-wayland-evidence-2026-11-16.md)
+  — selected maintainer command/result excerpts and unresolved acceptance tests.
+- [DRAFT Codex prompt — progressive `-x` sweep](DRAFT_Codex-Step1.6-x-progressive-sweep.md)
+  — proposed focused implementation; maintainer authorization required.
+- [Original native adapter contract and matrix](../native/managed-close/README.md)
+  — its retained-`-x` language reflects the old candidate and needs alignment
+  at implementation time.
 - [Active HANDOFF](HANDOFF.md) — current authority, transition validation,
   development/test hosts and next actor.
 - [Project architecture](../ARCHITECTURE.md) — intended managed operations
@@ -26,25 +33,45 @@ publication remain reserved for the maintainer.
   managed RDP baseline; [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30)
   — accepted single-window launch, inventory and integrated regression.
 
-## Next work and results
+## Latest maintainer-native result and refined requirement
 
-The source/contract review and final design are complete. The authorized
-candidate implements confirmed `-d` and broker-owned fixed-set `-x`, using
-three additive broker methods and the exact-version native close adapter.
-Managed records, slots and placement history remain intact; application refusal
-never triggers automatic force killing. `-a` is removed; `-D` retirement and
-snapshot/restart restoration are not part of this milestone.
+On `q552u01`, the corrected `joetoo_managed_close.so` loaded in a fresh
+KWin 6.7.6 Wayland process and matched KWin's D-Bus owner. The OpenRC user
+broker was current and running. Confirmed `-d` selectively closed native
+Wayland and XWayland clients without closing unrelated windows. The broker
+recorded exact UUID/backend and separate retained results; retry of a missing
+managed ID was safely excluded. See the [native evidence](step1.6-native-wayland-evidence-2026-11-16.md).
 
-The [adapter notes](../native/managed-close/README.md) contain API details,
-headless/native evidence boundaries and the maintainer acceptance matrix.
-Current validation and next-actor permissions belong in [HANDOFF.md](HANDOFF.md).
-No Step 1.6 native acceptance, installation or publication is claimed.
+A confirmed `-x` reported **6/6 eligible native windows closed**, but
+retained **12/12** registrations/reservations as `missing` and reported
+`partial` solely because six targets were already missing. A later broker
+restart emptied the in-memory registry; that is **only a workaround**, not
+the `-x` contract. The maintainer clarified:
 
-## Candidate headless validation (2026-11-16)
+- `-d ID`: retain the closed window's managed registration/slot/history.
+- **`-x`:** once confirmed, retire each positively already-missing managed
+  record immediately and retire each present record/slot **as soon as its own
+  graceful closure is verified**. Continue other independently safe entries
+  after individual failure; retain/report only minimal unresolved residue.
+  Full success means empty `-l` without broker restart. No batch rollback.
+- `-D ID`: one-window close-and-retire deferred to **version 2**.
 
-Baseline/ending HEAD: `cdcdc9e8c842d0be04447c06b90a25d3cc59f107`, branch
-`task/joetoo-kwin-step1.6-managed-close`; candidate remains uncommitted.
-The four starting documentation edits were preserved and extended.
+**First next implementation:** focused `-x` registry-lifecycle and truthful
+bulk result/preview correction, leaving the native adapter and `-d` behavior
+untouched. [Codex draft](DRAFT_Codex-Step1.6-x-progressive-sweep.md) is ready
+for maintainer review, **not** an automatic dispatch. The project architecture
+and native adapter README still describe the old retention contract; update
+their narrow wording with implementation. Remaining native gates include
+top-level application refusal, workers/SSH/tmux cleanup, self-terminal/CLI
+loss, and separate native X11 compositor/XID fence tests. Step 1.6 acceptance
+and publication are **not** claimed; [HANDOFF](HANDOFF.md) is the dispatcher.
+
+## Prior candidate headless validation (2026-11-16; before native results)
+
+This section preserves the earlier Codex report at baseline/ending HEAD
+`cdcdc9e8c842d0be04447c06b90a25d3cc59f107` on the task branch **before**
+the maintainer pushed changes and performed native testing. It is historical
+headless evidence and does **not** validate the new `-x` refinement.
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tests python3 -m unittest test_managed_close test_managed_close_cli test_managed_close_native test_config_presentation test_openrc_user_setup
@@ -71,9 +98,11 @@ git diff --check
 
 SO_PASSCRED is denied by this sandbox. Its explicit availability test skips;
 wire tests execute actual libxcb with an isolated platform-credential double.
-Unconfined tests use real credential transport automatically. Real KWin loading,
-Qt event ordering, native disappearance/refusal and application/SSH/tmux cleanup
-remain maintainer-native acceptance, not headless claims.
+Unconfined tests use real credential transport automatically. The later
+maintainer-native effect loading and **some actual window disappearance**
+are in the [evidence](step1.6-native-wayland-evidence-2026-11-16.md);
+application refusal, native X11 ordering and worker/SSH/tmux cleanup remain
+untested or unverified, not headless claims.
 
 The first full run reported two stale configuration-presentation assertions
 (981 PASS / 2 FAIL); their expected debug-variable inventory was corrected.

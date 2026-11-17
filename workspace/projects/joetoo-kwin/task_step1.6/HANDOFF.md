@@ -1,6 +1,6 @@
 # Step 1.6 — Managed operations HANDOFF
 
-**Status (2026-11-16): Step 1.6 implementation candidate — shared authenticated graceful close, `-d` and broker-owned `-x`; headless validation complete, native acceptance/publication reserved.**
+**Status (2026-11-16, evening): Step 1.6 candidate pushed, with substantial maintainer-native Wayland/XWayland close evidence. NOT ACCEPTED: the confirmed `-x` operation still retains records/reservations and requires the approved progressive clean-sweep refinement. Remaining native gates and publication are reserved.**
 
 ## 1. Task identity and authority
 
@@ -28,48 +28,54 @@ These completed milestones are accepted foundations, not outstanding work.
 
 ## 3. Documentation transition (completed)
 
-PR #31 merged the archive/init transition at `cdcdc9e`. All 213 tracked Step 1.5
-artifacts and modes were preserved; no runtime behavior changed. Historical
-transition validation and publication checkpoints remain in the
-[initial HANDOFF](step1.6_initial_historical_HANDOFF.md) and PR #31.
-
-The read-only source review and final contract design are complete. The
-maintainer authorized both close commands and the minimal native adapter.
-Current candidate changes remain uncommitted; native operations and publication
-are separately reserved. The four pre-existing maintainer documentation edits
-were preserved when preparing this implementation.
+PR #31 merged the archive/init transition at `cdcdc9e`; the
+[initial historical HANDOFF](step1.6_initial_historical_HANDOFF.md) preserves
+that work. The maintainer subsequently pushed the Step 1.6 candidate with
+corrected KWin plugin packaging, and executed q552u01 native tests.
+See [2026-11-16 evidence](step1.6-native-wayland-evidence-2026-11-16.md).
+Native evidence does not imply Step 1.6 acceptance or authorize publication.
 
 ## 4. Step 1.6 objective
 
-The intended milestone is safe management of existing and newly added managed windows through:
+- `-d MANAGED_ID`: positively authenticated graceful close of **one** managed
+  window; **retain** registration, desktop/slot reservation and history.
+- `-x`: broker-owned **progressive clean sweep** of the fixed snapshot after
+  one confirmation. Retire each *already-missing* record/reservation as
+  encountered and each eligible present record/reservation **immediately after
+  verified graceful closure**. Do not wait for every other target before
+  retiring independently verified entries. Flag individual failures and retain
+  only minimal safety-critical unresolved state; continue other work whenever
+  native dispatch can be performed safely. Full success leaves `-l` empty
+  without broker restart.
 
-- `-d MANAGED_ID` — selective graceful close.
-- `-x` — graceful closure of positively identified managed windows.
+Preserve exact UUID/owner proof, one confirmation, truthful bounded results
+surviving CLI exit, isolated unrelated windows and graceful-only behavior.
+A genuinely uncertain helper/owner/source is **not** proof of closure and may
+block unsafe *native dispatch*, but must not roll back earlier verified cleanup.
+Never force-kill, close by title/class/PID alone, or erase uncertain ownership.
+`-D` individual close-and-retire is version 2; no `-a`, `-S`, `-r`, restore,
+new native subsystem or general checkpoint/recovery in Step 1.6.
 
-Approved scope: explicit confirmation; exact authenticated native UUID/owner
-proof; ordinary graceful close only; fixed bulk snapshot, serialized by the
-broker; retained per-target results after CLI exit. Missing/uncertain targets
-are excluded and remain reserved. No `-a`, `-D`, `-S`, `-r`, retirement or restore.
-
-Implementation: three additive broker methods (`PrepareManagedClose`,
-`CommitManagedClose`, `ManagedCloseStatus`), one import-safe close module and
-private frontend pipe, plus the exact-version native effect/XCB helper.
-Legacy observation traffic cannot authorize close or prove completion.
-See [adapter build, safety contract and native matrix](../native/managed-close/README.md).
+Current implementation retains all records for `-x`; this is the **first
+remaining coding discrepancy**. See [Codex draft](DRAFT_Codex-Step1.6-x-progressive-sweep.md),
+[evidence](step1.6-native-wayland-evidence-2026-11-16.md) and
+[native adapter design](../native/managed-close/README.md).
 
 ## 5. Invariants and exclusions
 
-Preserve exact managed UUID identity, source and ownership validation, retained missing reservations, existing broker protections and isolation of unrelated windows.
+Preserve source/owner/exact-UUID validation, the fixed authenticated snapshot,
+existing broker serialization, and protection of unrelated windows. `-d`
+retains missing reservations; **confirmed `-x` retires them progressively**.
+No registration/slot mutation before explicit confirmation; no implied
+rollback or forced process termination. Keep application, placement, RDP/VNC
+connection and broker lifetime outcomes separate.
 
-Never close or adopt a window using class, title or PID alone, or substitute an observed UUID for the managed identity.
-
-Keep separately scoped outcomes distinct: window placement, managed-window lifecycle, RDP/VNC connection state, and independent broker/service lifetime.
-
-Step 1.7 runtime checkpoint/restart reconciliation, Step 1.8 durable last-good layout/restore, Step 1.9 packaging, and unrelated architectural redesign remain outside this task.
+Step 1.7 checkpoint/reconciliation, Step 1.8 snapshots/restore and Step 1.9
+packaging remain out of scope. `-x` must not erase a future last-good snapshot.
 
 ## 6. Development and native testing hosts
 
-- **q552u01:** Primary development host, native KWin Wayland; first planned native testing.
+- **q552u01:** Maintainer-native KWin Wayland/XWayland tests performed 2026-11-16; remaining cases pending.
 - **slim2:** Subsequent native X11 testing.
 - **gmki91:** Additional X11 development and testing when available.
 
@@ -77,33 +83,56 @@ Host assignments do not themselves authorize native test execution, service chan
 
 ## 7. Next actor and authorization
 
-**Next actor:** maintainer, reviewing the integrated uncommitted candidate and
-headless evidence. Publication and native install/load/destructive testing
-require explicit authorization. Codex must not begin later milestones.
+**Next actor:** maintainer to review and **explicitly authorize** the bounded
+[`-x` Codex prompt](DRAFT_Codex-Step1.6-x-progressive-sweep.md).
+After that authorization, Codex implements only the registry/retirement,
+aggregate reporting and small CLI-preview correction on the existing task
+branch; runs focused headless regressions; and returns a reviewable diff.
+Codex must not perform native operations, deployment, commit, push or PR
+without separate maintainer authority.
 
-Native acceptance order: q552u01 Wayland, slim2 X11, then gmki91 if needed.
-Include close refusal, exact identity, XID reuse/unsupported-protocol rejection,
-CLI loss during bulk close, retained reservations and ordinary Konsole/SSH
-termination with independent remote tmux persistence. No such test has run here.
+**First next action:** implement confirmed progressive `-x` record/slot
+retirement without changing `-d` or adding version-2 `-D`.
+**Then:** cloud code/test review; maintainer repeats q552u01 native `-x`
+(mixed already-missing + present, post-run empty `-l`), refusal and
+self-terminal/CLI-loss/worker-cleanup tests. Native X11 on `slim2` (optional
+`gmki91`) remains outstanding, including XID reuse/fence and unsupported
+`WM_DELETE_WINDOW` cases. All these are separate approval/test gates.
 
 ## 8. Recent decisions
-- there will be no `-a` (add window) requirement - this is satisfied already by `-L`
-- I have removed references to `-a` where I could find them, any others should be taken only as historical reference to something once considered.
+
+- No `-a` requirement; `-L` already launches a new managed window. Older
+  archived `-a` references are historical only.
+- **2026-11-16 maintainer clarification:** `-x` is a destructive *managed
+  collection sweep*, not simply repeated `-d`; confirmed safe removals occur
+  progressively. `-d` retains registrations; `-D` is deferred to version 2.
 
 ## 9. Latest candidate result
 
-999 Python tests: 998 PASS / 1 SKIP; 163 JavaScript PASS. The 107-test focused
-set has 106 PASS / the same SKIP. Both KWin 6.7.6 native variants compile;
-Bash/Python syntax, ShellCheck and diff checks pass. The skip is the sandbox's
-SO_PASSCRED prohibition: wire tests use an explicit credential double here.
-No native loading/closure is claimed. Exact commands and limitations are in the
-[task README](README.md) and [adapter notes](../native/managed-close/README.md).
-Concurrent maintainer edits to workspace instructions/role documents were left
-untouched and are separate from this project candidate.
+**Maintainer native on q552u01 (2026-11-16):** corrected compiled effect
+`joetoo_managed_close` discovered, supported and loaded after fresh Wayland
+login; same D-Bus owner as KWin; OpenRC broker started with all close methods.
+Declined `-d` closed nothing. Verified exact-UUID selective closes included
+Dolphin, Konsole, SDL FreeRDP (Wayland) and TigerVNC (local XWayland); repeat
+close was safely excluded. Confirmed `-x` closed **6/6** eligible targets,
+but returned `partial` due to six already-missing exclusions, retained **all
+12** records as `missing` and required a broker restart workaround for empty
+inventory. Nano/Kate attempts were **not** a direct application-refusal test;
+RDP/VNC/SSH worker cleanup and native X11 are not yet verified. Evidence:
+[maintainer-native record](step1.6-native-wayland-evidence-2026-11-16.md).
+
+**Prior Codex headless candidate (not rerun for this documentation or the
+refinement):** 999 Python tests (998 PASS/1 SKIP due sandbox SO_PASSCRED),
+107 focused (106 PASS/1 SKIP), 163 JavaScript PASS; both KWin 6.7.6 native
+variants compiled; syntax and ShellCheck passed. These are pre-refinement
+results, not evidence for corrected `-x`. See [task README](README.md).
 
 ## 10. Next decision
 
-Review the candidate diff and headless evidence; separately authorize publication
-and the native acceptance procedure. Step 1.6 is not yet accepted.
+Review/authorize the focused `-x` implementation; then inspect its diff,
+headless regression and subsequent maintainer-native evidence. Align stale
+`-x` wording in the project architecture and native adapter README when the
+code changes. **Step 1.6 is not yet accepted.** Commit/push/PR/merge and native
+operations are separately reserved; historical records grant no authority.
 
 Historical evidence and earlier draft instructions must not override this HANDOFF or subsequent explicit maintainer decisions.
