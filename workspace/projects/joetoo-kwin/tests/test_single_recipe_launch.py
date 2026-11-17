@@ -108,6 +108,19 @@ _test_single_configured_window() {
             self.assertEqual(len(cohorts),1);self.assertTrue(cohorts[0]['single_raise'])
             self.assertEqual(cohorts[0]['entries'],[dict(registration_request_id='reg',layer='over')])
 
+    def test_sweep_released_slot_is_visible_to_real_single_launch_preflight(self):
+        from test_managed_close import ManagedCloseTests
+        close=ManagedCloseTests();close.setUp();self.addCleanup(close.tearDown)
+        close.b.registry.managed_windows[next(iter(close.b.registry.managed_windows))].recipe['desktop']=3
+        close.missing()
+        self.env['MANAGED']=close.b.ListManaged()
+        _,trace=self.run_single()
+        self.assertIn('intent:konsole:2:3:96,32,1804,972',trace)
+        close.prepare('all');close.commit()
+        self.env['MANAGED']=close.b.ListManaged()
+        _,trace=self.run_single()
+        self.assertIn('intent:konsole:1:3:96,32,1804,972',trace)
+
     def test_reservations_including_missing_pick_free_logical_slot_not_panel_count(self):
         records=[self.record(1),self.record(2,'missing'),self.record(4),self.record(5)]
         original=json.dumps(dict(count=len(records),windows=records));self.env['MANAGED']=original

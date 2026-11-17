@@ -47,6 +47,13 @@ confirm_continue_or_exit() { printf 'confirmation\\n' >> "$TRACE"; [[ ${CANCEL:-
         output,calls=self.invoke('-x')
         self.assertEqual(calls,['prepare:all:','confirmation','commit'])
         self.assertNotIn('This terminal',output)
+        self.assertIn('retire registrations and reserved slots',output)
+        self.assertNotIn('reserved slots will remain',output)
+        help_run=subprocess.run(['bash',str(self.client),'-h'],env=self.env,capture_output=True,text=True,timeout=10)
+        self.assertEqual(help_run.returncode,0,help_run.stdout+help_run.stderr)
+        help_output=help_run.stdout+help_run.stderr
+        self.assertIn('record/slot retained',help_output)
+        self.assertIn('verified registrations/slots retired',help_output)
     def test_conditional_positive_terminal_warning_only(self):
         self.env['SELF_TERMINAL']='win-001'
         output,_=self.invoke('-x');self.assertIn('This terminal (win-001)',output)

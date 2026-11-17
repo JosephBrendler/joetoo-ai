@@ -136,16 +136,28 @@ Flow: CLI fields/config → original Python frontend bus connection → authenti
 broker PREPARING/PREPARED preview → confirmation → broker RUNNING → native
 exact-target dispatch → authenticated native disappearance → retained result.
 Targets serialize; later registrations never enter the fixed set. Prepared work
-expires without dispatch. Already missing/uncertain targets are excluded and keep
-reservations. Per-target refusal/no disappearance times out without a resend or
+expires without dispatch or retirement. `-d` retains missing registrations and
+reservations. Confirmed `-x` first revalidates authenticated already-missing entries
+and retires each immediately without a close request, then closes eligible present
+entries. Previews never retire records; uncertain identities stay reserved.
+Per-target refusal/no disappearance times out without a resend or
 force escalation; known-reaped attempts can proceed to the next fixed target.
 
 Legacy `ObserveWindow`/`SyncInventory` messages do not authenticate destruction.
 Only the native effect's original-window closed signal proves completion.
-Successful closure updates presence to missing and leaves identity, slot and
-placement history intact. Forged/mismatched responses, owner/source loss or
+`-d` completion updates presence to missing and preserves identity, slot and
+placement history. `-x` immediately retires each independently verified absent or
+closed record from both registry indexes, without alias recycling or rollback.
+A legacy missing flag alone is insufficient: retirement requires fresh native
+absence or authenticated `closed`/`gone=true` completion. Retained operation
+results distinguish `state=closed` or `state=already_missing` with `retired=true`,
+from failed/unresolved/skipped entries. Retention booleans describe the fixed
+snapshot and are false only after all its registrations/reservations are retired.
+Forged/mismatched responses, owner/source loss or
 unknown dispatch/helper reaping produce unresolved/cleanup-uncertain state and
-block conflicting work. A terminal result cannot conceal owned resources.
+block conflicting work. Deterministic failures with known reaped helpers allow
+other safe targets to proceed, retaining only the failed entries. A terminal
+result cannot conceal owned resources; prior retirements remain retired.
 
 The effect never blocks unload indefinitely waiting for a helper: an unreaped
 Qt process object is detached for Qt-only reaping after the bounded wait; service
@@ -180,8 +192,10 @@ Use disposable application windows/unsaved work, never irreplaceable sessions.
    neither kills the application nor dismisses its dialog. Refusal in a bulk set
    permits only the remaining previously confirmed, still eligible targets.
 5. Run `-x` with multiple registered clients and an unrelated unmanaged window.
-   Verify one snapshot, one confirmation, serialized outcomes, retained slots,
-   partial results and no unrelated close. Close the invoking terminal only in a
+   Verify one snapshot, one confirmation and progressive retirement of already
+   missing and verified-closed entries. Full success must leave empty `-l` without
+   broker restart; refusal retains only failed entries and reports partial results.
+   No unrelated window is closed. Close the invoking terminal only in a
    disposable managed-member test: warning only with positive proof; broker work
    and `ManagedCloseStatus(REQUEST_ID)` remain available from another console.
 6. Verify an ordinary managed Konsole/SSH close terminates its local foreground

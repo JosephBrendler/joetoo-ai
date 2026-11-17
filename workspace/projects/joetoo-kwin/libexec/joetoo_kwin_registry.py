@@ -188,6 +188,25 @@ class WindowRegistry:
             record.presence = state
         return True
 
+    def retire_missing(self, managed_id, *, window_uuid, request_id):
+        """Remove one confirmed absent registration, never recycle its alias.
+
+        Native absence/close authentication and sweep confirmation belong to
+        the broker. Check both indexes and the original request before mutation;
+        ordinary missing observations alone must never call this operation.
+        """
+        identifier = canonical_uuid(window_uuid)
+        record = self.managed_windows.get(identifier)
+        if (record is None or record.managed_id != managed_id
+                or record.window_uuid != identifier or record.request_id != request_id
+                or self.uuid_by_managed_id.get(managed_id) != identifier
+                or record.presence != "missing" or record.placement == "pending"):
+            raise RegistryError("retirement requires the same inactive missing registration")
+        del self.managed_windows[identifier]
+        del self.uuid_by_managed_id[managed_id]
+        # Launch and close result histories remain independently bounded.
+        return True
+
     def set_placement(self, window_uuid, state):
         """Track placement separately from registration and window presence."""
         if state not in PLACEMENT_STATES:

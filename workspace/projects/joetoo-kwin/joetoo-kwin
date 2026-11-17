@@ -48,7 +48,8 @@ usage() {
     j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -L DESKTOP PROGRAM MODE TARGET [over] (one managed window; omitted layer is over)"
     j_msg "-${notice}" -p "       -L panel/under are not implemented yet; existing windows are never rearranged"
     j_msg "-${notice}" -p "       ${PN} [-v|-q ...] -l (read-only managed inventory, including missing reservations)"
-    j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -d MANAGED_ID | -x (confirmed graceful close; records/slots retained)"
+    j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -d MANAGED_ID (confirmed graceful close; record/slot retained)"
+    j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -x (confirmed progressive clean sweep; verified registrations/slots retired)"
 }
 
 # Retain the positional move/test grammar. getopts handles common options and
@@ -753,9 +754,15 @@ close_managed_windows() {
         trap - INT TERM HUP
         return 1
     fi
-    j_msg "-${notice}" -p 'Graceful close target set (registrations and reserved slots will remain):'
-    jq -r '.targets[] | "  \(.managed_id) desktop=\(.desktop) slot=\(.slot) UUID=\(.window_uuid)"' <<< "$_mc_preview"
-    jq -r '.excluded[] | "  excluded: \(.managed_id) (missing, uncertain or unavailable native identity)"' <<< "$_mc_preview"
+    if [[ $_mc_scope == all ]]; then
+        j_msg "-${notice}" -p 'Managed clean sweep (confirmed verified removals retire registrations and reserved slots):'
+        jq -r '.targets[] | "  \(.managed_id) desktop=\(.desktop) slot=\(.slot) UUID=\(.window_uuid) action=\(.action // "close")"' <<< "$_mc_preview"
+        jq -r '.excluded[] | "  excluded: \(.managed_id) (\(.reason))"' <<< "$_mc_preview"
+    else
+        j_msg "-${notice}" -p 'Graceful close target set (registrations and reserved slots will remain):'
+        jq -r '.targets[] | "  \(.managed_id) desktop=\(.desktop) slot=\(.slot) UUID=\(.window_uuid)"' <<< "$_mc_preview"
+        jq -r '.excluded[] | "  excluded: \(.managed_id) (missing, uncertain or unavailable native identity)"' <<< "$_mc_preview"
+    fi
     j_msg "-${notice}" -p "Retained close result: $(jq -r '.request_id' <<< "$_mc_preview")"
     # Warn only after authenticated Konsole/session/native-UUID correlation.
     if [[ $_mc_scope == all ]] && jq -e '.self_terminal | test("^win-[0-9]+$")' <<< "$_mc_preview" >/dev/null; then

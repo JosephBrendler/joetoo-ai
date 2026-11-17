@@ -287,6 +287,12 @@ class ManagedCloseTests(unittest.TestCase):
         self.assertEqual(self.runtime.job['terminal_identity'].fd,None)
         self.assertFalse(self.native.calls)
 
+    def test_missing_retirement_entry_cannot_trigger_self_close_warning(self):
+        self.missing()
+        preview=self.terminal_preview()
+        self.assertEqual(preview['self_terminal'],'excluded')
+        self.assertFalse(self.native.calls)
+
     def test_ambiguous_native_terminal_is_unknown_not_guessed(self):
         preview=self.terminal_preview(native_state='unknown')
         self.assertEqual(preview['self_terminal'],'unknown')
@@ -345,6 +351,146 @@ class ManagedCloseTests(unittest.TestCase):
         self.assertEqual(self.runtime.job['state'],'partial')
         self.close_current_after_terminal()
         self.assertEqual(self.runtime.job['state'],'partial')
+    def missing(self, identifier=WINDOW_ID):
+        self.b.registry.set_presence(identifier, 'missing')
+        self.native.windows.pop(identifier, None)
+
+    def test_sweep_preview_decline_and_expiry_never_retire(self):
+        self.missing()
+        for cancel in ('owner', 'deadline'):
+            preview=self.prepare('all')
+            self.assertEqual(preview['targets'][0]['action'],'retire_missing')
+            self.assertTrue(preview['registration_retained'])
+            self.assertEqual(len(self.b.registry.managed_windows),1)
+            if cancel=='owner': self.runtime.owner_changed(':1.7',':1.7','')
+            else: self.now+=301;self.runtime.tick(self.runtime.job)
+            self.assertEqual(len(self.b.registry.managed_windows),1)
+            self.assertTrue(json.loads(self.runtime.report(self.runtime.job))['registration_retained'])
+            self.assertEqual(self.native.calls,[])
+
+    def test_failed_sweep_authentication_reports_snapshot_as_retained(self):
+        self.credentials_uid=os.geteuid()+1
+        self.prepare('all')
+        result=json.loads(self.runtime.report(self.runtime.job))
+        self.assertEqual(result['state'],'failed')
+        self.assertTrue(result['registration_retained']);self.assertTrue(result['reservations_retained'])
+        self.assertEqual(len(self.b.registry.managed_windows),1)
+
+    def test_confirmed_all_missing_sweep_succeeds_without_close_dispatch(self):
+        second='11111111-1111-4111-8111-111111111111'
+        self.register(second,2);self.missing();self.missing(second)
+        self.prepare('all');self.commit()
+        result=json.loads(self.b.ManagedCloseStatus(self.runtime.job['id']))
+        self.assertEqual(result['state'],'succeeded')
+        self.assertFalse(result['registration_retained']);self.assertFalse(result['reservations_retained'])
+        self.assertEqual([t['state'] for t in result['targets']],['already_missing']*2)
+        self.assertTrue(all(t['retired'] for t in result['targets']))
+        self.assertEqual(json.loads(self.b.ListManaged()),dict(count=0,windows=[]))
+        self.assertEqual(self.b.registry.uuid_by_managed_id,{})
+        self.assertEqual(self.native.calls,[])
+        self.assertEqual(self.b.registry.requests['launch1'].state,'succeeded')
+        # The real broker's reservation gate now permits this logical slot.
+        self.assertTrue(self.b.SubmitManagedLaunch('konsole',1,1,1,1,800,600))
+
+    def test_mixed_sweep_retires_progressively_and_keeps_fixed_results(self):
+        second='11111111-1111-4111-8111-111111111111'
+        self.register(second,2);self.missing(second)
+        self.prepare('all');self.commit()
+        self.assertEqual(self.runtime.job['targets'][0]['state'],'already_missing')
+        self.assertNotIn(second,self.b.registry.managed_windows)
+        self.assertIn(WINDOW_ID,self.b.registry.managed_windows)
+        self.close_current()
+        self.assertEqual(self.runtime.job['state'],'succeeded')
+        self.assertEqual(self.b.registry.managed_windows,{})
+        request_id=self.runtime.job['id']
+        self.runtime.owner_changed(':1.7',':1.7','')
+        self.prepare('all');self.commit()
+        old=json.loads(self.b.ManagedCloseStatus(request_id))
+        self.assertEqual([t['state'] for t in old['targets']],['already_missing','closed'])
+
+    def test_legacy_missing_flag_and_wrong_native_uuid_are_not_absence_proof(self):
+        self.b.registry.set_presence(WINDOW_ID,'missing')
+        self.prepare('all');self.commit()
+        self.assertEqual(self.runtime.job['state'],'partial')
+        self.assertEqual(self.runtime.job['excluded'][0]['reason'],'native_presence_conflict')
+        self.native.windows[WINDOW_ID]=dict(state='missing',uuid='11111111-1111-4111-8111-111111111111')
+        self.prepare('all');self.commit()
+        self.assertEqual(len(self.b.registry.managed_windows),1)
+        self.assertFalse(self.native.calls)
+
+    def test_preview_absence_is_revalidated_before_retirement(self):
+        second='11111111-1111-4111-8111-111111111111'
+        self.register(second,2);self.missing()
+        self.prepare('all')
+        self.native.windows[WINDOW_ID]=dict(state='present',uuid=WINDOW_ID)
+        self.commit()
+        self.assertEqual(self.runtime.job['targets'][0]['reason'],'native_absence_not_verified')
+        self.assertEqual([c[1] for c in self.native.calls],[second])
+        self.close_current()
+        self.assertEqual(self.runtime.job['state'],'partial')
+        self.assertEqual(set(self.b.registry.managed_windows),{WINDOW_ID})
+
+    def test_known_reaped_native_failure_continues_later_safe_target(self):
+        second='11111111-1111-4111-8111-111111111111'
+        self.register(second,2)
+        close=self.native.Close
+        def fail_first(token,identifier,pid,app,grab,expires,**kw):
+            if identifier==WINDOW_ID:
+                kw['reply_handler'](json.dumps(dict(token=token,uuid=identifier,state='unsupported',helper_reaped=True,gone=False)))
+            else: close(token,identifier,pid,app,grab,expires,**kw)
+        self.native.Close=fail_first
+        self.prepare('all');self.commit()
+        self.assertEqual(self.runtime.job['targets'][0]['reason'],'native_unsupported')
+        self.close_current()
+        self.assertEqual(self.runtime.job['state'],'partial')
+        self.assertEqual(set(self.b.registry.managed_windows),{WINDOW_ID})
+        result=json.loads(self.runtime.report(self.runtime.job))
+        self.assertTrue(result['registration_retained'])
+        self.assertFalse(result['targets'][0]['retired']);self.assertTrue(result['targets'][1]['retired'])
+
+    def test_changed_record_identity_does_not_block_independent_targets(self):
+        second='11111111-1111-4111-8111-111111111111'
+        self.register(second,2);self.prepare('all')
+        self.b.registry.managed_windows[WINDOW_ID].observation['pid']+=100000
+        self.commit()
+        self.assertEqual(self.runtime.job['targets'][0]['state'],'identity_lost')
+        self.assertEqual([c[1] for c in self.native.calls],[second])
+        self.close_current()
+        self.assertEqual(set(self.b.registry.managed_windows),{WINDOW_ID})
+
+    def test_uncertain_helper_never_undoes_retirements_or_dispatches_next(self):
+        missing='11111111-1111-4111-8111-111111111111'
+        later='22222222-2222-4222-8222-222222222222'
+        self.register(missing,2);self.register(later,3);self.missing(missing)
+        self.native.hold=True;self.prepare('all');self.commit()
+        self.assertNotIn(missing,self.b.registry.managed_windows)
+        self.now+=16;self.runtime.tick(self.runtime.job)
+        self.assertEqual(self.runtime.job['state'],'cleanup_uncertain')
+        self.assertTrue(self.runtime.busy())
+        self.assertEqual([c[1] for c in self.native.calls],[WINDOW_ID])
+        token=self.runtime.job['targets'][1]['token']
+        self.native.pending[0]['reply_handler'](json.dumps(dict(self.native.results[token],state='closed',gone=True)))
+        self.assertEqual(set(self.b.registry.managed_windows),{WINDOW_ID,later})
+        self.assertTrue(self.runtime.job['targets'][0]['retired'])
+        self.assertEqual(self.runtime.job['targets'][2]['state'],'skipped')
+
+    def test_source_loss_after_progress_preserves_retirement_and_blocks_dispatch(self):
+        missing='11111111-1111-4111-8111-111111111111'
+        self.register(missing,2);self.missing(missing)
+        self.prepare('all');self.commit()
+        self.runtime.owner_changed('org.kde.KWin',':1.2',':1.88')
+        self.assertEqual(self.runtime.job['state'],'cleanup_uncertain')
+        self.assertNotIn(missing,self.b.registry.managed_windows)
+        self.assertIn(WINDOW_ID,self.b.registry.managed_windows)
+
+    def test_unanswered_post_confirmation_absence_preserves_record_and_guard(self):
+        self.missing();self.prepare('all')
+        self.native.Inspect=lambda identifier,**kw: None
+        self.commit();self.now+=16;self.runtime.tick(self.runtime.job)
+        self.assertEqual(self.runtime.job['state'],'cleanup_uncertain')
+        self.assertIn(WINDOW_ID,self.b.registry.managed_windows)
+        self.assertFalse(self.native.calls)
+
     def close_current_after_terminal(self):
         token=self.runtime.job['targets'][0]['token'];self.native.results[token].update(state='closed',gone=True)
         self.runtime.tick(self.runtime.job)

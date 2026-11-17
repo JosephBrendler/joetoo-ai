@@ -5,7 +5,9 @@
 
 The native adapter shares org.kde.KWin's authenticated unique bus connection.
 All adapter calls address that pinned unique name, not a re-resolved service.
+For single-window close:
 No process termination, registry retirement or placement mutation occurs here.
+Confirmed bulk sweeps additionally retire only verified missing registrations.
 """
 from collections import OrderedDict
 from copy import deepcopy
@@ -85,9 +87,12 @@ class CloseRuntime:
 
     def report(self, j):
         # Do not expose confirmation tokens, bus names, credentials or captions.
+        retired = {t['managed_id'] for t in j['targets'] if t.get('retired') is True}
+        retained = (j.get('scope') != 'all' or
+                    any(record.managed_id not in retired for record in j['records']))
         return json.dumps(dict(protocol=1, request_id=j['id'], state=j['state'], reason=j.get('reason', ''),
-                               targets=[{k: v for k, v in t.items() if k in ('managed_id', 'window_uuid', 'request_id', 'desktop', 'slot', 'backend', 'state')} for t in j['targets']], excluded=deepcopy(j['excluded']),
-                               registration_retained=True, reservations_retained=True,
+                               targets=[{k: v for k, v in t.items() if k in ('managed_id', 'window_uuid', 'request_id', 'desktop', 'slot', 'backend', 'state', 'action', 'retired', 'reason')} for t in j['targets']], excluded=deepcopy(j['excluded']),
+                               registration_retained=retained, reservations_retained=retained,
                                self_terminal=j.get('self_terminal', 'unknown')), sort_keys=True)
 
     def remember(self, j):
@@ -113,7 +118,7 @@ class CloseRuntime:
         for target in j['targets']:
             if target['state'] == 'queued':
                 target['state'] = 'skipped'
-            elif state == 'cleanup_uncertain' and target['state'] in ('claiming', 'waiting'):
+            elif state == 'cleanup_uncertain' and target['state'] in ('claiming', 'waiting', 'checking_absence'):
                 target['state'] = 'unresolved'
         if state != 'cleanup_uncertain':
             self.release(j)
@@ -174,7 +179,7 @@ class CloseRuntime:
             records.sort(key=lambda r: (r.recipe.get('desktop', 0), r.recipe.get('slot', 0), r.managed_id))
             # Managed slots already bound this finite snapshot; no post-prepare
             # registration can enter it. Missing/uncertain records stay reserved.
-            j = dict(id=uuid.uuid4().hex, state='authenticating', sender=sender, targets=[], excluded=[],
+            j = dict(id=uuid.uuid4().hex, scope=data['scope'], state='authenticating', sender=sender, targets=[], excluded=[],
                      records=deepcopy(records), terminal_hint=data.get('terminal', {}), index=0, source=self.b.observation_source,
                      revision=self.b.observation_revision, bounds=limits, reply=reply,
                      deadline=self.clock() + limits['managed_close_prepare_timeout_ms'] / 1000)
@@ -322,7 +327,9 @@ class CloseRuntime:
                                         native_pid = identity.pid
                                         def native(a):
                                             if a.get('state') == 'identified' and identity.alive() and j.get('caller') and j['caller'].alive() and _proc_info(shell_pid, include_executable=False)['start'] == ancestors[shell_pid]:
-                                                matches = [t['managed_id'] for t in j['targets'] if t['window_uuid'] == a.get('uuid')]
+                                                matches = [t['managed_id'] for t in j['targets']
+                                                           if t['window_uuid'] == a.get('uuid')
+                                                           and t.get('action', 'close') == 'close']
                                                 j['self_terminal'] = matches[0] if len(matches) == 1 else 'excluded'
                                             identity.close()
                                             ready()
@@ -350,6 +357,10 @@ class CloseRuntime:
             return
         j['state'] = 'preparing'
         if j['index'] == len(j['records']):
+            if j['scope'] == 'all':
+                # Resolve authenticated absences first, so a later native
+                # dispatch hazard cannot strand otherwise safe missing entries.
+                j['targets'].sort(key=lambda t: t.get('action') != 'retire_missing')
             j['state'] = 'prepared'
             j['index'] = 0
             self.identify_terminal(j)
@@ -357,16 +368,31 @@ class CloseRuntime:
         record = j['records'][j['index']]
         def received(a):
             expected = record.observation
-            if (record.presence == 'present' and a.get('state') == 'present' and
+            if (j['scope'] == 'all' and record.presence in ('present', 'missing') and
+                    a.get('state') == 'missing' and a.get('uuid') == record.window_uuid):
+                j['targets'].append(dict(managed_id=record.managed_id, window_uuid=record.window_uuid,
+                    request_id=record.request_id, desktop=record.recipe.get('desktop'), slot=record.recipe.get('slot'),
+                    pid=expected.get('pid'), app_class=expected.get('resource_class'), state='queued',
+                    action='retire_missing', retired=False))
+            elif (record.presence == 'present' and a.get('state') == 'present' and
                     a.get('uuid') == record.window_uuid and type(a.get('pid')) is int and
                     a['pid'] == expected.get('pid') and a.get('class') == expected.get('resource_class') and
                     a.get('backend') in ('wayland', 'x11') and a.get('closeable') is True):
                 j['targets'].append(dict(managed_id=record.managed_id, window_uuid=record.window_uuid,
                     request_id=record.request_id, desktop=record.recipe.get('desktop'), slot=record.recipe.get('slot'),
                     pid=a['pid'], app_class=a['class'], backend=a['backend'], state='queued'))
+                if j['scope'] == 'all':
+                    j['targets'][-1].update(action='close', retired=False)
             else:
                 j['excluded'].append(dict(managed_id=record.managed_id, presence=record.presence,
                                            reason='missing_uncertain_or_native_identity_unavailable'))
+                if j['scope'] == 'all':
+                    reason = ('registered_identity_uncertain' if record.presence == 'uncertain' else
+                              'native_presence_conflict' if record.presence == 'missing' else
+                              'native_not_closeable' if a.get('state') == 'present' and a.get('closeable') is False else
+                              'native_unsupported' if a.get('state') == 'unsupported' else
+                              'native_identity_unavailable')
+                    j['excluded'][-1].update(state='failed', retired=False, reason=reason)
             j['index'] += 1
             self.inspect_next(j)
         self.adapter(j, 'Inspect', (record.window_uuid,), received)
@@ -389,19 +415,34 @@ class CloseRuntime:
     def dispatch_next(self, j):
         if not self.current(j) or j['state'] != 'running':
             return
+        if j['index'] >= len(j['targets']):
+            done = ('closed', 'already_missing') if j['scope'] == 'all' else ('closed',)
+            complete = (all(t['state'] in done and (j['scope'] != 'all' or t.get('retired') is True)
+                            for t in j['targets']) and not j['excluded'])
+            return self.finish(j, 'succeeded' if complete else 'partial', 'verified' if complete else 'incomplete')
         if self.clock() >= j['deadline']:
             return self.finish(j, 'partial', 'deadline')
-        if j['index'] >= len(j['targets']):
-            complete = all(t['state'] == 'closed' for t in j['targets']) and not j['excluded']
-            return self.finish(j, 'succeeded' if complete else 'partial', 'verified' if complete else 'incomplete')
         t = j['targets'][j['index']]
-        record = self.b.registry.get_window(t['managed_id'])
-        if (not record or record.window_uuid != t['window_uuid'] or record.request_id != t['request_id'] or
-                record.presence != 'present' or record.observation.get('pid') != t['pid'] or
-                record.observation.get('resource_class') != t['app_class']):
-            t['state'] = 'identity_lost'
-            return self.finish(j, 'failed', 'registered_identity_lost')
+        record = self.matching_record(t)
+        if not record or record.presence not in ('present', 'missing'):
+            return self.target_failed(j, t, 'identity_lost', 'registered_identity_lost')
         j['window_deadline'] = min(j['deadline'], self.clock() + j['bounds']['managed_close_timeout_ms'] / 1000)
+        if t.get('action') == 'retire_missing':
+            j['polling'] = True
+            t['state'] = 'checking_absence'
+            def absent(a):
+                if self.clock() >= j['window_deadline']:
+                    return self.uncertain(j, t, 'native_absence_unavailable')
+                if a.get('state') == 'missing' and a.get('uuid') == t['window_uuid']:
+                    self.retire_verified(j, t, 'already_missing')
+                else:
+                    self.target_failed(j, t, 'identity_lost', 'native_absence_not_verified')
+            # Fresh authenticated absence after confirmation, not a legacy
+            # presence flag or an old preview, authorizes retirement.
+            return self.adapter(j, 'Inspect', (t['window_uuid'],), absent,
+                                lambda: self.uncertain(j, t, 'native_absence_unavailable'))
+        if record.presence != 'present':
+            return self.target_failed(j, t, 'identity_lost', 'registered_identity_lost')
         t['token'] = uuid.uuid4().hex
         t['state'] = 'claiming'
         j['polling'] = True
@@ -413,6 +454,43 @@ class CloseRuntime:
         self.adapter(j, 'Close', (t['token'], t['window_uuid'], t['pid'], t['app_class'],
                                  j['bounds']['managed_close_x11_grab_ms'], str(int(j['window_deadline'] * 1000))), received,
                      lambda: self.uncertain(j, t, 'dispatch_reply_unavailable'))
+
+    def matching_record(self, t):
+        from joetoo_kwin_registry import RegistryError
+        try:
+            record = self.b.registry.get_window(t['managed_id'])
+        except RegistryError:
+            return None
+        if (record and record.window_uuid == t['window_uuid'] and record.request_id == t['request_id']
+                and record.recipe.get('desktop') == t['desktop'] and record.recipe.get('slot') == t['slot']
+                and record.observation.get('pid') == t['pid']
+                and record.observation.get('resource_class') == t['app_class']):
+            return record
+        return None
+
+    def target_failed(self, j, t, state, reason):
+        t.update(state=state, reason=reason)
+        if j['scope'] != 'all':
+            return self.finish(j, 'failed', reason)
+        # No native claim remains unowned here; unrelated targets may proceed.
+        j['index'] += 1
+        j['polling'] = False
+        self.dispatch_next(j)
+
+    def retire_verified(self, j, t, state):
+        from joetoo_kwin_registry import RegistryError
+        record = self.matching_record(t)
+        if not record or record.presence not in ('present', 'missing'):
+            return self.target_failed(j, t, 'identity_lost', 'registered_identity_lost')
+        self.b.registry.set_presence(t['window_uuid'], 'missing')
+        try:
+            self.b.registry.retire_missing(t['managed_id'], window_uuid=t['window_uuid'], request_id=t['request_id'])
+        except RegistryError:
+            return self.target_failed(j, t, 'retirement_failed', 'retirement_guard_rejected')
+        t.update(state=state, retired=True, reason='verified')
+        j['index'] += 1
+        j['polling'] = False
+        self.dispatch_next(j)
 
     def uncertain(self, j, t, reason):
         if not self.current(j) or j['state'] != 'running' or j['index'] >= len(j['targets']) or j['targets'][j['index']] is not t:
@@ -435,6 +513,8 @@ class CloseRuntime:
             j['polling'] = False
             return self.dispatch_next(j)
         if a.get('state') == 'closed' and a.get('gone') is True:
+            if j['scope'] == 'all':
+                return self.retire_verified(j, t, 'closed')
             t['state'] = 'closed'
             # Only this authenticated native callback marks successful closure.
             self.b.registry.set_presence(t['window_uuid'], 'missing')
@@ -448,8 +528,10 @@ class CloseRuntime:
                       'identity_lost', 'source_lost', 'dispatch_failed'}
             if a.get('state') not in rejected | failed:
                 return self.uncertain(j, t, 'native_phase_unknown')
-            t['state'] = 'dispatch_rejected' if a['state'] in rejected else 'dispatch_failed'
-            self.finish(j, 'failed', 'native_' + a['state'])
+            if j['scope'] == 'all' and a['state'] in ('source_lost', 'busy_or_replay'):
+                return self.uncertain(j, t, 'native_' + a['state'])
+            self.target_failed(j, t, 'dispatch_rejected' if a['state'] in rejected else 'dispatch_failed',
+                               'native_' + a['state'])
         else:
             j['polling'] = False
 
@@ -478,6 +560,10 @@ class CloseRuntime:
             return True
         if j['state'] == 'running' and j['index'] < len(j['targets']):
             t = j['targets'][j['index']]
+            if t.get('action') == 'retire_missing':
+                if self.clock() >= j['window_deadline']:
+                    self.uncertain(j, t, 'native_absence_unavailable')
+                return self.busy()
             if self.clock() >= j['window_deadline']:
                 # Pending dispatch/unknown helper ownership cannot be hidden by
                 # a terminal timeout. Normal dispatched-but-open == refusal or

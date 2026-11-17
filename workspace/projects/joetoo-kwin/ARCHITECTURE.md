@@ -378,7 +378,7 @@ modifiable by unrelated processes.
 | `-m DESKTOP X Y` | Change desktop/position and preserve size |
 | `-m X Y WIDTH HEIGHT` | Change position/size and preserve desktop |
 | `-m DESKTOP X Y WIDTH HEIGHT` | Specify desktop, position and size |
-| `-x` | Confirm a fixed eligible managed set, then broker-owned graceful close; records/slots retained (1.6 candidate) |
+| `-x` | Confirm a fixed managed set; progressively retire authenticated absences and verified graceful closes, retaining only failed/unresolved entries (1.6 candidate) |
 | `-d MANAGED_ID` | Confirm graceful close of one authenticated managed window; record/slot retained (1.6 candidate) |
 | `-l` | List broker-managed windows read-only, one record per fixed-width table row, including stable managed ID, desktop/slot, presence, placement and UUID (Step 1.5d) |
 | `-i MANAGED_ID`, `-s` | Additional detail/application-status interfaces, not implemented in Step 1.5d |
@@ -479,7 +479,7 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.5c** | Comparative RDP feasibility and decision | **Closed:** affirmative feasibility accepted; SDL3 FreeRDP selected for first RDP implementation, not as a preferred/default client |
 | **1.5c.5d** | Managed SDL FreeRDP under configured `-o` | **ACCEPTED, CLOSED AND MERGED (2026-11-11, PR #29)**: exact UUID/placement/lifecycle on native X11/Wayland, layered configuration, bounded clean-failure continuation, strict `/sec:nla /cert:deny` defaults, successful trusted GDM connection and automatic invalid-certificate refusal with verified cleanup; see final Increment 5 evidence |
 | **1.5d** | Implement `-L` one-recipe single-window launch (`over` only; no reflow), retain read-only `-l` inventory; run integrated native X11/Wayland regression | **ACCEPTED, CLOSED AND MERGED (2026-11-12, PR #30)**: `-l` implemented; `-L` implemented under simplified scope, preserving field-specific validation, safe logical-slot reservation, exact-UUID placement, one-shot raise, existing-window geometry and accepted `-o` semantics |
-| **1.6** | Managed `-d`, `-x` | **Active implementation candidate.** Confirmed graceful `-d` / broker-owned fixed-set `-x`; records and reservations retained; native acceptance pending |
+| **1.6** | Managed `-d`, `-x` | **Active implementation candidate.** Confirmed graceful `-d` retains records/slots; broker-owned fixed-set `-x` progressively retires verified removals; native acceptance pending |
 | **1.7** | Runtime JSON checkpoint and same-session reconciliation | Broker restart and exact source/UUID reconciliation |
 | **1.8** | Restorable `.conf` snapshot, `-S`, `-r` | New-window recovery from validated last-good intent |
 | **1.9** | Packaging of the accepted optional `eselect` selector, installation/ebuild and complete integration | Maintainer-led joetoo/joetoo-upstream packaging, template guidance and version 1 lifecycle |
@@ -704,9 +704,13 @@ Step 1.5d merge: `f72407278fa0a9c923079f3b38ce834440d2fef2`.
 Step 1.5 history is retained in [the archive](archive/task_step1.5/README.md);
 The archive/init transition merged through PR #31 at
 `cdcdc9e8c842d0be04447c06b90a25d3cc59f107`. Step 1.6 implements confirmed
-`-d MANAGED_ID` and fixed-set `-x`, retaining registrations, slots and placement
-history. `-a` is unnecessary because `-L` supplies launch; future `-D` retirement
-is separate. Close does not save, restore or erase snapshots. Accepted bulk work
+`-d MANAGED_ID` retains registration, slot and placement history. Confirmed
+fixed-set `-x` progressively retires registrations/reservations after authenticated
+absence or verified graceful closure, with bounded per-target operation history.
+Failed/unresolved entries remain; helper/owner/source uncertainty blocks unsafe
+dispatch without rolling back prior retirements. `-a` is unnecessary because
+`-L` supplies launch; individual `-D` close-and-retire is version 2. Close does
+not save, restore or erase snapshots. Accepted bulk work
 belongs to the broker and survives the invoking CLI; it does not survive a
 broker restart under a new recovery contract.
 
