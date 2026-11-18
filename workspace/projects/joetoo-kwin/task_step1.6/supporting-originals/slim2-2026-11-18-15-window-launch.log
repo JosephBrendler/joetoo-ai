@@ -1,0 +1,296 @@
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ cat /home/joe/.config/j
+joetoo-kwin/ jukrc        
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ cat /home/joe/.config/joetoo-kwin/
+joetoo-kwin.conf        slim2-step1.6-x11.conf
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ cat /home/joe/.config/joetoo-kwin/joetoo-kwin.conf 
+#!/bin/bash
+# Configuration for joetoo-kwin-plan (trusted Bash, sourced by the planner)
+# Sample display dimensions; adjust for the screen being arranged.
+#1366x768
+screen_width=1366
+screen_height=768
+#screen_width=1920
+#screen_height=1080
+desktop_limit=20
+
+# Desktop | program | session mode | target/argument
+# One record is one *intended* window, regardless of network availability.
+# Order within each desktop determines its numbered slot.
+desktop_session_list=(
+    "5|konsole|ssh|nuthuvia"
+    "5|konsole|ssh|tahawus"
+    "5|konsole|ssh|slim2"
+    "4|konsole|ssh|katahdin"
+    "4|konsole|ssh|nuoromis"
+    "4|konsole|ssh|yorsqui"
+    "6|konsole|ssh|g3nuc01"
+    "6|konsole|ssh|g5nuc01"
+    "6|konsole|ssh|elrond"
+    "7|konsole|ssh|x401"
+    "7|konsole|ssh|x402"
+    "7|konsole|ssh|gmki92"
+    "8|konsole|ssh|iota01"
+    "8|konsole|ssh|retro"
+    "8|konsole|ssh|q552u01"
+)
+#desktop_session_list=(
+#    "1|konsole|swr|nuthuvia"
+#    "1|vncviewer|via-ssh|nuthuvia"
+#    "2|konsole|swr|Elrond"
+#    "2|konsole|swr|Elrond"
+#    "3|konsole|local|btop"
+#)
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -vv -o
+ ℹ * verbosity increased: [6]
+ ℹ * verbosity increased: [7]
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: (completed)  [ ✅ ]
+ ℹ Calculating shared geometry ...
+ 🔍 Planned desktop [5] slot [1]: 13,38 378x652
+ 🔍 Planned desktop [5] slot [2]: 418,38 378x652
+ 🔍 Planned desktop [5] slot [3]: 823,38 378x652
+ 🔍 Planned desktop [4] slot [1]: 13,38 378x652
+ 🔍 Planned desktop [4] slot [2]: 418,38 378x652
+ 🔍 Planned desktop [4] slot [3]: 823,38 378x652
+ 🔍 Planned desktop [6] slot [1]: 13,38 378x652
+ 🔍 Planned desktop [6] slot [2]: 418,38 378x652
+ 🔍 Planned desktop [6] slot [3]: 823,38 378x652
+ 🔍 Planned desktop [7] slot [1]: 13,38 378x652
+ 🔍 Planned desktop [7] slot [2]: 418,38 378x652
+ 🔍 Planned desktop [7] slot [3]: 823,38 378x652
+ 🔍 Planned desktop [8] slot [1]: 13,38 378x652
+ 🔍 Planned desktop [8] slot [2]: 418,38 378x652
+ 🔍 Planned desktop [8] slot [3]: 823,38 378x652
+ * Desktop [5]: implicit [3], explicit [0]; initial stack slots bottom-to-top [1 2 3 ], preferred focus slot [3] (intent only)
+ * Desktop [4]: implicit [3], explicit [0]; initial stack slots bottom-to-top [1 2 3 ], preferred focus slot [3] (intent only)
+ * Desktop [6]: implicit [3], explicit [0]; initial stack slots bottom-to-top [1 2 3 ], preferred focus slot [3] (intent only)
+ * Desktop [7]: implicit [3], explicit [0]; initial stack slots bottom-to-top [1 2 3 ], preferred focus slot [3] (intent only)
+ * Desktop [8]: implicit [3], explicit [0]; initial stack slots bottom-to-top [1 2 3 ], preferred focus slot [3] (intent only)
+ ℹ Calculating shared geometry result: (completed)          [ ✅ ]
+ ⚠ Unmanaged window may obscure desktop [6] slot [1]
+ ⚠ Unmanaged window may obscure desktop [6] slot [2]
+ ⚠ Unmanaged window may obscure desktop [6] slot [3]
+ 🔍 - in show_config
+---[ joetoo-kwin-1.0.17 (configuration) ]---------------------------
+ * PN .............: [ joetoo-kwin ]
+ * BUILD ..........: [ 1.0.17 ]
+ * config .........: [ 
+   /home/joe/.config/joetoo-kwin/joetoo-kwin.conf ]
+ * screen_width ...: [ 1366 ]
+ * screen_height ..: [ 768 ]
+ ℹ =====[ Additional Information ]===============
+ 🔍 - in show_config
+---[ joetoo-kwin-1.0.17 (configuration) ]---------------------------
+ * verbosity ....................: [ 7 ]
+ * desktop_limit ................: [ 20 ]
+ * dt_win_limit .................: [ 4 ]
+ * min_window_exposure_px .......: [ 32 ]
+ * terminal_width_percent .......: [ 87 ]
+ * terminal_gap_percent .........: [ 2 ]
+ * terminal_height_percent ......: [ 85 ]
+ * terminal_left_percent ........: [ 1 ]
+ * terminal_top_percent .........: [ 5 ]
+ * terminal_row_gap_percent .....: [ 3 ]
+ * graphical_left_percent .......: [ 5 ]
+ * graphical_top_percent ........: [ 3 ]
+ * graphical_width_percent ......: [ 94 ]
+ * graphical_height_percent .....: [ 90 ]
+ * rdp_registration_timeout_ms ..: [ 300000 ]
+ * rdp_windowing_backend ........: [ auto ]
+ * rdp_security_protocol ........: [ nla ]
+ * rdp_certificate_policy .......: [ strict ]
+ * rdp_x11_renderer .............: [ auto ]
+ * rdp_remote_width .............: [ 1024 ]
+ * rdp_remote_height ............: [ 768 ]
+ * RDP_SMART_SIZING .............: [ True ]
+ * rdp_initial_client_width .....: [ 800 ]
+ * rdp_initial_client_height ....: [ 600 ]
+ * vnc_viewer_ready_timeout_ms ..: [ 300000 ]
+ * sftp_advisory_enabled ........: [ True ]
+ * sftp_advisory_timeout_ms .....: [ 2000 ]
+ * sftp_advisory_ssh_port .......: [ 22 ]
+ 🔍 =====[ Additional Debug Information ]===============
+ 🔍 - in show_config
+---[ joetoo-kwin-1.0.17 (configuration) ]---------------------------
+ * initial_focus_timeout_ms ..........: [ 500 ]
+ * initial_focus_poll_interval_ms ....: [ 25 ]
+ * sftp_capability_timeout_ms ........: [ 2000 ]
+ * rdp_registration_poll_ms ..........: [ 100 ]
+ * rdp_registration_event_limit ......: [ 4096 ]
+ * rdp_registration_window_limit .....: [ 64 ]
+ * rdp_backend_log_byte_limit ........: [ 65536 ]
+ * rdp_x11_identity_settle_ms ........: [ 500 ]
+ * vnc_ssh_start_timeout_ms ..........: [ 10000 ]
+ * vnc_supervisor_poll_interval_ms ...: [ 100 ]
+ * vnc_cleanup_timeout_ms ............: [ 2000 ]
+ * vnc_local_port_attempts ...........: [ 3 ]
+ * vnc_identity_event_limit ..........: [ 256 ]
+ * vnc_identity_settle_ms ............: [ 500 ]
+ * vnc_dbus_timeout_ms ...............: [ 3000 ]
+ * vnc_placement_timeout_ms ..........: [ 15000 ]
+ * vnc_identity_start_timeout_ms .....: [ 1000 ]
+ * managed_close_timeout_ms ..........: [ 15000 ]
+ * managed_close_total_timeout_ms ....: [ 300000 ]
+ * managed_close_prepare_timeout_ms ..: [ 300000 ]
+ * managed_close_x11_grab_ms .........: [ 100 ]
+ * managed_close_poll_ms .............: [ 100 ]
+ * managed_close_dbus_timeout_ms .....: [ 3000 ]
+ ✨ LAUNCH PLAN: [15] windows; confirmation required
+ ✨ Execution desktop groups: [5 4 6 7 8]; preserve entry order within each group
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1366x768] (not autodetected); terminal width budget: [87%]
+ * Desktop  Slot  Program  Mode  Target    Layer  X    Y   Width  Height
+ * 5        1     konsole  ssh   nuthuvia  panel  13   38  378    652
+ * 5        2     konsole  ssh   tahawus   panel  418  38  378    652
+ * 5        3     konsole  ssh   slim2     panel  823  38  378    652
+ * 4        1     konsole  ssh   katahdin  panel  13   38  378    652
+ * 4        2     konsole  ssh   nuoromis  panel  418  38  378    652
+ * 4        3     konsole  ssh   yorsqui   panel  823  38  378    652
+ * 6        1     konsole  ssh   g3nuc01   panel  13   38  378    652
+ * 6        2     konsole  ssh   g5nuc01   panel  418  38  378    652
+ * 6        3     konsole  ssh   elrond    panel  823  38  378    652
+ * 7        1     konsole  ssh   x401      panel  13   38  378    652
+ * 7        2     konsole  ssh   x402      panel  418  38  378    652
+ * 7        3     konsole  ssh   gmki92    panel  823  38  378    652
+ * 8        1     konsole  ssh   iota01    panel  13   38  378    652
+ * 8        2     konsole  ssh   retro     panel  418  38  378    652
+ * 8        3     konsole  ssh   q552u01   panel  823  38  378    652
+ ✨ KWin desktops: current [9], required [8]; existing desktop capacity is adequate
+
+ ✨ Do you want to continue? [Y/n]: y                               
+ ✨ Affirmative response from user; continuing
+ ⚠ Unmanaged window may obscure desktop [6] slot [1]
+ ⚠ Unmanaged window may obscure desktop [6] slot [2]
+ ⚠ Unmanaged window may obscure desktop [6] slot [3]
+ ✨ [20261118-15:33:49] Launching desktop [5] slot [1]
+ ✨ Armed managed launch [e3dd5bac2d1749f399c6c8ec1e475bc4], placement [9ce3fc7cee4549bababd5e02a191393a]
+ ✨ Launched Konsole operation; launch-process PID [91570] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-002] UUID [14f4d166-3364-491e-aec8-66424a55c61f]
+ ✨ OK launch: Konsole (pid=91570) before=[6] (393,40) 580x652 after=[5] (13,38) 378x652 tiled=false fullscreen=false
+ ⚠ Unmanaged window may obscure desktop [6] slot [1]
+ ⚠ Unmanaged window may obscure desktop [6] slot [2]
+ ⚠ Unmanaged window may obscure desktop [6] slot [3]
+ ✨ [20261118-15:33:50] Launching desktop [5] slot [2]
+ ✨ Armed managed launch [4f8c66ca47894d12a96e44e0c3a97536], placement [710599654b6449cd85ff579929798904]
+ ✨ Launched Konsole operation; launch-process PID [91803] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-003] UUID [3615b45f-f654-4d07-baa2-30a5499c4fff]
+ ✨ OK launch: Konsole (pid=91803) before=[6] (494,40) 378x652 after=[5] (418,38) 378x652 tiled=false fullscreen=false
+ ⚠ Unmanaged window may obscure desktop [6] slot [1]
+ ⚠ Unmanaged window may obscure desktop [6] slot [2]
+ ⚠ Unmanaged window may obscure desktop [6] slot [3]
+ ✨ [20261118-15:33:52] Launching desktop [5] slot [3]
+ ✨ Armed managed launch [b4703dfd721c4223b02d0b39e290fbed], placement [2b0e60ecf739415f8aeaf78fbd5bd0a9]
+ ✨ Launched Konsole operation; launch-process PID [92009] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-004] UUID [432c6b01-c628-4433-9465-109f59e80191]
+ ✨ OK launch: Konsole (pid=92009) before=[6] (494,40) 378x652 after=[5] (823,38) 378x652 tiled=false fullscreen=false
+ ✨ Initializing desktop [5] stack/focus; geometry remains separately verified
+ ✨ Desktop [5] initial stacking/focus result: (completed)   [ ✅ ]
+ * Initial layout: {"id": "5f09adc6c6774a1f9685947cbff411e9", "state": "SUCCEEDED", "geometry": "unchanged", "stacking": "verified", "focus": "preferred target retained; inactive desktop", "detail": "", "preferred_uuid": "432c6b01-c628-4433-9465-109f59e80191", "observed_active_uuid": "", "focus_attempted": false, "order": ["14f4d166-3364-491e-aec8-66424a55c61f", "3615b45f-f654-4d07-baa2-30a5499c4fff", "432c6b01-c628-4433-9465-109f59e80191"], "observed_order": ["14f4d166-3364-491e-aec8-66424a55c61f", "3615b45f-f654-4d07-baa2-30a5499c4fff", "432c6b01-c628-4433-9465-109f59e80191"], "before_active_uuid": "", "current_desktop": 6, "focus_observation": "not attempted", "focus_elapsed_ms": 0, "initial_active_uuid": null, "focus_timeout_ms": 500, "focus_poll_interval_ms": 25, "entries": [{"uuid": "14f4d166-3364-491e-aec8-66424a55c61f", "layer": "panel", "desktop": 5}, {"uuid": "3615b45f-f654-4d07-baa2-30a5499c4fff", "layer": "panel", "desktop": 5}, {"uuid": "432c6b01-c628-4433-9465-109f59e80191", "layer": "panel", "desktop": 5}]}
+ ⚠ Unmanaged window may obscure desktop [6] slot [1]
+ ⚠ Unmanaged window may obscure desktop [6] slot [2]
+ ⚠ Unmanaged window may obscure desktop [6] slot [3]
+ ✨ [20261118-15:33:53] Launching desktop [4] slot [1]
+ ✨ Armed managed launch [bac90ed978fd4b828d519df8c63a859a], placement [bc66a372b5a844dd8652b5a9a1fb9e0f]
+ ✨ Launched Konsole operation; launch-process PID [92253] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-005] UUID [5161fc1d-30b3-48c1-a348-ecad57abc8fd]
+ ✨ OK launch: Konsole (pid=92253) before=[6] (494,40) 378x652 after=[4] (13,38) 378x652 tiled=false fullscreen=false
+ ⚠ Unmanaged window may obscure desktop [6] slot [1]
+ ⚠ Unmanaged window may obscure desktop [6] slot [2]
+ ⚠ Unmanaged window may obscure desktop [6] slot [3]
+ ✨ [20261118-15:33:54] Launching desktop [4] slot [2]
+ ✨ Armed managed launch [b7d7a05924f44ac5a4b1215a6e047983], placement [4aced161cf6848ad9753ba6d067ea360]
+ ✨ Launched Konsole operation; launch-process PID [92453] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-006] UUID [f110ef69-c360-49de-a4d9-2ccc83cabded]
+ ✨ OK launch: Konsole (pid=92453) before=[6] (494,40) 378x652 after=[4] (418,38) 378x652 tiled=false fullscreen=false
+ ⚠ Unmanaged window may obscure desktop [6] slot [1]
+ ⚠ Unmanaged window may obscure desktop [6] slot [2]
+ ⚠ Unmanaged window may obscure desktop [6] slot [3]
+ ✨ [20261118-15:33:55] Launching desktop [4] slot [3]
+ ✨ Armed managed launch [48edf113f1494ce2b36f6cc54ccdfb51], placement [013819dfc0a441a9bdf36aa21c8321a3]
+ ✨ Launched Konsole operation; launch-process PID [92650] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-007] UUID [aa72896e-aec8-4afd-aa99-0c8a0d4b5880]
+ ✨ OK launch: Konsole (pid=92650) before=[6] (494,40) 378x652 after=[4] (823,38) 378x652 tiled=false fullscreen=false
+ ✨ Initializing desktop [4] stack/focus; geometry remains separately verified
+ ✨ Desktop [4] initial stacking/focus result: (completed)   [ ✅ ]
+ * Initial layout: {"id": "6d6247b1af6e44bf89a199efe0c53133", "state": "SUCCEEDED", "geometry": "unchanged", "stacking": "verified", "focus": "preferred target retained; inactive desktop", "detail": "", "preferred_uuid": "aa72896e-aec8-4afd-aa99-0c8a0d4b5880", "observed_active_uuid": "", "focus_attempted": false, "order": ["5161fc1d-30b3-48c1-a348-ecad57abc8fd", "f110ef69-c360-49de-a4d9-2ccc83cabded", "aa72896e-aec8-4afd-aa99-0c8a0d4b5880"], "observed_order": ["5161fc1d-30b3-48c1-a348-ecad57abc8fd", "f110ef69-c360-49de-a4d9-2ccc83cabded", "aa72896e-aec8-4afd-aa99-0c8a0d4b5880"], "before_active_uuid": "", "current_desktop": 6, "focus_observation": "not attempted", "focus_elapsed_ms": 0, "initial_active_uuid": null, "focus_timeout_ms": 500, "focus_poll_interval_ms": 25, "entries": [{"uuid": "5161fc1d-30b3-48c1-a348-ecad57abc8fd", "layer": "panel", "desktop": 4}, {"uuid": "f110ef69-c360-49de-a4d9-2ccc83cabded", "layer": "panel", "desktop": 4}, {"uuid": "aa72896e-aec8-4afd-aa99-0c8a0d4b5880", "layer": "panel", "desktop": 4}]}
+ ⚠ Unmanaged window may obscure desktop [6] slot [1]
+ ⚠ Unmanaged window may obscure desktop [6] slot [2]
+ ⚠ Unmanaged window may obscure desktop [6] slot [3]
+ ✨ [20261118-15:33:57] Launching desktop [6] slot [1]
+ ✨ Armed managed launch [41b8317f98544157bb99cd23dcc8fce6], placement [f8157091974448b1bb4cd79c0a66161d]
+ ✨ Launched Konsole operation; launch-process PID [92881] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-008] UUID [d628ee2e-22f6-4a27-8060-98e9f4ef2eb0]
+ ✨ OK launch: Konsole (pid=92881) before=[6] (494,40) 378x652 after=[6] (13,38) 378x652 tiled=false fullscreen=false
+ ⚠ Unmanaged window may obscure desktop [6] slot [2]
+ ⚠ Unmanaged window may obscure desktop [6] slot [3]
+ ✨ [20261118-15:33:58] Launching desktop [6] slot [2]
+ ✨ Armed managed launch [95290172772f4582b8dc27c387e8d1aa], placement [a64b652e51bd4e00bbf9b12eb8cbe5ed]
+ ✨ Launched Konsole operation; launch-process PID [93067] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-009] UUID [e4279605-08ea-4370-9c8a-09578eea6caa]
+ ✨ OK launch: Konsole (pid=93067) before=[6] (494,40) 378x652 after=[6] (418,38) 378x652 tiled=false fullscreen=false
+ ⚠ Unmanaged window may obscure desktop [6] slot [3]
+ ✨ [20261118-15:33:59] Launching desktop [6] slot [3]
+ ✨ Armed managed launch [87ca9463166844cc9a1e3e5c4654ae5b], placement [06012ce0678b4bea8f85ede79632c119]
+ ✨ Launched Konsole operation; launch-process PID [93245] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-010] UUID [9de2741c-5fa4-46c6-8033-2de41e826348]
+ ✨ OK launch: Konsole (pid=93245) before=[6] (494,40) 378x652 after=[6] (823,38) 378x652 tiled=false fullscreen=false
+ ✨ Initializing desktop [6] stack/focus; geometry remains separately verified
+ ✨ Desktop [6] initial stacking/focus result: (completed)   [ ✅ ]
+ * Initial layout: {"id": "8f648f00903c4942a9917139be131e68", "state": "SUCCEEDED", "geometry": "unchanged", "stacking": "verified", "focus": "verified", "detail": "", "preferred_uuid": "9de2741c-5fa4-46c6-8033-2de41e826348", "observed_active_uuid": "9de2741c-5fa4-46c6-8033-2de41e826348", "focus_attempted": true, "order": ["d628ee2e-22f6-4a27-8060-98e9f4ef2eb0", "e4279605-08ea-4370-9c8a-09578eea6caa", "9de2741c-5fa4-46c6-8033-2de41e826348"], "observed_order": ["d628ee2e-22f6-4a27-8060-98e9f4ef2eb0", "e4279605-08ea-4370-9c8a-09578eea6caa", "9de2741c-5fa4-46c6-8033-2de41e826348"], "before_active_uuid": "9de2741c-5fa4-46c6-8033-2de41e826348", "current_desktop": 6, "focus_observation": "immediate", "focus_elapsed_ms": 5, "initial_active_uuid": "9de2741c-5fa4-46c6-8033-2de41e826348", "focus_timeout_ms": 500, "focus_poll_interval_ms": 25, "entries": [{"uuid": "d628ee2e-22f6-4a27-8060-98e9f4ef2eb0", "layer": "panel", "desktop": 6}, {"uuid": "e4279605-08ea-4370-9c8a-09578eea6caa", "layer": "panel", "desktop": 6}, {"uuid": "9de2741c-5fa4-46c6-8033-2de41e826348", "layer": "panel", "desktop": 6}]}
+ ✨ [20261118-15:34:01] Launching desktop [7] slot [1]
+ ✨ Armed managed launch [11262d42a2bf4d62a8db53fdbbb47b9f], placement [cc3af15d61b0448bb17d8887ce657cec]
+ ✨ Launched Konsole operation; launch-process PID [93452] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-011] UUID [819a3c80-b69d-4343-9fc5-6f81d67cde08]
+ ✨ OK launch: Konsole (pid=93452) before=[6] (494,40) 378x652 after=[7] (13,38) 378x652 tiled=false fullscreen=false
+ ✨ [20261118-15:34:02] Launching desktop [7] slot [2]
+ ✨ Armed managed launch [d93cce3481b04d51bd47451f655f4428], placement [869caf5f80864ebd9b8b0a1d3b3cae48]
+ ✨ Launched Konsole operation; launch-process PID [93619] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-012] UUID [b9d447d8-5394-4bda-b6fb-3f9175ac604b]
+ ✨ OK launch: Konsole (pid=93619) before=[6] (494,40) 378x652 after=[7] (418,38) 378x652 tiled=false fullscreen=false
+ ✨ [20261118-15:34:03] Launching desktop [7] slot [3]
+ ✨ Armed managed launch [80d036c83e2e4b3396bb3986e7198f7a], placement [e833b4d8c08f4f7b91037efdddd5641c]
+ ✨ Launched Konsole operation; launch-process PID [93783] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-013] UUID [b25c9598-9fcc-42c1-9c2a-3956fac662cb]
+ ✨ OK launch: Konsole (pid=93783) before=[6] (494,40) 378x652 after=[7] (823,38) 378x652 tiled=false fullscreen=false
+ ✨ Initializing desktop [7] stack/focus; geometry remains separately verified
+ ✨ Desktop [7] initial stacking/focus result: (completed)   [ ✅ ]
+ * Initial layout: {"id": "0342f0c04cdc442a8277ca67f5c1920e", "state": "SUCCEEDED", "geometry": "unchanged", "stacking": "verified", "focus": "preferred target retained; inactive desktop", "detail": "", "preferred_uuid": "b25c9598-9fcc-42c1-9c2a-3956fac662cb", "observed_active_uuid": "", "focus_attempted": false, "order": ["819a3c80-b69d-4343-9fc5-6f81d67cde08", "b9d447d8-5394-4bda-b6fb-3f9175ac604b", "b25c9598-9fcc-42c1-9c2a-3956fac662cb"], "observed_order": ["819a3c80-b69d-4343-9fc5-6f81d67cde08", "b9d447d8-5394-4bda-b6fb-3f9175ac604b", "b25c9598-9fcc-42c1-9c2a-3956fac662cb"], "before_active_uuid": "", "current_desktop": 6, "focus_observation": "not attempted", "focus_elapsed_ms": 0, "initial_active_uuid": null, "focus_timeout_ms": 500, "focus_poll_interval_ms": 25, "entries": [{"uuid": "819a3c80-b69d-4343-9fc5-6f81d67cde08", "layer": "panel", "desktop": 7}, {"uuid": "b9d447d8-5394-4bda-b6fb-3f9175ac604b", "layer": "panel", "desktop": 7}, {"uuid": "b25c9598-9fcc-42c1-9c2a-3956fac662cb", "layer": "panel", "desktop": 7}]}
+ ✨ [20261118-15:34:04] Launching desktop [8] slot [1]
+ ✨ Armed managed launch [1f62f79f872547d3be134c62e4095285], placement [d2316698b6e54badba1bf1a4a864fdf7]
+ ✨ Launched Konsole operation; launch-process PID [93981] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-014] UUID [eba26ead-4413-4afb-8ca3-b12ad57af34e]
+ ✨ OK launch: Konsole (pid=93981) before=[6] (494,40) 378x652 after=[8] (13,38) 378x652 tiled=false fullscreen=false
+ ✨ [20261118-15:34:05] Launching desktop [8] slot [2]
+ ✨ Armed managed launch [f485a35fa747411fbc6c8c411ed4cec1], placement [b05917bd6b4f479d970103cad75e5ffa]
+ ✨ Launched Konsole operation; launch-process PID [94139] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-015] UUID [eec7be23-2efe-44de-bc05-d07250001aaf]
+ ✨ OK launch: Konsole (pid=94139) before=[6] (494,40) 378x652 after=[8] (418,38) 378x652 tiled=false fullscreen=false
+ ✨ [20261118-15:34:07] Launching desktop [8] slot [3]
+ ✨ Armed managed launch [43eed0ae268f4d56a84303149e9b268d], placement [cd27664a0e4746b499b30994a1d6ca7a]
+ ✨ Launched Konsole operation; launch-process PID [94294] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-016] UUID [eb94bf05-289d-422f-8372-16a649194cf9]
+ ✨ OK launch: Konsole (pid=94294) before=[6] (494,40) 378x652 after=[8] (823,38) 378x652 tiled=false fullscreen=false
+ ✨ Initializing desktop [8] stack/focus; geometry remains separately verified
+ ✨ Desktop [8] initial stacking/focus result: (completed)   [ ✅ ]
+ * Initial layout: {"id": "7fb92c642cbe4386b518a0586b645959", "state": "SUCCEEDED", "geometry": "unchanged", "stacking": "verified", "focus": "preferred target retained; inactive desktop", "detail": "", "preferred_uuid": "eb94bf05-289d-422f-8372-16a649194cf9", "observed_active_uuid": "", "focus_attempted": false, "order": ["eba26ead-4413-4afb-8ca3-b12ad57af34e", "eec7be23-2efe-44de-bc05-d07250001aaf", "eb94bf05-289d-422f-8372-16a649194cf9"], "observed_order": ["eba26ead-4413-4afb-8ca3-b12ad57af34e", "eec7be23-2efe-44de-bc05-d07250001aaf", "eb94bf05-289d-422f-8372-16a649194cf9"], "before_active_uuid": "", "current_desktop": 6, "focus_observation": "not attempted", "focus_elapsed_ms": 0, "initial_active_uuid": null, "focus_timeout_ms": 500, "focus_poll_interval_ms": 25, "entries": [{"uuid": "eba26ead-4413-4afb-8ca3-b12ad57af34e", "layer": "panel", "desktop": 8}, {"uuid": "eec7be23-2efe-44de-bc05-d07250001aaf", "layer": "panel", "desktop": 8}, {"uuid": "eb94bf05-289d-422f-8372-16a649194cf9", "layer": "panel", "desktop": 8}]}
+ ✨ Entries: completed [15], failed [0], skipped [0]; incomplete desktop cohorts [0]
+ ✨ Configured layout: [15/15] windows completed ... (complet[ ✅ ]
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -l
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     3        1     present   succeeded  281dc4d7-5a88-4193-8f19-f805ffc7111a
+win-005     4        1     present   succeeded  5161fc1d-30b3-48c1-a348-ecad57abc8fd
+win-006     4        2     present   succeeded  f110ef69-c360-49de-a4d9-2ccc83cabded
+win-007     4        3     present   succeeded  aa72896e-aec8-4afd-aa99-0c8a0d4b5880
+win-002     5        1     present   succeeded  14f4d166-3364-491e-aec8-66424a55c61f
+win-003     5        2     present   succeeded  3615b45f-f654-4d07-baa2-30a5499c4fff
+win-004     5        3     present   succeeded  432c6b01-c628-4433-9465-109f59e80191
+win-008     6        1     present   succeeded  d628ee2e-22f6-4a27-8060-98e9f4ef2eb0
+win-009     6        2     present   succeeded  e4279605-08ea-4370-9c8a-09578eea6caa
+win-010     6        3     present   succeeded  9de2741c-5fa4-46c6-8033-2de41e826348
+win-011     7        1     present   succeeded  819a3c80-b69d-4343-9fc5-6f81d67cde08
+win-012     7        2     present   succeeded  b9d447d8-5394-4bda-b6fb-3f9175ac604b
+win-013     7        3     present   succeeded  b25c9598-9fcc-42c1-9c2a-3956fac662cb
+win-014     8        1     present   succeeded  eba26ead-4413-4afb-8ca3-b12ad57af34e
+win-015     8        2     present   succeeded  eec7be23-2efe-44de-bc05-d07250001aaf
+win-016     8        3     present   succeeded  eb94bf05-289d-422f-8372-16a649194cf9
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ 

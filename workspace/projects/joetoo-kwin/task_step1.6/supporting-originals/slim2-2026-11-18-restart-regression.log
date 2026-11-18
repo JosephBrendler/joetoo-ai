@@ -1,0 +1,348 @@
+joe@slim2 ~ $ alias mw='/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/joetoo-kwin -m'
+joe@slim2 ~ $ rc-service -U joetoo-kwind status
+ * status: stopped
+joe@slim2 ~ $ rc-service -U joetoo-kwind start
+ * /run/user/1000/joetoo-kwin: creating directory
+ * Starting joetoo-kwind ...                                                                           [ ok ]
+joe@slim2 ~ $ rc-service -U joetoo-kwind status
+ * status: started
+joe@slim2 ~ $ mw l
+ ✨ Submitting active-window move ... (completed)                                                     [ ✅ ]
+ ✨ Invoking active-window move shortcut ... (completed)           [ ✅ ]
+ ✨ Verifying active-window move ... (completed)             [ ✅ ]
+joe@slim2 ~ $ cd /home/joe/joetoo-ai/workspace/projects/joetoo-kwin
+
+echo "=== TMUX SESSIONS ==="
+tmux list-sessions
+
+echo "=== X11 DESKTOP STATE ==="
+xprop -root _NET_NUMBER_OF_DESKTOPS _NET_CURRENT_DESKTOP
+
+echo "=== MANAGED INVENTORY ==="
+./joetoo-kwin -l
+
+echo "=== NATIVE CLOSE ADAPTER ==="
+qdbus6 org.kde.KWin /Effects \
+    org.kde.kwin.Effects.isEffectLoaded joetoo_managed_close
+
+# End of commands
+=== TMUX SESSIONS ===
+error connecting to /tmp/tmux-1000/default (No such file or directory)
+=== X11 DESKTOP STATE ===
+_NET_NUMBER_OF_DESKTOPS(CARDINAL) = 9
+_NET_CURRENT_DESKTOP(CARDINAL) = 5
+=== MANAGED INVENTORY ===
+No managed windows (no retained managed reservations).
+=== NATIVE CLOSE ADAPTER ===
+false
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./tools/restart_joetoo-kwind 
+---[ slim2 restart_joetoo-kwind-20261118 ]--------------------------
+---[ restart_joetoo-kwind-20261118 (configuration) ]----------------
+ * PN ...............: [ restart_joetoo-kwind ]
+ * BUILD ............: [ 20261118 ]
+ * user .............: [ joe ]
+ * project_dir ......: [ 
+   /home/joe/joetoo-ai/workspace/projects/joetoo-kwin ]
+ * bus ..............: [ org.joetoo.KWinBridge ]
+ * path .............: [ /org/joetoo/KWinBridge ]
+
+ ✨ PWD: [/home/joe/joetoo-ai/workspace/projects/joetoo-kwin]
+ ✨ Moving to [/home/joe/joetoo-ai/workspace/projects/joetoo-[ ✅ ]
+ ✨ Stopping joetoo-kwind service                            [ ✅ ]
+ ✨ Running ./tools/joetoo-kwind-install-poc --update
+    OpenRC user service: /home/joe/.config/rc/init.d/joetoo-kwind
+    Daemon executable:  /home/joe/.local/libexec/joetoo-kwind
+    Registry module:     /home/joe/.local/libexec/joetoo_kwin_registry.py
+    VNC identity module: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+    VNC target module:   /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+    VNC launch module:   /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+    SDL RDP module:      /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+    RDP target module:   /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+    Managed close:       /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+    Resident JavaScript: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+    Bash CLI:           /home/joe/.local/bin/joetoo-kwin
+    OpenRC user override: /home/joe/.config/rc/conf.d/joetoo-kwind
+    OpenRC user config:  /home/joe/.config/rc/rc.conf
+    OpenRC allowlist already correct: /home/joe/.config/rc/rc.conf
+    Installed twelve user-owned joetoo-kwind files. No service was started.
+    From a local Plasma Konsole, run:
+      rc-service -U joetoo-kwind start
+      rc-service -U joetoo-kwind status
+ ✨ Update done; result: (success!)                          [ ✅ ]
+ ✨ Unloading joetoo-bridge KWin script (true)               [ ✅ ]
+ ✨ Starting joetoo-kwind service                            [ ✅ ]
+
+ ✨ Do you want to run python and javascript unit tests? [Y/n]:y    
+ ✨ Running python unit tests
+........................................................................................................................................................................................................................................................................................................................................................................................................................................................Full diagnostic fixture export: 1024 events, 11.784s (disposable storage)
+...............................................................................................................................................................................................................................................................................................................joetoo-kwind: KWin resident reused: joetoo-bridge
+joetoo-kwind: KWin resident reused: joetoo-bridge
+.joetoo-kwind: KWin resident reused: joetoo-bridge
+joetoo-kwind: KWin resident started: joetoo-bridge
+................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 1016 tests in 217.508s
+
+OK
+ ✨ python tests done; result: (success!)                    [ ✅ ]
+ ✨ Running javascript unit tests
+✔ initial stack respects layers, last over, and targets only cohort UUIDs (16.008272ms)
+✔ last panel beats a final under; under-only and inactive groups do not activate (7.889576ms)
+✔ focus changes during claim and deleted cohort fail before stack mutation (7.674032ms)
+✔ ordinary floating windows remain compatible on displayed and inactive desktops (5.247933ms)
+✔ canonical broker UUIDs resolve braced uppercase Qt internalIds without adopting another window (3.073063ms)
+✔ exact UUID/property diagnostic without mutation: deleted (4.672905ms)
+✔ exact UUID/property diagnostic without mutation: fullscreen (2.516579ms)
+✔ exact UUID/property diagnostic without mutation: keep-above (2.778596ms)
+✔ exact UUID/property diagnostic without mutation: keep-below (2.971996ms)
+✔ exact UUID/property diagnostic without mutation: tile pointer (3.554713ms)
+✔ exact UUID/property diagnostic without mutation: vertical maximize (2.402194ms)
+✔ exact UUID/property diagnostic without mutation: horizontal maximize (2.387831ms)
+✔ exact UUID/property diagnostic without mutation: full maximize (2.353044ms)
+✔ exact UUID/property diagnostic without mutation: missing maximize property (2.835049ms)
+✔ exact UUID/property diagnostic without mutation: string zero is not a numeric enum (2.386214ms)
+✔ exact UUID/property diagnostic without mutation: null is not restore (2.421448ms)
+✔ missing stack UUID is never adopted from windowList (4.672505ms)
+✔ post-activation ordering is observed rather than inferred from raise return (3.006306ms)
+✔ expired, moved and preexisting special-mode targets fail before mutation (6.594358ms)
+✔ immediate success records one request and no temporary observers (2.708422ms)
+✔ delayed activation succeeds after one request, rechecks stack, and releases observers (4.622082ms)
+✔ nonconvergence times out, retains stack/geometry evidence, and does not reclaim focus (5.237509ms)
+✔ unchanged preexisting active UUID is allowed; newly competing activation interrupts (3.321095ms)
+✔ bounded observation interruption: desktop (3.154992ms)
+✔ bounded observation interruption: deleted (2.822523ms)
+✔ bounded observation interruption: removed (5.378158ms)
+✔ bounded observation interruption: special (1.829691ms)
+✔ bounded observation interruption: geometry (2.600526ms)
+✔ bounded observation interruption: source (1.877078ms)
+✔ bounded observation interruption: broker source (1.796548ms)
+✔ expiry and queued callbacks cannot renew lease or reactivate (1.860389ms)
+✔ focus success returns actual post-convergence order without repairing a mismatch (1.833924ms)
+✔ timer polling fallback works without activation signals (2.087765ms)
+✔ a new activation event for the preexisting window is distinct from unchanged polling (2.119085ms)
+✔ unavailable timer reports unsupported delay without repeatedly activating (1.764119ms)
+✔ effective observation timing and the remaining transaction lease both bound the wait (4.603027ms)
+✔ single over raises only the owned UUID above earlier normal windows without moving peers (2.362958ms)
+✔ single raise reports failure when a prior normal window remains above it (2.043801ms)
+✔ explicit action places only broker UUID without active-window/focus/stack access (9.799825ms)
+✔ real finish transports only fixed diagnostic stages beside the original detail (3.062436ms)
+✔ desktop assignment failure does not falsely report geometry assignment attempted (2.72846ms)
+✔ new resident remains compatible with an older broker without diagnostic opt-in (2.08159ms)
+✔ resident refuses uuid before any assignment (1.966394ms)
+✔ resident refuses pid before any assignment (1.749348ms)
+✔ resident refuses marker before any assignment (1.646107ms)
+✔ resident refuses class before any assignment (3.267847ms)
+✔ resident refuses removed before any assignment (2.052218ms)
+✔ resident refuses non_normal before any assignment (2.161042ms)
+✔ resident refuses source before any assignment (1.59938ms)
+✔ resident refuses expiry before any assignment (1.575263ms)
+✔ resident refuses fullscreen before any assignment (2.255532ms)
+✔ resident refuses maximized before any assignment (1.641423ms)
+✔ resident refuses tile before any assignment (1.639135ms)
+✔ resident refuses desktop before any assignment (1.824321ms)
+✔ loads before PID is known; copies creation state and exports only safe title markers (23.756194ms)
+✔ late class recognition retains a bounded redacted birth snapshot in capture order (4.580733ms)
+✔ utility X11 and normal Wayland credential windows are both observed without enrollment (9.068848ms)
+✔ decorated captions retain only generated tokens and never suffix contents (4.291112ms)
+✔ unclassified removed windows make scope coverage explicitly incomplete (3.692752ms)
+✔ temporary marked window and persistent viewer remain distinct; neither is selected (4.591708ms)
+✔ delayed Wayland caption preserves creation UUID and records marker arrival and loss (4.787579ms)
+✔ normal Wayland credentials and concurrent marked viewers remain distinct observations only (5.25409ms)
+✔ removal uses cached UUID/geometry, disconnects handlers and ignores queued callbacks (5.95996ms)
+✔ workspace activation and activeWindow readback are distinct, with no operator-intent claim (4.292645ms)
+✔ interactive movement, geometry changes and explicit markers do not assert physical input (7.496141ms)
+✔ unsupported properties and signals are explicit; function-valued getters are never invoked (5.336142ms)
+✔ inaccessible properties do not leak exception strings or authentication/certificate contents (5.354376ms)
+✔ backward wall-clock changes do not break sequence ordering (5.255435ms)
+✔ record, window and serialized-record bounds stop explicitly without active callbacks (15.029279ms)
+✔ expiry cleans signals and timer; late expiry, markers and queued events are inert (4.686118ms)
+✔ reaching the record bound during removal does not disconnect a subscription twice (4.452456ms)
+✔ missing timer or lifecycle signal fails setup and never leaves observers connected (4.504626ms)
+✔ invalid settings fail before observation, including Qt timer overflow (13.166832ms)
+✔ unusable SDL UUID cannot alias another unknown window (4.062309ms)
+✔ two observers have independent unique identities; baseline windows are labelled (7.430007ms)
+✔ disconnect failures are explicit and retained callbacks cannot act after finish (6.927379ms)
+✔ default duration matches the 1800-second proof and remains configurable with early cleanup (6.46513ms)
+✔ geometry storm exhausts default bound explicitly; no dropped event can look successful (226.847536ms)
+✔ transport boundaries and sequence detect loss, duplication, reordering and interrupted export (5.723648ms)
+✔ callback exception ends capture without escaping into KWin and queued callbacks are inert (3.65911ms)
+✔ timer and shortcut setup exceptions fail closed and disconnect existing observations (3.648631ms)
+✔ marker invoked after activating Konsole refers only to Konsole, never the previous viewer (4.01143ms)
+✔ persisted ready plus observe acknowledgement precede launch gate; transition events are retained (11.043978ms)
+✔ lost ready callback (including native D-Bus error) times out without a launch gate (4.015689ms)
+✔ late ready acknowledgement after expiry cannot revive observation or launch permission (2.924978ms)
+✔ missing or malformed persistence acknowledgement fails without trusting another run (22.122145ms)
+✔ receiver disappearance during observation stops subscriptions and never retargets a new owner (11.85896ms)
+✔ receiver refusal of observe handshake prevents readiness even after ready was persisted (2.792405ms)
+✔ ready may be pending when early finish occurs; no later launch gate is opened (2.338429ms)
+✔ all observation subscriptions are disconnected before export; end needs final receipt acknowledgement (3.549773ms)
+✔ total export timeout independently stops a progressing drain and ignores its late callback (2.08754ms)
+✔ full 1024-event export fits default deadline even at almost the per-call acknowledgement limit (179.803714ms)
+✔ deadline and receiver settings are validated before making any call (9.004173ms)
+✔ actual observer envelopes are available for independent Python replay (5.100221ms)
+✔ exact getClient XID maps live PID/class to canonical UUID only (6.103091ms)
+✔ missing, deleted, wrong PID and wrong class are never linked (9.302097ms)
+✔ one outstanding call; a missing D-Bus callback cleans up (2.577441ms)
+✔ wrong receiver run and malformed reply stop without linkage (4.051826ms)
+✔ explicit finish is idempotent and late replies cannot restart observation (2.453397ms)
+✔ candidate overflow and inaccessible KWin object fail safely (4.742216ms)
+✔ existing resident: ordered inventory/add/change/remove snapshots, no shortcut or GUI action (17.337272ms)
+✔ synthetic: automatic readiness, precheck/mapping, fenced reply and cleanup precede success (13.543966ms)
+✔ synthetic: READY before added waits for a synthetic lifecycle event, not human input (7.155056ms)
+✔ synthetic fence rejects missing added evidence (4.877618ms)
+✔ synthetic fence rejects delayed_delivery added evidence (3.81606ms)
+✔ synthetic fence rejects delayed_handler added evidence (3.6402ms)
+✔ synthetic fence rejects reordered added evidence (4.514493ms)
+✔ synthetic fence rejects evicted added evidence (4.481339ms)
+✔ synthetic fence rejects wrong_sender added evidence (6.557603ms)
+✔ synthetic rejects changed owner provenance (9.164223ms)
+✔ synthetic rejects changed connection provenance (6.358077ms)
+✔ synthetic rejects changed stale_resolution provenance (3.756342ms)
+✔ synthetic rejects changed uid provenance (3.749293ms)
+✔ synthetic rejects changed source provenance (3.277714ms)
+✔ synthetic: duplicates cache the fence; conflict before commit fails, terminal remains stable (3.781926ms)
+✔ synthetic: stale/forged/cross-request challenge cannot complete mapping (3.471818ms)
+✔ synthetic: stale/forged/cross-request job_id cannot complete mapping (3.12657ms)
+✔ synthetic: stale/forged/cross-request request_id cannot complete mapping (6.350165ms)
+✔ synthetic: stale/forged/cross-request expiry cannot complete mapping (4.013792ms)
+✔ synthetic: lost callbacks, late load/unload/reap retain ownership and never renew deadlines (4.864762ms)
+✔ synthetic: unknown load outcome, cancellation, owner-specific late reconciliation (5.931866ms)
+✔ synthetic: fresh checks reject removed after mapping snapshot (3.735956ms)
+✔ synthetic: fresh checks reject marker after mapping snapshot (3.53948ms)
+✔ synthetic: fresh checks reject pid after mapping snapshot (4.417701ms)
+✔ synthetic: fresh checks reject app after mapping snapshot (3.896905ms)
+✔ synthetic: fresh checks reject instance after mapping snapshot (4.097137ms)
+✔ synthetic: fresh checks reject competitor after mapping snapshot (3.645299ms)
+✔ synthetic: fresh checks reject child_exit after mapping snapshot (4.259139ms)
+✔ synthetic: fresh checks reject post_property after mapping snapshot (3.558198ms)
+✔ synthetic: fresh checks reject worker_exit after mapping snapshot (3.501725ms)
+✔ native contract vectors: exact types, instance/class order, terminators and raw title (5.202608ms)
+✔ synthetic: readiness and mapping have distinct jobs/challenges; old ready callback is inert (3.648403ms)
+✔ synthetic: foreign callers cannot consume a challenge or cancel the owning job (6.0163ms)
+✔ synthetic: lost mapping callback expires; late proof only reports cached failure (2.888725ms)
+✔ synthetic: an added event cannot reclassify a prelaunch baseline UUID as new (3.440307ms)
+✔ synthetic exact-XID lookup rejects expected_uuid_at_other_xid (2.578892ms)
+✔ synthetic exact-XID lookup rejects reused_xid_before_snapshot (2.224512ms)
+✔ synthetic exact-XID lookup rejects reused_xid_after_snapshot (3.181337ms)
+✔ synthetic rejects previous publication at precheck; numeric XID reuse=false (8.953093ms)
+✔ synthetic rejects previous publication at precheck; numeric XID reuse=true (7.78444ms)
+✔ synthetic rejects previous publication at postcheck; numeric XID reuse=false (6.292515ms)
+✔ synthetic rejects previous publication at postcheck; numeric XID reuse=true (7.905339ms)
+✔ synthetic: successive launches accept their own distinct markers, nonces and exact XIDs (3.846695ms)
+✔ synthetic worker identity: a probe acknowledgement cannot discharge the precheck worker (1.907884ms)
+✔ synthetic worker identity: stale/missing tokens keep postcheck owned and registration blocked (3.559472ms)
+✔ synthetic worker identity: late reaping for an old request cannot clean up a newer same-owner worker (3.452102ms)
+✔ initial inventory is observational only, including application hints (8.493949ms)
+✔ distinct windows, updates and removal retain correct UUID (6.205231ms)
+✔ explicit refresh republishes existing windows without duplicate subscriptions (1.916671ms)
+✔ refresh sends a complete inventory with a later resident revision (3.786064ms)
+✔ stale immediate Wayland frame is verification pending, not failure (6.135421ms)
+✔ already-converged frame also requires exact UUID broker verification (2.189773ms)
+✔ missing desktop is an immediate real error (2.295642ms)
+✔ deleted window is an immediate real error (2.307732ms)
+✔ desktop-only preserves frame at application time and captured focus target (5.825056ms)
+✔ all independent preservation flags preserve exactly the omitted fields (26.159037ms)
+✔ last available desktop accepted; absent desktops rejected without mutation (8.29091ms)
+✔ expired callbacks and deleted captured windows do not move another window (5.740466ms)
+✔ tiled/fullscreen/maximized geometry changes rejected without changing modes (6.173243ms)
+✔ unclaimed request causes no mutation or completion (1.732165ms)
+✔ desktop XID resolves to correct UUID without selecting same-PID normal auth window (5.384478ms)
+✔ only broker-approved same UUID is placed (1.622725ms)
+✔ disappeared viewer is not offered for registration (6.020949ms)
+ℹ tests 163
+ℹ suites 0
+ℹ pass 163
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 922.081634
+ ✨ javascript tests done; result: (success!)                [ ✅ ]
+ ✨ Running ./tools/joetoo-kwind-install-poc --check
+    OpenRC user service: /home/joe/.config/rc/init.d/joetoo-kwind
+    Daemon executable:  /home/joe/.local/libexec/joetoo-kwind
+    Registry module:     /home/joe/.local/libexec/joetoo_kwin_registry.py
+    VNC identity module: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+    VNC target module:   /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+    VNC launch module:   /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+    SDL RDP module:      /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+    RDP target module:   /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+    Managed close:       /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+    Resident JavaScript: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+    Bash CLI:           /home/joe/.local/bin/joetoo-kwin
+    OpenRC user override: /home/joe/.config/rc/conf.d/joetoo-kwind
+    OpenRC user config:  /home/joe/.config/rc/rc.conf
+    Current: /home/joe/.config/rc/init.d/joetoo-kwind
+    Current: /home/joe/.local/libexec/joetoo-kwind
+    Current: /home/joe/.local/libexec/joetoo_kwin_registry.py
+    Current: /home/joe/.config/rc/conf.d/joetoo-kwind
+    Current: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+    Current: /home/joe/.local/bin/joetoo-kwin
+    Current: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+    OpenRC allowlist correct: /home/joe/.config/rc/rc.conf
+ ✨ Checks done; result: (success!)                          [ ✅ ]
+---[ restart_joetoo-kwind-20261118 (available methods) ]------------
+ ✨ Running "dbus introspection" with: qdbus6 $bus $path
+    method QString org.freedesktop.DBus.Introspectable.Introspect()
+    method QString org.joetoo.KWinBridge.BeginCorrelation(QString expected_class, QString title_token)
+    method QString org.joetoo.KWinBridge.BeginSdlRegistration(QString payload)
+    method QString org.joetoo.KWinBridge.BindSdlRegistration(QString request_id, int pid, QDBusUnixFileDescriptor log_fd)
+    method void org.joetoo.KWinBridge.CancelManagedViewerLaunch(QString request_id)
+    method QString org.joetoo.KWinBridge.CancelSdlPlacement(QString request_id)
+    method QString org.joetoo.KWinBridge.CancelSdlRegistration(QString request_id)
+    method QString org.joetoo.KWinBridge.CommitManagedClose(QString request_id)
+    method void org.joetoo.KWinBridge.Complete(QString request_id, QString result, QString detail)
+    method void org.joetoo.KWinBridge.CompleteInitialLayout(QString request_id, QString payload)
+    method QString org.joetoo.KWinBridge.CompleteManagedViewer(QString payload)
+    method QString org.joetoo.KWinBridge.GetManaged(QString identifier)
+    method QString org.joetoo.KWinBridge.InitialLayoutStatus(QString request_id)
+    method QString org.joetoo.KWinBridge.ListManaged()
+    method QString org.joetoo.KWinBridge.ListObserved()
+    method QString org.joetoo.KWinBridge.ManagedCloseStatus(QString request_id)
+    method void org.joetoo.KWinBridge.ObserveWindow(QString payload)
+    method QString org.joetoo.KWinBridge.PollCorrelation(QString request_id)
+    method QString org.joetoo.KWinBridge.PollManagedLaunch(QString request_id)
+    method QString org.joetoo.KWinBridge.PollSdlPlacement(QString request_id)
+    method QString org.joetoo.KWinBridge.PollSdlRegistration(QString request_id)
+    method QString org.joetoo.KWinBridge.PrepareManagedClose(QString payload)
+    method QString org.joetoo.KWinBridge.RegistryStatus()
+    method void org.joetoo.KWinBridge.SetCorrelationPid(QString request_id, int pid)
+    method void org.joetoo.KWinBridge.SetManagedLaunchPid(QString request_id, int pid)
+    method QString org.joetoo.KWinBridge.Status(QString request_id)
+    method QString org.joetoo.KWinBridge.Submit(int desktop, int x, int y, int width, int height)
+    method QString org.joetoo.KWinBridge.SubmitInitialLayout(QString payload)
+    method QString org.joetoo.KWinBridge.SubmitLaunch(QString app_class, int desktop, int x, int y, int width, int height)
+    method QString org.joetoo.KWinBridge.SubmitManagedLaunch(QString app_class, int desktop, int slot, int x, int y, int width, int height)
+    method QString org.joetoo.KWinBridge.SubmitManagedViewerLaunch(QString payload)
+    method QString org.joetoo.KWinBridge.SubmitMove(int desktop, int x, int y, int width, int height, bool preserve_desktop, bool preserve_position, bool preserve_size)
+    method QString org.joetoo.KWinBridge.SubmitSdlPlacement(QString payload)
+    method void org.joetoo.KWinBridge.SyncInventory(QString payload)
+    method QString org.joetoo.KWinBridge.Take()
+    method QString org.joetoo.KWinBridge.TakeInitialLayout(QString source)
+    method QString org.joetoo.KWinBridge.TakeLaunch(QString resource_class, QString desktop_file)
+    method QString org.joetoo.KWinBridge.TakeManagedViewer(QString source)
+    method QString org.joetoo.KWinBridge.TakeMove(QString source, QString window_uuid)
+    method QString org.joetoo.KWinBridge.TakeSdlPlacement(QString source)
+ ✨ dbus introspection done; result: (success!)              [ ✅ ]
+ ✨ Returning to [/home/joe/joetoo-ai/workspace/projects/joetoo-kwin]                                                            [ ✅ ]
+
+ ✨ Make these abbreviation assignments to facilitate use of these methods
+bus="org.joetoo.KWinBridge";  path="/org/joetoo/KWinBridge"
+kbus="org.kde.KWin";  kpath="/org/kde/KWin"
+
+ ✨ Use these to list all interface/methods for each service
+qdbus6 $bus $path
+qdbus6 $kbus $kpath
+
+ ✨ Use these for more focused queries in the joetoo KWinBridge service
+qdbus6 $bus $path $bus.ListManaged
+qdbus6 $bus $path $bus.RegistryStatus
+
+qdbus6 $bus $path $bus.ListManaged | jq .
+qdbus6 $bus $path $bus.RegistryStatus | jq .
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ 
