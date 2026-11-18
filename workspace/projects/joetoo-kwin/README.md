@@ -6,23 +6,33 @@ in `joetoo-ai`, not yet the packaged version 1 application. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for accepted and proposed product contracts,
 including managed-operation requirements.
 
-## Current status — November 14, 2026
+## Current status — November 18, 2026
 
 **Step 1.5 is complete and archived.** Managed configured RDP and its five
-increments were accepted and merged through [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29)
-at `3e9c4bf311bc65b32d332a00d3b50163a9043303`. Step 1.5d was accepted and
-merged through [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30)
-at `f72407278fa0a9c923079f3b38ce834440d2fef2`. The reviewed transition
-baseline is `main` at `231e3c3c7e77839ef9220cf1c128f7a1572726d0`.
+increments were accepted/merged in [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29);
+single-window launch and inventory in [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30);
+and archive/init in [PR #31](https://github.com/JosephBrendler/joetoo-ai/pull/31)
+(`cdcdc9e`).
 
-**Step 1.6 is an implementation candidate, awaiting review and native acceptance.**
-The archive/init transition merged in [PR #31](https://github.com/JosephBrendler/joetoo-ai/pull/31)
-at `cdcdc9e`. The candidate adds confirmed graceful `-d MANAGED_ID` and
-broker-owned fixed-set `-x`, retaining registrations, reservations and placement
-history. It requires the exact-version [native close adapter](native/managed-close/README.md).
-It adds no retirement, restoration, generic process killing or broker recovery.
-No Step 1.6 native success, installation or publication is claimed.
-See the [active HANDOFF](task_step1.6/HANDOFF.md) and [task index](task_step1.6/README.md).
+**Step 1.6 is implemented on the published task branch `c57ab8c` and is
+ready for maintainer acceptance review, not yet formally accepted/merged.**
+`-d MANAGED_ID` retains the registration/slot after verified graceful close;
+confirmed fixed-set `-x` **progressively retires verified absences and verified
+closes**, without force killing or restart of the broker. Core behavior passed
+both q552u01 Wayland/XWayland (**9/9 records retired**) and slim2 native X11
+(**16/16 records retired**) with immediate empty inventory, queryable retained
+history and real Konsole refusal/timeout observations. The native X11 helper
+uses a KWin 6.7.6-specific installed effect. See the
+[active HANDOFF](task_step1.6/HANDOFF.md),
+[task index](task_step1.6/README.md), and
+[2026-11-18 slim2 evidence](task_step1.6/step1.6-slim2-native-x11-evidence-2026-11-18.md).
+
+**Disposition:** No demonstrated code blocker. Strict live X11
+unsupported-`WM_DELETE_WINDOW`/stale-XID race proof and some independent
+client-worker/frontend-loss checks remain unverified; headless safety tests
+exist. The maintainer decides whether to accept with those limitations or
+run a narrow live fixture. Publication/merge and q552u01 fast-forward remain
+separate maintainer workflow steps. No additional development stage is implied.
 
 | Completed capability | Accepted outcome / evidence |
 | --- | --- |

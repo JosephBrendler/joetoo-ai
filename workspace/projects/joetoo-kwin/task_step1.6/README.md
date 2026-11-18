@@ -1,15 +1,23 @@
 # Step 1.6 — Task index
 
-**Status (2026-11-16, late evening):** Step 1.5 and PR #31's transition
-are accepted/merged. The **uncommitted Step 1.6 progressive `-x` correction**
-has passed Codex headless checks and a maintainer-native q552u01 Wayland/
-XWayland clean sweep: 8 live windows closed, 1 missing record retired,
-9/9 records retired, empty `-l` **without restart**. **Step 1.6 is not yet
-finally accepted** pending only the remaining native safety/X11 checks and
-maintainer publication decision. No demonstrated current coding blocker.
+**Current result (2026-11-18):** Core Step 1.6 is **ready for maintainer
+acceptance review**: q552u01 Wayland/XWayland 9/9 clean sweep, slim2 X11 16/16
+mixed retirements, retained post-CLI result, native declined confirmation,
+Konsole refusal/timeouts, and clean 1,016 Python / 163 JavaScript regression.
+There is **no demonstrated coding blocker**. The live X11 unsupported
+`WM_DELETE_WINDOW`/stale-XID fence and some independent lifecycle tests have
+headless coverage but not full live-fixture proof; acceptance/risk disposition
+is reserved to the maintainer. Remote branch is `c57ab8c`; q552u01 still
+reports `8849e59` and no upstream tracking. See the
+[latest X11 evidence](step1.6-slim2-native-x11-evidence-2026-11-18.md) and
+[active HANDOFF](HANDOFF.md). Historical uncommitted-candidate descriptions
+below describe the earlier 2026-11-16 state.
 
 ## Current task and design
 
+- [slim2 native X11 acceptance and refusal evidence (2026-11-17–18)](step1.6-slim2-native-x11-evidence-2026-11-18.md)
+  — exact 16-target sweep, retained history, declined operations, live Konsole
+  refusal, test-environment findings and remaining coverage limitations.
 - [Corrected `-x` implementation review and native addendum](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md)
   — ten-file diff assessment, headless/maintainer regressions, exact nine-target
   native result, limitations and shortest next acceptance actions.
@@ -42,48 +50,40 @@ maintainer publication decision. No demonstrated current coding blocker.
 
 ## Latest maintainer-native result and corrected requirement
 
-**The refined `-x` clean-sweep requirement is implemented in the latest
-locally uncommitted candidate.** The confirmed `-x` transaction on `q552u01`
-returned `succeeded/verified`: **eight verified native closes** (seven
-Wayland clients, one XWayland TigerVNC viewer), **one authenticated
-already-missing retirement**, **nine `retired=true`**, zero exclusions, and
-both snapshot retention flags `false`. The immediate independent
-`./joetoo-kwin -l` output was:
+**Approved implementation semantics, demonstrated natively:**
+`-d MANAGED_ID` closes only the positively identified managed window and
+retains its registration/slot; confirmed `-x` progressively retires verified
+missing entries and verified closed entries from its fixed snapshot. `-D`
+remains version 2.
 
-```text
-No managed windows (no retained managed reservations).
-```
+On **q552u01** (Wayland/XWayland), the confirmed clean sweep successfully
+retired **9/9** records (8 closes, 1 missing), and `-l` became empty without
+broker restart. See the [progressive addendum](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md).
 
-No broker restart occurred after the sweep. The earlier run that left 12
-missing reservations is preserved in the [earlier native evidence](step1.6-native-wayland-evidence-2026-11-16.md);
-the correction and new behavior are documented in the
-[progressive-sweep addendum](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md).
-The user-owned OpenRC broker was updated/restarted **before** the new launch
-set; maintainer-native tests then ran **1,016 Python OK** and **163 JavaScript
-PASS**. The corrected source did not modify the C++ effect/XCB helper or
-RDP/VNC workers.
+On **slim2** (native KWin X11 6.7.6), the maintainer installed/loaded the
+correctly owned native effect, passed **1,016/1,016 Python** and **163/163
+JavaScript** tests after selecting an executable test TMPDIR, launched
+**15/15** configured windows, verified two retained selective `-d` closures,
+then confirmed a **16/16** progressive `-x` clean sweep (2 already missing,
+14 native X11 closes) with immediate empty `-l` and independently queryable
+full retained result. Later tests proved a freed slot takes a new managed ID,
+negative `-d`/`-x` confirmations leave the window untouched, and real Konsole
+quit dialogs produce `partial/not_closed_timeout`, not force killing.
 
-Lifecycle contract remains:
+**Decision:** no observed implementation blocker. A dedicated live compositor
+fixture for absent `WM_DELETE_WINDOW` and stale/reused XID race is not yet
+recorded even though the compiled helper and native broker have headless
+safety tests. Mid-transaction self-terminal loss and remote worker lifecycle
+are also not independently demonstrated. The maintainer must decide whether
+these evidence gaps need narrowly scoped live validation or may be recorded
+as accepted residual limits. See the [slim2 evidence](step1.6-slim2-native-x11-evidence-2026-11-18.md).
 
-- `-d ID`: verified graceful close of one, **retain** record/slot/history.
-- `-x`: confirm once, progressively retire authenticated absences and each
-  verified graceful close; independent failures leave minimal unresolved
-  records, while true native cleanup ambiguity blocks unsafe further
-  dispatch. Fully resolved sweep leaves `-l` empty without broker restart.
-- `-D ID`: close-and-retire one window, **version 2 only**.
-
-The code still awaits final maintainer acceptance/publication; Codex reported
-branch `task/joetoo-kwin-step1.6-managed-close`, local
-`HEAD f26027a0add26442937c32b92fdc1ef9b54f1de9`, **10 modified tracked
-files (uncommitted/unstaged)**. `git fetch` could not update its read-only
-`.git/FETCH_HEAD`, so no refreshed remote synchronization is claimed.
-
-**Shortest remaining work:** targeted maintainer-native tests for (1) declined
-`-x`, status lookup, freed-slot/ID behavior, (2) refusal/known-safe partial
-and self-terminal/CLI loss plus worker cleanup as feasible, and (3) separate
-native `kwin_x11` helper/lifetime-fence cases on `slim2`. There is currently
-**no demonstrated code defect requiring another Codex implementation round**.
-See [HANDOFF](HANDOFF.md) for the next actor and reserved publication decision.
+**Source/publication state:** Branch `task/joetoo-kwin-step1.6-managed-close`
+is published through `c57ab8c`. q552u01 at `8849e59` needs a normal clean
+fast-forward and optional upstream setup; no code conflict is demonstrated.
+The cloud-authored documentation draft is not committed/published; normal
+diff review and maintainer publication approval remain. No additional Codex
+implementation round is indicated by this evidence.
 
 ## Corrected-candidate validation (Codex report and q552u01 maintainer run)
 
@@ -94,11 +94,14 @@ See [HANDOFF](HANDOFF.md) for the next actor and reserved publication decision.
 | Codex final JavaScript | 163 PASS | No skip/failure |
 | Codex syntax, ShellCheck, AST, whitespace | PASS | Candidate source-only checks |
 | Maintainer `restart_joetoo-kwind t` | **1,016 Python OK, 163 JS PASS**, installer check PASS | User broker updated/restarted and tests run natively on q552u01 |
-| Maintainer confirmed `-x` | 8 native closes + 1 already missing; **9 retired; empty `-l`** | Direct positive-path acceptance evidence |
+| Maintainer confirmed `-x` | 8 native closes + 1 already missing; **9 retired; empty `-l`** | Direct q552u01 positive-path evidence |
+| Maintainer slim2 X11 regression/native `-x` | **1,016 Python OK; 163 JS PASS; 2 missing + 14 native X11 closes; 16/16 retired; status retained after CLI exit** | Native X11 positive path, [detailed evidence](step1.6-slim2-native-x11-evidence-2026-11-18.md) |
 
 The prior Codex intermediate help-test failure was corrected before the final
-fresh-tree test. These tests do not themselves demonstrate native refusal,
+fresh-tree test. These original headless tests did not themselves demonstrate native refusal,
 XID-reuse/lifetime fencing on `kwin_x11`, or remote-worker cleanup.
+The later slim2 record now documents **actual native Konsole refusal**,
+while live XID-reuse and remote-worker lifecycle remain unverified.
 
 ## Prior candidate headless validation (2026-11-16; before native results)
 
@@ -135,8 +138,10 @@ wire tests execute actual libxcb with an isolated platform-credential double.
 Unconfined tests use real credential transport automatically. The later
 maintainer-native effect loading and **some actual window disappearance**
 are in the [evidence](step1.6-native-wayland-evidence-2026-11-16.md);
-application refusal, native X11 ordering and worker/SSH/tmux cleanup remain
-untested or unverified, not headless claims.
+those native limitations applied **at the time of that earlier record**.
+See the subsequent [slim2 X11 evidence](step1.6-slim2-native-x11-evidence-2026-11-18.md)
+for later refusal and live X11 results; native XID-reuse and worker cleanup
+are still unverified.
 
 The first full run reported two stale configuration-presentation assertions
 (981 PASS / 2 FAIL); their expected debug-variable inventory was corrected.
