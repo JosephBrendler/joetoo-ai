@@ -133,6 +133,8 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.rdp_module = self.home / ".local/libexec/joetoo_kwin_rdp_launch.py"
         self.rdp_target = self.home / ".local/libexec/joetoo_kwin_rdp_target.py"
         self.managed_close = self.home / ".local/libexec/joetoo_kwin_managed_close.py"
+        self.persistence = self.home / ".local/libexec/joetoo_kwin_persistence.py"
+        self.recovery = self.home / ".local/libexec/joetoo_kwin_recovery.py"
         self.vnc_modules = [self.home / '.local/libexec' / name for name in
                             ('joetoo_kwin_vnc_identity.py', 'joetoo_kwin_vnc_target.py',
                              'joetoo_kwin_vnc_launch.py')]
@@ -147,7 +149,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertEqual(self.daemon.read_bytes(), (ROOT / 'libexec/joetoo-kwind').read_bytes())
         self.assertEqual(self.override.read_bytes(), (ROOT / 'poc-user-conf.d/joetoo-kwind').read_bytes())
         self.assertEqual(self.conf.read_text(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC DISPLAY XAUTHORITY"\n')
-        self.assertIn('Installed twelve user-owned', p.stdout)
+        self.assertIn('Installed fourteen user-owned', p.stdout)
         self.assertEqual(self.rdp_module.read_bytes(), (ROOT / 'libexec' / self.rdp_module.name).read_bytes())
         self.assertEqual(self.rdp_module.stat().st_mode & 0o777, 0o644)
         self.assertEqual(self.rdp_module.stat().st_uid, os.geteuid())
@@ -240,6 +242,8 @@ class InstallerIntegrationTests(unittest.TestCase):
             'rdp_launch': (self.rdp_module, 0o644),
             'rdp_target': (self.rdp_target, 0o644),
             'managed_close': (self.managed_close, 0o644),
+            'persistence': (self.persistence, 0o644),
+            'recovery': (self.recovery, 0o644),
             'registry': (self.daemon.with_name('joetoo_kwin_registry.py'), 0o644),
             'resident': (self.home / '.local/share/joetoo-kwin/joetoo-kwin-resident.js', 0o644),
             'cli': (self.home / '.local/bin/joetoo-kwin', 0o755),
@@ -324,6 +328,8 @@ class InstallerIntegrationTests(unittest.TestCase):
             'rdp_launch': self.rdp_module,
             'rdp_target': self.rdp_target,
             'managed_close': self.managed_close,
+            'persistence': self.persistence,
+            'recovery': self.recovery,
             'registry': self.daemon.with_name('joetoo_kwin_registry.py'),
             'resident': self.home / '.local/share/joetoo-kwin/joetoo-kwin-resident.js',
             'cli': self.home / '.local/bin/joetoo-kwin',
@@ -617,7 +623,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         result = self.run_tool(INSTALL_TOOL, '--preview-legacy-backups')
         self.assertEqual(result.returncode, 0, result.stderr)
         records = [json.loads(line) for line in result.stdout.splitlines()]
-        self.assertEqual(len(records), 12)
+        self.assertEqual(len(records), 14)
         daemon = next(r for r in records if r['component'] == 'daemon')
         self.assertEqual(sorted(v['copies'] for v in daemon['versions']), [1, 2])
         self.assertEqual({p for v in daemon['versions'] for p in v['paths']}, set(map(str, files)))
@@ -824,7 +830,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         for _ in range(2):
             result = self.run_tool(INSTALL_TOOL, '--update')
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn('Installed twelve user-owned', result.stdout)
+            self.assertIn('Installed fourteen user-owned', result.stdout)
             self.assertEqual(self.rdp_module.read_bytes(), (ROOT / 'libexec' / self.rdp_module.name).read_bytes())
             self.assertEqual(self.rdp_module.stat().st_mode & 0o7777, 0o644)
             self.assertEqual(self.rdp_module.stat().st_uid, os.geteuid())

@@ -35,7 +35,7 @@ from gi.repository import GLib
 _libexec_dir = os.path.dirname(os.path.realpath(__file__))
 if _libexec_dir not in sys.path:
     sys.path.insert(0, _libexec_dir)
-from joetoo_kwin_registry import RegistryError, WindowRegistry
+from joetoo_kwin_registry import RegistryError, WindowRegistry, historical_observation
 from joetoo_kwin_managed_close import CloseRuntime
 # Lazy factories preserve non-VNC startup when optional deployment files have
 # not yet been installed. VNC preflight reports their absence explicitly.
@@ -151,6 +151,7 @@ class Broker(dbus.service.Object):
         # Step 1.4b: ownership and correlation kept entirely broker-private.
         # None of these methods is exposed as a D-Bus registration API.
         self.registry = WindowRegistry()
+        self._recovery = None  # Activated only by production main(), not model construction.
         self._managed_correlation = None
         # Private SDL prototype; deliberately has no D-Bus entry points.
         self._rdp_registration = None
@@ -161,6 +162,11 @@ class Broker(dbus.service.Object):
         self._managed_close = CloseRuntime(self, GLib, dbus)
 
     def _close_guard(self):
+        if self._recovery is not None:
+            try:
+                self._recovery.guard()
+            except (ValueError, OSError) as exc:
+                raise dbus.DBusException("Recovery unresolved", name=IFACE + ".Busy") from exc
         if self._managed_close.busy():
             raise dbus.DBusException("Managed close is active or unresolved", name=IFACE + ".Busy")
 
@@ -168,6 +174,10 @@ class Broker(dbus.service.Object):
                          sender_keyword="sender", async_callbacks=("reply", "error"))
     def PrepareManagedClose(self, payload, sender=None, reply=None, error=None):
         """Authenticate the operator and preview a fixed native-verified set."""
+        try:
+            self._close_guard()
+        except dbus.DBusException as exc:
+            return error(exc)
         self._managed_close.prepare(payload, sender, reply, error)
 
     @dbus.service.method(IFACE, in_signature="s", out_signature="s",
@@ -268,12 +278,18 @@ class Broker(dbus.service.Object):
             def invalid_constant(value):
                 raise ValueError("nonfinite number")
             data = json.loads(payload, object_pairs_hook=unique, parse_constant=invalid_constant)
-            if (not isinstance(data, dict) or set(data) not in ({"protocol", "desktop", "slot", "bounds"},
+            if (not isinstance(data, dict) or set(data) - {"intent"} not in ({"protocol", "desktop", "slot", "bounds"},
                                                        {"protocol", "desktop", "slot", "bounds", "profile"})
                     or type(data["protocol"]) is not int or data["protocol"] != 1
                     or any(type(data[k]) is not int or not 1 <= data[k] <= 256 for k in ("desktop", "slot"))
                     or not isinstance(data["bounds"], dict)):
                 raise ValueError("schema")
+            metadata = None
+            if "intent" in data:
+                from joetoo_kwin_persistence import intent
+                metadata = intent(data["intent"])
+                if (metadata["desktop"], metadata["slot"], metadata["program"]) != (data["desktop"], data["slot"], "sdl-freerdp"):
+                    raise ValueError("intent mismatch")
             profile = data.get("profile")
             if "profile" in data and profile is None:
                 raise ValueError("null profile")
@@ -336,6 +352,8 @@ class Broker(dbus.service.Object):
                 executable = executable_identity()
                 spec = self._begin_rdp_registration(data["desktop"], data["slot"], limits, profile=profile)
                 c = self._rdp_registration
+                if metadata is not None:
+                    self.registry.requests[c["id"]].recipe["restore_intent"] = metadata
                 c.update(owner_name=sender, owner_identity=owner, owner_bus=bus, owner_match=job["match"],
                          boot_floor=job["floor"], executable=executable, deadline=job["deadline"])
                 job["match"] = None
@@ -1697,6 +1715,37 @@ class Broker(dbus.service.Object):
         return json.dumps({"placement_request_id": placement_id,
                            "registration_request_id": registration_id}, sort_keys=True)
 
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s")
+    def SubmitManagedLaunchIntent(self, payload):
+        """Original managed launch plus validated non-authoritative restore intent."""
+        from joetoo_kwin_persistence import intent
+        try:
+            if len(payload) > 16384:
+                raise ValueError("intent too large")
+            data = json.loads(payload)
+            if set(data) != {"intent", "frame"}:
+                raise ValueError("schema")
+            metadata = intent(data["intent"])
+            frame = data["frame"]
+            if not isinstance(frame, list) or len(frame) != 4 or any(type(v) is not int for v in frame):
+                raise ValueError("frame")
+            result = self.SubmitManagedLaunch(metadata["program"], metadata["desktop"], metadata["slot"], *frame)
+            registration = json.loads(result)["registration_request_id"]
+            self.registry.requests[registration].recipe["restore_intent"] = metadata
+            return result
+        except (ValueError, KeyError, TypeError):
+            raise dbus.DBusException("Invalid restore launch intent (redacted)", name=IFACE + ".BadArguments")
+
+    @dbus.service.method(IFACE, in_signature="", out_signature="s", sender_keyword="sender")
+    def ExportManagedSnapshot(self, sender=None):
+        """Authenticated complete arrangement; no filesystem or window action."""
+        try:
+            if self._recovery is None:
+                raise ValueError("recovery unavailable")
+            return self._recovery.export(sender)
+        except Exception:
+            raise dbus.DBusException("Snapshot refused: incomplete, unrestorable or unauthenticated arrangement", name=IFACE + ".SnapshotRejected")
+
     @dbus.service.method(IFACE, in_signature="si", out_signature="")
     def SetManagedLaunchPid(self, request_id, pid):
         """Supply the freshly spawned child's PID; never choose a KWin UUID."""
@@ -1910,6 +1959,10 @@ class Broker(dbus.service.Object):
             if len(payload) > 8192:
                 raise ValueError("Viewer request too large")
             data = json.loads(payload)
+            from joetoo_kwin_persistence import intent
+            metadata = intent(data.pop("intent")) if "intent" in data else None
+            if metadata and (metadata["program"], metadata["desktop"], metadata["slot"]) != ("vncviewer", data["desktop"], data["slot"]):
+                raise ValueError("intent mismatch")
             bounds = viewer_settings(data)
             if not self.viewer_protocol or not self.observation_synced:
                 raise ValueError("Resident cannot resolve X11/XWayland viewer identity")
@@ -1924,7 +1977,7 @@ class Broker(dbus.service.Object):
             # Connect and select the root BEFORE the viewer is allowed to start.
             observer = DesktopObserver(bounds)
             registration = self._begin_managed_launch(expected_class="vncviewer",
-                recipe={"desktop": desktop, "slot": slot, "program": "vncviewer", "mode": "ssh", "target": ""})
+                recipe={"desktop": desktop, "slot": slot, "program": "vncviewer", "mode": "ssh", "target": "", **({"restore_intent": metadata} if metadata else {})})
             c = self._managed_correlation
             c.update(viewer=True, observer=observer, bounds=bounds, role_xids=set(),
                      destroyed_xids=set(), claim=None, selected=None,
@@ -2408,8 +2461,13 @@ class Broker(dbus.service.Object):
             raise ValueError("invalid observation source/revision")
         return source, revision
 
-    @dbus.service.method(IFACE, in_signature="s", out_signature="")
-    def ObserveWindow(self, payload):
+    @dbus.service.method(IFACE, in_signature="s", out_signature="", sender_keyword="sender")
+    def ObserveWindow(self, payload, sender=None):
+        if self._recovery is not None:
+            try:
+                self._recovery.authenticate(sender)
+            except Exception:
+                return  # Untrusted observations never alter recovered authority.
         # Preserve the existing single-string method and payload-size bound.
         if len(payload) > 4096:
             raise dbus.DBusException("Observation too large", name=IFACE + ".BadArguments")
@@ -2427,6 +2485,8 @@ class Broker(dbus.service.Object):
         identifier = details["uuid"]
         if source_revision is not None:
             source, revision = source_revision
+            if self._recovery is not None and not self._recovery.event(source, revision):
+                return
             self._managed_close.observation(source, revision)
             # A newly loaded resident must establish itself with a complete
             # inventory before we accept its incremental events. Conversely,
@@ -2439,6 +2499,8 @@ class Broker(dbus.service.Object):
                     self._rdp_finish(c, "failed", "RDP observation source/revision gap")
                 return
             self.observation_revision = revision
+        elif self._recovery is not None:
+            return  # Authenticated production inventory is always sequenced.
         elif self.observation_synced:
             # Legacy, unsequenced calls cannot supersede synchronized state.
             return
@@ -2496,8 +2558,13 @@ class Broker(dbus.service.Object):
     # A whole inventory is one D-Bus method call and one broker replacement.
     # Per-window "existing" updates are not an atomic inventory boundary:
     # this snapshot also removes any stale UUIDs left by a missed removal.
-    @dbus.service.method(IFACE, in_signature="s", out_signature="")
-    def SyncInventory(self, payload):
+    @dbus.service.method(IFACE, in_signature="s", out_signature="", sender_keyword="sender")
+    def SyncInventory(self, payload, sender=None):
+        if self._recovery is not None:
+            try:
+                self._recovery.authenticate(sender)
+            except Exception:
+                return
         if len(payload) > 262144:
             raise dbus.DBusException("Inventory too large", name=IFACE + ".BadArguments")
         try:
@@ -2525,6 +2592,8 @@ class Broker(dbus.service.Object):
             raise dbus.DBusException("Malformed window inventory",
                                      name=IFACE + ".BadArguments") from exc
 
+        if self._recovery is not None and not self._recovery.candidates:
+            self._recovery.candidates = deepcopy(self.registry.managed_windows)
         self._managed_close.observation(source, revision)
         if source == self.observation_source and revision <= self.observation_revision:
             c = self._rdp_registration
@@ -2573,6 +2642,8 @@ class Broker(dbus.service.Object):
         self._advance_placement()
         self._rdp_observation()
         self._rdp_recheck_x11()
+        if self._recovery is not None:
+            self._recovery.inventory(sender)
 
     # Read-only diagnostic query. Output is JSON, not a public management
     # registry: class, caption and PID are observational hints only.
@@ -2609,6 +2680,8 @@ class Broker(dbus.service.Object):
     @dbus.service.method(IFACE, in_signature="", out_signature="s")
     def ListManaged(self):
         """List only positively registered windows in managed-ID order."""
+        if self._recovery is not None and self._recovery.error == "checkpoint_invalid":
+            raise dbus.DBusException("Managed checkpoint invalid; inventory unresolved", name=IFACE + ".Busy")
         records = sorted(self.registry.managed_windows.values(),
                          key=lambda item: int(item.managed_id[4:]))
         return json.dumps({"count": len(records),
@@ -2630,18 +2703,10 @@ class Broker(dbus.service.Object):
         detail = self._managed_summary(record)
         # Observation is last-known if presence is missing or uncertain.
         # A KWin observation may contain extra fields. Do not forward them.
-        observed = record.observation
-        geometry = observed["geometry"]
-        detail["observation"] = {
-            "pid": observed["pid"],
-            "resource_class": observed["resource_class"],
-            "desktop_file": observed["desktop_file"],
-            "caption": observed["caption"][:256],
-            "desktops": list(observed["desktops"]),
-            "on_all_desktops": observed["on_all_desktops"],
-            "geometry": {key: geometry[key]
-                         for key in ("x", "y", "width", "height")},
-        }
+        observed = historical_observation(record.observation)
+        detail["observation"] = {key: observed[key] for key in
+            ("pid", "resource_class", "desktop_file", "caption", "desktops", "on_all_desktops", "geometry")
+            if key in observed}  # Older identity-only checkpoints do not invent optional facts.
         return json.dumps({"state": "FOUND", "window": detail}, sort_keys=True)
 
     @dbus.service.method(IFACE, in_signature="", out_signature="s")
@@ -2662,6 +2727,8 @@ class Broker(dbus.service.Object):
                                       if self.request is not None else {"id": None, "state": "IDLE"}),
             "managed_close_active": self._managed_close.busy(),
             "managed_close_protocol": 1,
+            "recovery_snapshot_protocol": 1,
+            "recovery": self._recovery.state if self._recovery is not None else "inactive",
             "viewer_protocol": self.viewer_protocol,
             "viewer_cleanup_uncertain": bool(self._managed_correlation and self._managed_correlation.get("observer_cleanup_uncertain")),
             "initial_layout_protocol": self.initial_layout_protocol,
@@ -2834,6 +2901,8 @@ def main():
         # Keep this object reachable throughout loop.run(): otherwise a
         # garbage-collected object could no longer serve the six methods.
         broker = Broker(name)  # noqa: F841 - hold D-Bus object for lifetime
+        from joetoo_kwin_recovery import Recovery
+        broker._recovery = Recovery(broker, bus, dbus.Interface, glib=GLib)
         resident = ResidentCoordinator(bus, broker)
         loop = GLib.MainLoop()
         resident.start()
@@ -2841,6 +2910,7 @@ def main():
         def graceful_shutdown():
             # Stop this broker's event loop only. Do not terminate KWin,
             # the resident script, or Konsole/SSH processes owned by the user.
+            broker._recovery.flush()
             loop.quit()
             return GLib.SOURCE_REMOVE
 
@@ -2855,7 +2925,7 @@ def main():
         # until graceful_shutdown() asks the loop to quit.
         loop.run()
         return 0
-    except (RuntimeError, dbus.DBusException) as exc:
+    except (RuntimeError, ValueError, OSError, dbus.DBusException) as exc:
         print(f"joetoo-kwind: {exc}", file=sys.stderr, flush=True)
         return 1
 

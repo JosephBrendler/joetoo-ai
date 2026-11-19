@@ -177,6 +177,9 @@ class Supervisor:
             self.source=initial['observation']['source']
             spec={key:self.job[key] for key in ('desktop','slot','x','y','width','height')}
             spec.update(self.bounds)
+            if 'intent' in self.job:
+                from joetoo_kwin_persistence import intent
+                spec['intent'] = intent(self.job['intent'])
             ids=json.loads(self.call('SubmitManagedViewerLaunch',json.dumps(spec)))
             self.registration=ids['registration_request_id'];self.placement=ids['placement_request_id']
             write_status(self.folder,dict(state='pending',detail='Starting dedicated noninteractive SSH tunnel'))

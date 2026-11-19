@@ -64,3 +64,19 @@ accepted `-d`, `-x`, registry identity, or remote-launch machinery.
 **Following Step 1.7:** Step 1.9 version 1 packaging remains separate and
 maintainer-led. [Version 2 Considerations](../ARCHITECTURE.md#12-version-2-considerations)
 are explicitly deferred and not acceptance criteria here.
+
+
+## Latest result — local agent (2026-11-19)
+
+The existing uncommitted Step 1.7 candidate on
+`task/joetoo-kwin-step1.7-recovery-snapshot` (`f18fea2`) now includes the
+maintainer-authorized history, historical-observation, normalized snapshot and
+user-manual refinements. See [current results and narrow additional native
+checks](README.md#refinement-candidate--2026-11-19). Earlier positive Wayland
+results are maintainer-reported and are not relabelled as agent-run validation.
+Maintainer-owned planning/authorization text above has not been rewritten.
+
+**Next actor: maintainer**, reviewing the complete uncommitted diff and exact
+headless evidence, with separate authority for publication and any remaining
+native checks. No installation, service action, publication or milestone
+acceptance is claimed by the agent.

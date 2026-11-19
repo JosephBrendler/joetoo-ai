@@ -53,7 +53,7 @@ launch_resource() {
 ''')
         self.env['BROKER_STATE'] = json.dumps({'observation': {'synchronized': True},
             'presence_counts': {'uncertain': 0}, 'request_counts': {'pending': 0, 'running': 0},
-            'placement_transaction': {'state': 'IDLE'}, 'initial_layout_protocol': 1, 'initial_layout_active': False})
+            'placement_transaction': {'state': 'IDLE'}, 'recovery_snapshot_protocol': 1, 'initial_layout_protocol': 1, 'initial_layout_active': False})
         self.env['MANAGED'] = '{"windows":[]}'
         self.write_config(['1|konsole|local|btop', '2|konsole|local|btop'])
         self.client.write_text(self.client.read_text().replace('#-----[ main script ]', r'''

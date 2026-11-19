@@ -503,7 +503,7 @@ def owned_logon_failure(log, identity, byte_limit, pid, minimum_size=0):
 def launch_registration(bus, interface, unix_fd, adapter, host, port, username, desktop, slot,
            bounds, call_timeout=3., emit=print, spawn=subprocess.Popen,
            sleep=time.sleep, clock=time.monotonic, cancelled=lambda: False, profile=None, on_registered=None,
-           argv_builder=None, connection_factory=None, on_cleanup=None, registered_cancelled=None, on_diagnostic=None):
+           argv_builder=None, connection_factory=None, on_cleanup=None, registered_cancelled=None, on_diagnostic=None, restore_intent=None):
     """Injectable orchestration; real broker enforces all identity/ownership rules.
 
     Registration is reported promptly, then supervision continues until child
@@ -563,6 +563,9 @@ def launch_registration(bus, interface, unix_fd, adapter, host, port, username, 
         payload = dict(protocol=1, desktop=desktop, slot=slot, bounds=bounds)
         if profile is not None:
             payload['profile'] = profile
+        if restore_intent is not None:
+            from joetoo_kwin_persistence import intent
+            payload["intent"] = intent(restore_intent)
         result = api.call('BeginSdlRegistration', json.dumps(payload))
         # Retain a valid ID even if another Begin field is invalid, for cleanup.
         active = result.get('request_id')
@@ -875,13 +878,18 @@ def configured_job(data):
     from joetoo_kwin_rdp_target import target, settings as client_settings
     from joetoo_kwin_vnc_target import settings as mechanical_settings
     keys = {'target', 'settings', 'bounds', 'mechanical', 'desktop', 'slot', 'x', 'y', 'width', 'height'}
-    if not isinstance(data, dict) or set(data) != keys:
+    if not isinstance(data, dict) or set(data) - {"intent"} != keys:
         raise ConfiguredError('invalid_job_schema')
     try:
         target(data['target'])
         sizing = client_settings(data['settings'])
     except (TypeError, ValueError):
         raise ConfiguredError('invalid_rdp_target_or_settings') from None
+    if 'intent' in data:
+        from joetoo_kwin_persistence import intent
+        metadata = intent(data['intent'])
+        if (metadata['program'], metadata['target'], metadata['desktop'], metadata['slot']) != ('sdl-freerdp', data['target'], data['desktop'], data['slot']):
+            raise ConfiguredError('restore_intent_mismatch')
     requested = sizing['rdp_windowing_backend']
     profile = X11_PROFILE if requested == 'x11' else None
     raw = data['bounds']
@@ -951,7 +959,8 @@ def configured_preflight(job, bus, interface):
                 ''.join(a.get('type') for a in args if a.get('direction') == 'out') != 's'):
             raise ConfiguredError('placement_interface_unavailable')
     status = api.call('RegistryStatus')
-    if (not status['observation']['synchronized'] or not placement_available(status) or
+    if (status.get('recovery', 'inactive') not in ('inactive', 'ready') or
+            not status['observation']['synchronized'] or not placement_available(status) or
             status['request_counts']['pending'] or status['request_counts']['running'] or
             status.get('initial_layout_protocol') != 1 or status['presence_counts']['uncertain']):
         raise ConfiguredError('broker_busy_or_observation_unavailable')
@@ -1137,7 +1146,8 @@ def configured_worker(folder, bus_factory, interface, unix_fd):
             emit=emitted, on_registered=registered_callback, profile=profile,
             argv_builder=lambda h, p, u, m: configured_argv(h, p, u, m, job['settings']),
             connection_factory=connection_factory, on_cleanup=cleaned, on_diagnostic=diagnosed, registered_cancelled=lambda: explicit_stop[0],
-            cancelled=lambda: explicit_stop[0] if registered else pending_cancel())
+            cancelled=lambda: explicit_stop[0] if registered else pending_cancel(),
+            **({'restore_intent': job['intent']} if 'intent' in job else {}))
         if not published:
             terminal = registration_events[-1] if registration_events else {}
             state = terminal.get('state', 'failed')
