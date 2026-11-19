@@ -1,5 +1,7 @@
 # Step 1.6 — Accepted managed-close milestone
 
+> **Archive closure (2026-11-18):** Step 1.6 was accepted and merged into `main` by [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32) (`a6999e2`). This document preserves its historical stage and may refer to then-pending publication or authorization; the current work is [Step 1.7](../../task_1.7/HANDOFF.md).
+
 **Maintainer decision: ACCEPTED on 2026-11-18.** The feature is accepted on
 `task/joetoo-kwin-step1.6-managed-close`; a pull request and merge into
 `main` are separate, still-pending publication actions. The task branch
@@ -34,21 +36,21 @@ milestone without treating unperformed native edge tests as passes.
 ## Authoritative evidence and references
 
 - [slim2 X11 native evidence (November 17–18)](step1.6-slim2-native-x11-evidence-2026-11-18.md),
-  including [supporting-originals](supporting-originals/) for screenshots and
+  including [supporting-originals](supporting-originals) for screenshots and
   operator-captured logs.
 - [q552u01 progressive-sweep implementation and native evidence](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md).
 - [Earlier q552u01 Wayland evidence](step1.6-native-wayland-evidence-2026-11-16.md) — historical result before the correction.
-- [Native adapter contract and regression checklist](../native/managed-close/README.md).
-- [Accepted predecessor Step 1.5](../archive/task_step1.5/README.md) and
-  [native acceptance evidence](../archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md).
-- [Active accepted-milestone HANDOFF](HANDOFF.md), [project README](../README.md),
-  [architecture](../ARCHITECTURE.md).
+- [Native adapter contract and regression checklist](../../native/managed-close/README.md).
+- [Accepted predecessor Step 1.5](../task_step1.5/README.md) and
+  [native acceptance evidence](../task_step1.5/step1.5d-native-acceptance-2026-11-12.md).
+- [Active accepted-milestone HANDOFF](HANDOFF.md), [project README](../../README.md),
+  [architecture](../../ARCHITECTURE.md).
 
 Historical Step 1.6 candidate drafts, initial HANDOFF and test addenda remain
 available as evidence of how the implementation evolved. They are **not**
 active assignments, permission to reimplement successful behavior, or a source
 of new release gates. Deferred design belongs in
-[Version 2 Considerations](../ARCHITECTURE.md#12-version-2-considerations),
+[Version 2 Considerations](../../ARCHITECTURE.md#12-version-2-considerations),
 not in this task index.
 
 ## Closure and next work

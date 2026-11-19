@@ -29,6 +29,12 @@ project directory. The Step 1 CLI and planner remain archived prototypes.
   Step 1.5d was accepted and merged through
   [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30) at
   `f72407278fa0a9c923079f3b38ce834440d2fef2`.
+- [Step 1.6 accepted record](task_step1.6/README.md),
+  [closure HANDOFF](task_step1.6/HANDOFF.md), and
+  [native X11 evidence and originals](task_step1.6/step1.6-slim2-native-x11-evidence-2026-11-18.md) —
+  `-d` / `-x`, accepted and merged by
+  [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32) at `a6999e2`.
+  Entire task directory and supporting originals were retained.
 
 Archived evidence, screenshots, example configurations, scripts, patch builders
 and command transcripts retain their historical meaning. Original filenames
@@ -40,6 +46,6 @@ as evidence, not rewritten into current instructions. Maintainer-run commands
 or external configuration symlinks referring to `task_step1.5/` may need an
 explicit path adjustment; this transition does not modify user profiles.
 
-Active work is indexed by the [Step 1.6 HANDOFF](../task_step1.6/HANDOFF.md).
-Its next engineering activity is a separately authorized read-only
-source/contract review; implementation and native actions are not authorized.
+Current work is indexed by the [Step 1.7 HANDOFF](../task_1.7/HANDOFF.md)
+and [task README](../task_1.7/README.md). Archived records are historical,
+not active permission or instructions.

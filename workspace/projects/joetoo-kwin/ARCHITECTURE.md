@@ -3,8 +3,9 @@
 This is the project-specific design record for `joetoo-ai/workspace/projects/joetoo-kwin/`.
 It distinguishes accepted requirements, implemented and accepted contracts, proposed
 future capabilities, and open design questions. The [project README](README.md)
-records current implementation status. The [active Step 1.6 handoff](task_step1.6/HANDOFF.md)
-records the accepted Step 1.6 milestone, while [Step 1.5c.4 native closure](archive/task_step1.5/step1.5c4-native-acceptance.md)
+records current implementation status. The [accepted Step 1.6 archive](archive/task_step1.6/README.md)
+preserves its merged result and evidence. The [active Step 1.7 handoff](task_1.7/HANDOFF.md)
+tracks the combined recovery and snapshot workstream, while [Step 1.5c.4 native closure](archive/task_step1.5/step1.5c4-native-acceptance.md)
 and other task evidence retain the earlier acceptance history.
 
 Repository-root, workspace and project `AGENTS.md` instructions govern AI collaboration.
@@ -50,7 +51,7 @@ clients, close their windows, or relaunch them as a side effect. The resident
 and broker shall synchronize a complete observed-window inventory on startup
 and reconnection without adopting observations as managed windows. The manual
 `joetoo_bridge_observe` shortcut remains diagnostic. Durable registry
-reconstruction is part of the proposed combined Step 1.7–1.8 workstream,
+reconstruction is part of the combined Step 1.7 recovery/snapshot workstream,
 not an assertion about current support.
 The CLI must not invoke root-level SSH or require root for GUI management.
 
@@ -340,13 +341,14 @@ required window makes the layout incomplete. Future `-r` creates new
 connections/windows; it cannot revive old SSH processes. Application
 connection and window management remain independent.
 
-## 8. Recovery and restorable layout (proposed combined Step 1.7–1.8 workstream)
+## 8. Recovery and restorable layout (combined version 1 Step 1.7)
 
-**Version 1 objective, not yet implemented.** Steps 1.7 and 1.8 need not be
-separate milestones. They naturally form one recovery/snapshot delivery, but
-require **two independent data representations and two different trust tests**.
-Neither can safely be substituted for the other. Combining their implementation
-review is a proposal for maintainer approval, not permission to begin work.
+**Accepted scope organization; not yet implemented.** The maintainer agreed
+to combine the formerly separate Steps 1.7 and 1.8 into one Step 1.7
+recovery/snapshot milestone. The two responsibilities retain **distinct data
+representations, trust requirements and verification**, not separate delivery
+gates. This documentation transition does not authorize implementation. See
+the [active Step 1.7 HANDOFF](task_1.7/HANDOFF.md) for current next actions.
 
 ### 8.1 Private same-session checkpoint and reconciliation
 
@@ -509,8 +511,8 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.5c** | Comparative RDP feasibility and decision | **Closed:** affirmative feasibility accepted; SDL3 FreeRDP selected for first RDP implementation, not as a preferred/default client |
 | **1.5c.5d** | Managed SDL FreeRDP under configured `-o` | **ACCEPTED, CLOSED AND MERGED (2026-11-11, PR #29)**: exact UUID/placement/lifecycle on native X11/Wayland, layered configuration, bounded clean-failure continuation, strict `/sec:nla /cert:deny` defaults, successful trusted GDM connection and automatic invalid-certificate refusal with verified cleanup; see final Increment 5 evidence |
 | **1.5d** | Implement `-L` one-recipe single-window launch (`over` only; no reflow), retain read-only `-l` inventory; run integrated native X11/Wayland regression | **ACCEPTED, CLOSED AND MERGED (2026-11-12, PR #30)**: `-l` implemented; `-L` implemented under simplified scope, preserving field-specific validation, safe logical-slot reservation, exact-UUID placement, one-shot raise, existing-window geometry and accepted `-o` semantics |
-| **1.6** | Managed `-d`, `-x` | **ACCEPTED by maintainer 2026-11-18**, q552u01 Wayland/XWayland and slim2 native X11; evidence in task Step 1.6; PR/merge separate |
-| **1.7–1.8 (proposed combined delivery)** | Private same-session checkpoint/reconciliation **plus** durable `.conf` last-good snapshot, `-S`, `-r` | Two distinct safety/data contracts within one version 1 workstream; planning recommendation, pending maintainer scope decision |
+| **1.6** | Managed `-d`, `-x` | **ACCEPTED AND MERGED** (2026-11-18, [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32), `a6999e2`); [archived evidence](archive/task_step1.6/README.md) on Wayland/XWayland and native X11 |
+| **1.7 (includes former 1.8)** | Private same-session checkpoint/reconciliation **plus** durable `.conf` last-good snapshot, `-S`, `-r` | **Next version 1 milestone**; one delivery with two separate data/trust contracts; [active HANDOFF](task_1.7/HANDOFF.md); implementation not yet begun |
 | **1.9** | Packaging of the accepted optional `eselect` selector, installation/ebuild and complete integration | Maintainer-led joetoo/joetoo-upstream packaging, template guidance and version 1 lifecycle |
 
 ### Accepted remote-resource contract (Step 1.5; historical detail archived)
@@ -562,7 +564,7 @@ confirmed `-x` uses a fixed set, retires authenticated missing windows and
 verified closed windows progressively, and retains failed/uncertain targets
 without force kill or false rollback. The native adapter and X11 fence are
 specified in [native managed-close](native/managed-close/README.md); evidence
-and qualifications are in [the accepted Step 1.6 task](task_step1.6/README.md).
+and qualifications are in [the archived Step 1.6 task](archive/task_step1.6/README.md).
 
 ## 12. Version 2 Considerations
 
@@ -571,7 +573,7 @@ or exploratory changes. These are **not** version 1 requirements, release
 blockers, or implicitly authorized development tasks. The accepted original
 decisions remain traceable in archived Step 1.5/1.6 evidence; historical files
 should not be rewritten to imply different past outcomes. Version 1 recovery
-and snapshot work (the proposed combined Steps 1.7–1.8) and Step 1.9
+and snapshot work (combined Step 1.7 (formerly 1.7–1.8)) and Step 1.9
 packaging are **not** deferred to Version 2.
 
 ### Settled deferrals and design principles

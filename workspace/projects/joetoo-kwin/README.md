@@ -12,8 +12,8 @@ including managed-operation requirements.
 `-L` and `-l` [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30),
 archive transition [PR #31](https://github.com/JosephBrendler/joetoo-ai/pull/31)).
 
-**Step 1.6 was ACCEPTED by the maintainer on 2026-11-18** on branch
-`task/joetoo-kwin-step1.6-managed-close`, inspected at `65e4e6be`.
+**Step 1.6 was ACCEPTED and MERGED on 2026-11-18** through
+[PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32) at `a6999e2`.
 `-d MANAGED_ID` gracefully closes only the authenticated managed window and
 **retains** its registration/slot; confirmed `-x` **progressively retires**
 authenticated missing windows and verified graceful closes, without force
@@ -23,11 +23,11 @@ without forced close, declined operations unchanged, 1,016 Python and 163
 JavaScript tests passing on each tested host. The maintainer accepted with
 explicitly documented, nonblocking live-edge coverage limits.
 
-**Next:** review and publish the Step 1.6 PR against `main`; acceptance does
-not mean the PR has been merged or an ebuild published. Future version 1 scope
-is the proposed unified **Step 1.7–1.8 recovery and last-good snapshot**
-workstream (two distinct artifacts); Step 1.9 packaging follows. See
-[accepted HANDOFF](task_step1.6/HANDOFF.md), [Step 1.6 evidence](task_step1.6/README.md),
+**Next:** **Step 1.7**, combining the previously numbered 1.7 and 1.8
+into one version 1 recovery-and-last-good-snapshot milestone, with two distinct
+data/trust contracts. Step 1.9 packaging follows. See the
+[active Step 1.7 HANDOFF](task_1.7/HANDOFF.md), [task README](task_1.7/README.md),
+and [archived Step 1.6 evidence](archive/task_step1.6/README.md),
 [architecture](ARCHITECTURE.md) and the consolidated
 [Version 2 Considerations](ARCHITECTURE.md#12-version-2-considerations).
 
@@ -60,7 +60,7 @@ intermediate corrections and native limitations are documented in the
 [Step 1.4 closure](archive/step1.4/HANDOFF.md),
 [Step 1.5 archive](archive/task_step1.5/README.md),
 [Step 1.5d native acceptance](archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md),
-and [Step 1.6 evidence](task_step1.6/README.md).
+and [Step 1.6 evidence](archive/task_step1.6/README.md).
 Those historical materials remain primary evidence, not active instructions.
 
 ## Accepted configuration and lifecycle baseline
@@ -130,7 +130,8 @@ this does **not** constitute autodetection or a universal display requirement.
   user OpenRC and development configuration assets.
 - `tests/`: headless regression suites; `archive/`: historical POCs and
   completed tasks, including `archive/step1.4/` and `archive/task_step1.5/`.
-- `task_step1.6/`: active managed-operations dispatch and task index.
+- `archive/task_step1.6/`: accepted and merged Step 1.6 records and supporting originals.
+- `task_1.7/`: active combined recovery/last-good-snapshot task and handoff.
 - `tools/joetoo-kwind-install-poc`: user-owned installation/checking helper.
 
 From the project directory, suitable headless checks include:
@@ -159,5 +160,6 @@ or separately authorized, consistent with applicable repository policy.
 - [Step 1.5c.4 merge-readiness audit](archive/task_step1.5/step1.5c4-review.md)
 
 Historical proposals and illustrative targets do not authorize new work.
-The [Step 1.6 HANDOFF](task_step1.6/HANDOFF.md) identifies current authority
-and the next actor. Archived task instructions confer no new authorization.
+The [active Step 1.7 HANDOFF](task_1.7/HANDOFF.md) records current scope and
+next decisions. [Archived Step 1.6 records](archive/task_step1.6/README.md)
+preserve evidence but confer no new authorization.

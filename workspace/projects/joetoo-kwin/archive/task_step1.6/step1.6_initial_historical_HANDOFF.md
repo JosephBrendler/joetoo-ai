@@ -1,5 +1,7 @@
 # Step 1.6 — Managed operations dispatcher
 
+> **Archive closure (2026-11-18):** Step 1.6 was accepted and merged into `main` by [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32) (`a6999e2`). This document preserves its historical stage and may refer to then-pending publication or authorization; the current work is [Step 1.7](../../task_1.7/HANDOFF.md).
+
 ## Status, current authority and next actor
 
 **2026-11-14: Step 1.6 is the active milestone; detailed implementation scope
@@ -21,8 +23,8 @@ destructive operations, native tests, host/service actions or publication
 - Step 1.5d accepted and merged through
   [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30) at
   `f72407278fa0a9c923079f3b38ce834440d2fef2`.
-- [Architecture](../ARCHITECTURE.md), [project status](../README.md),
-  [task index](README.md), [completed Step 1.5](../archive/task_step1.5/README.md).
+- [Architecture](../../ARCHITECTURE.md), [project status](../../README.md),
+  [task index](README.md), [completed Step 1.5](../task_step1.5/README.md).
 - Verify actual branch, HEAD, worktree and maintainer feedback before any
   separately authorized assignment. Preserve newer changes.
 

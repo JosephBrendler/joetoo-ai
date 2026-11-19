@@ -1,5 +1,7 @@
 # Step 1.6 — Managed operations HANDOFF (accepted)
 
+> **Archive closure (2026-11-18):** Step 1.6 was accepted and merged into `main` by [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32) (`a6999e2`). This document preserves its historical stage and may refer to then-pending publication or authorization; the current work is [Step 1.7](../../task_1.7/HANDOFF.md).
+
 **Status (2026-11-18): ACCEPTED by the maintainer.** The implementation and its
 principal native validation are complete. This is the accepted Step 1.6 scope,
 not a request for more implementation or native testing. **PR publication and
@@ -42,7 +44,7 @@ No `-D`, restore, new checkpointing or extra general lifecycle framework in 1.6.
   empty `-l` without restart and status queryable after CLI exit; declined `-d`
   and `-x`; real Konsole close dialog/refusal with truthful timeout and
   retained registration.
-- Supporting [original logs and screenshots](supporting-originals/) are indexed
+- Supporting [original logs and screenshots](supporting-originals) are indexed
   in the slim2 evidence. Earlier [Wayland observations](step1.6-native-wayland-evidence-2026-11-16.md)
   remain historical evidence, not current instructions.
 
@@ -63,9 +65,9 @@ After integration, the next version 1 development objective is recovery and
 last-good snapshots (the *proposed combined* Step 1.7–1.8 workstream).
 Its same-session checkpoint and durable restorable plan remain separate data
 and safety contracts within one potential delivery. See
-[ARCHITECTURE.md](../ARCHITECTURE.md#8-recovery-and-restorable-layout-proposed-combined-step-17-18-workstream)
+[ARCHITECTURE.md](../../ARCHITECTURE.md#8-recovery-and-restorable-layout-proposed-combined-step-17-18-workstream)
 for requirements, unanswered version 1 choices and the separate
-[Version 2 Considerations](../ARCHITECTURE.md#12-version-2-considerations).
+[Version 2 Considerations](../../ARCHITECTURE.md#12-version-2-considerations).
 This is a recommendation for subsequent maintainer scoping, **not an
 implementation authorization**. Step 1.9 packaging remains future version 1.
 
