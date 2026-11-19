@@ -43,6 +43,14 @@ sys.exit(int(os.environ['INVENTORY_EXIT']))
         self.assertEqual(calls,[['org.joetoo.KWinBridge','/org/joetoo/KWinBridge','org.joetoo.KWinBridge.ListManaged']])
         return run.stdout+run.stderr
 
+    def test_verified_sweep_produces_real_cli_empty_inventory(self):
+        from test_managed_close import ManagedCloseTests
+        close=ManagedCloseTests();close.setUp();self.addCleanup(close.tearDown)
+        close.prepare('all');close.commit();close.close_current()
+        self.assertEqual(close.runtime.job['state'],'succeeded')
+        output=self.listing(json.loads(close.b.ListManaged()))
+        self.assertIn('No managed windows (no retained managed reservations).',output)
+
     def test_empty_inventory_is_success_and_no_configuration_is_sourced(self):
         self.config.write_text('touch "$TRACE"; return 99\n')
         user = Path(self.env['XDG_CONFIG_HOME']) / 'joetoo-kwin';user.mkdir(parents=True)

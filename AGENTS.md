@@ -129,6 +129,26 @@ Use a shorter format for simple questions; avoid procedural ceremony that adds n
 - Never commit, push, merge, deploy, or modify protected repositories on an agent's initiative.
 - Keep outputs reviewable and preserve attribution, licenses, and provenance.
 
+
+## Resource efficiency and scope control
+
+The maintainer's AI coding-agent allowance is limited and must be conserved.
+
+- Work toward the smallest implementation satisfying the explicitly approved objective.
+- Reuse established project architecture, source, libraries and tests whenever practical.
+- Avoid speculative investigations, redundant source reviews, unnecessary redesign and unrelated cleanup.
+- Do not introduce new programming languages, compiled dependencies, native plugins, build systems or architectural subsystems merely because they offer a technically elegant solution.
+- When such a change is genuinely necessary, explain the specific blocker, simpler alternatives, expected maintenance burden and likely increase in implementation effort before proceeding, unless that change has already been explicitly approved.
+- Distinguish required safety properties from optional defense-in-depth mechanisms. Do not let optional improvements become prerequisites for completing approved functionality.
+- Keep headless tests and implementation changes proportional to the behavior being added.
+- Avoid repeated design/proposal cycles once the maintainer has settled the functional contract.
+- Report genuine blockers promptly. Do not silently expand the assignment to solve problems outside its scope.
+- When the coding environment exposes usage or remaining-budget information, consider it in prioritization and report material budget risks. Never pretend to know usage data that is unavailable.
+
+Favor a complete, testable, maintainable version 1 over an open-ended engineering investigation.
+
+This policy does not permit weakening explicitly approved security or correctness requirements. When a requirement cannot be met economically, report the tradeoff rather than inventing a larger project.
+
 ## Success criterion
 
 An AI contribution is successful when it improves the developer's understanding or decision quality with accurate, traceable, appropriately scoped work — even if no code is changed.

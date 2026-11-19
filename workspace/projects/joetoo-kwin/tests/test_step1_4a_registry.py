@@ -60,6 +60,43 @@ class RegistryTests(TestCase):
             source=kwargs.pop("source", SOURCE),
             synchronized=kwargs.pop("synchronized", True))
 
+    def test_retirement_removes_both_indexes_without_recycling_aliases(self):
+        self.arm();self.register()
+        self.registry.set_presence(FIRST,'missing')
+        self.assertTrue(self.registry.retire_missing('win-001',window_uuid=FIRST,request_id='req-001'))
+        self.assertEqual(self.registry.managed_windows,{})
+        self.assertEqual(self.registry.uuid_by_managed_id,{})
+        self.assertEqual(self.registry.requests['req-001'].state,'succeeded')
+        self.arm('req-002',pid=42)
+        second=self.register('req-002',SECOND,42)
+        self.assertEqual(second.managed_id,'win-002')
+        self.assertEqual(second.recipe['slot'],1)
+        self.assertFalse(self.registry.set_presence(FIRST,'missing'))
+
+    def test_retirement_rejects_live_uncertain_pending_or_mismatched_records(self):
+        self.arm();self.register()
+        for presence in ('present','uncertain'):
+            self.registry.managed_windows[FIRST].presence=presence
+            with self.assertRaises(self.module.RegistryError):
+                self.registry.retire_missing('win-001',window_uuid=FIRST,request_id='req-001')
+        self.registry.set_presence(FIRST,'missing')
+        for managed,identifier,request in (('win-002',FIRST,'req-001'),('win-001',SECOND,'req-001'),('win-001',FIRST,'foreign')):
+            with self.assertRaises(self.module.RegistryError):
+                self.registry.retire_missing(managed,window_uuid=identifier,request_id=request)
+        self.registry.managed_windows[FIRST].placement='pending'
+        with self.assertRaises(self.module.RegistryError):
+            self.registry.retire_missing('win-001',window_uuid=FIRST,request_id='req-001')
+        self.assertEqual(self.registry.uuid_by_managed_id,{'win-001':FIRST})
+        self.assertEqual(list(self.registry.managed_windows),[FIRST])
+
+    def test_retirement_checks_alias_consistency_before_mutating_either_index(self):
+        self.arm();self.register();self.registry.set_presence(FIRST,'missing')
+        self.registry.uuid_by_managed_id['win-001']=SECOND
+        with self.assertRaises(self.module.RegistryError):
+            self.registry.retire_missing('win-001',window_uuid=FIRST,request_id='req-001')
+        self.assertEqual(self.registry.uuid_by_managed_id,{'win-001':SECOND})
+        self.assertEqual(list(self.registry.managed_windows),[FIRST])
+
     def test_intention_is_not_registration(self):
         self.arm()
         self.assertEqual(self.registry.managed_windows, {})

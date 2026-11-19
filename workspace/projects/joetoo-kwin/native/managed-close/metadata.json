@@ -1,0 +1,8 @@
+{
+    "KPlugin": {
+        "Name": "joetoo authenticated managed close",
+        "Description": "Broker-authorized exact-window graceful close; no visual effect",
+        "License": "GPL-3.0-or-later",
+        "EnabledByDefault": false
+    }
+}

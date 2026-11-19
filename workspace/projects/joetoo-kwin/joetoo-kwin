@@ -48,6 +48,8 @@ usage() {
     j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -L DESKTOP PROGRAM MODE TARGET [over] (one managed window; omitted layer is over)"
     j_msg "-${notice}" -p "       -L panel/under are not implemented yet; existing windows are never rearranged"
     j_msg "-${notice}" -p "       ${PN} [-v|-q ...] -l (read-only managed inventory, including missing reservations)"
+    j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -d MANAGED_ID (confirmed graceful close; record/slot retained)"
+    j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -x (confirmed progressive clean sweep; verified registrations/slots retired)"
 }
 
 # Retain the positional move/test grammar. getopts handles common options and
@@ -78,11 +80,13 @@ parse_cmdline() {
     shift "$((OPTIND - 1))"
     cli_args=("$@")
     [[ -n $cli_operation ]] || { bad_args 'select an operation'; return 2; }
-    if [[ $CONFIG_SELECTED && $cli_operation != -c && $cli_operation != -o && $cli_operation != -m && $cli_operation != -L ]]; then
-        bad_args '-f is supported only with -c, -o, -L or layout movement'; return 2
+    if [[ $CONFIG_SELECTED && $cli_operation != -c && $cli_operation != -o && $cli_operation != -m && $cli_operation != -L && $cli_operation != -d && $cli_operation != -x ]]; then
+        bad_args '-f is supported only with -c, -o, -L, -d, -x or layout movement'; return 2
     fi
     if [[ $cli_operation == -L ]]; then
         validate_single_operands "$@" || return $?
+    elif [[ $cli_operation == -d ]]; then
+        [[ $# == 1 && $1 =~ ^win-[0-9]{3,}$ ]] || { bad_args '-d requires one MANAGED_ID such as win-001'; return 2; }
     elif [[ $cli_operation != -m && $# != 0 ]]; then
         bad_args 'unexpected operands'; return 2
     fi
@@ -135,6 +139,7 @@ select_config() {
     else _sc_presence=$?; (( _sc_presence == 1 )) || return "$_sc_presence"; fi
     if config_path_present "$_sc_system"; then config=$_sc_system; return 0
     else _sc_presence=$?; (( _sc_presence == 1 )) || return "$_sc_presence"; fi
+    [[ ${1:-} != optional ]] || { config=""; return 0; }
     j_msg "-${err}" -p "No configuration: create [$_sc_user] or select -f CONFIG; system fallback [$_sc_system] absent"
     return 2
 }
@@ -144,7 +149,7 @@ prepare_config_sources() {
     # scope, so Bash declarations retain their pre-layering behavior.
     local _cs_home=${XDG_CONFIG_HOME:-$HOME/.config} _cs_file _cs_presence
     [[ $_cs_home == /* ]] || _cs_home=$HOME/.config
-    select_config || return $?
+    select_config "${1:-}" || return $?
     declare -ga config_sources=()
     for _cs_file in /etc/joetoo-kwin/defaults.conf "$_cs_home/joetoo-kwin/defaults.conf"; do
         if config_path_present "$_cs_file"; then config_sources+=("$_cs_file")
@@ -152,8 +157,10 @@ prepare_config_sources() {
     done
     # source searches PATH for bare filenames. Anchor relative selections to
     # the invocation's directory, matching the file checked by -f and bash -n.
-    if [[ $config == /* ]]; then config_sources+=("$config")
-    else config_sources+=("./$config"); fi
+    if [[ -n $config || $CONFIG_SELECTED ]]; then
+        if [[ $config == /* ]]; then config_sources+=("$config")
+        else config_sources+=("./$config"); fi
+    fi
     # Check every selected file before executing any of them. Do not echo its
     # contents: syntax diagnostics could otherwise disclose a malformed target.
     for _cs_file in "${config_sources[@]}"; do
@@ -247,6 +254,7 @@ check_plan() {
     local debug_varlist="initial_focus_timeout_ms initial_focus_poll_interval_ms sftp_capability_timeout_ms"
     debug_varlist+=" rdp_registration_poll_ms rdp_registration_event_limit rdp_registration_window_limit rdp_backend_log_byte_limit rdp_x11_identity_settle_ms"
     debug_varlist+=" vnc_ssh_start_timeout_ms vnc_supervisor_poll_interval_ms vnc_cleanup_timeout_ms vnc_local_port_attempts vnc_identity_event_limit vnc_identity_settle_ms vnc_dbus_timeout_ms vnc_placement_timeout_ms vnc_identity_start_timeout_ms"
+    debug_varlist+=" managed_close_timeout_ms managed_close_total_timeout_ms managed_close_prepare_timeout_ms managed_close_x11_grab_ms managed_close_poll_ms managed_close_dbus_timeout_ms"
     local varlist
     [[ ${1:-} != launch ]] || launch_preflight || return $?
     varlist="$notice_varlist"
@@ -692,6 +700,92 @@ PY_LIST_MANAGED
 
 #-----[ main script ]----------------------------------------------------------------------------------
 
+# The frontend owns one D-Bus connection through preview/confirmation. It never
+# owns applications; accepted work and retained results belong to the broker.
+close_managed_windows() {
+    local _mc_scope=all _mc_id=${2:-} _mc_dir _mc_settings _mc_preview _mc_result _mc_pid _mc_read _mc_write _mc_rc _mc_original_read _mc_original_write _mc_helper_dir _mc_defaults _mc_key
+    [[ $1 != -d ]] || _mc_scope=one
+    _mc_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+    # The POC installer deploys Python modules in ~/.local/libexec. Source-tree
+    # use remains colocated. No launch/geometry helper is needed for closure.
+    _mc_helper_dir=$_mc_dir/libexec
+    [[ -f $_mc_helper_dir/joetoo_kwin_managed_close.py ]] || _mc_helper_dir=$HOME/.local/libexec
+    _mc_defaults=$(python3 "$_mc_helper_dir/joetoo_kwin_managed_close.py" --defaults) || return 2
+    for _mc_key in managed_close_timeout_ms managed_close_total_timeout_ms managed_close_prepare_timeout_ms \
+        managed_close_x11_grab_ms managed_close_poll_ms managed_close_dbus_timeout_ms; do
+        printf -v "$_mc_key" '%s' "$(jq -er --arg key "$_mc_key" '.[$key]' <<< "$_mc_defaults")" || return 2
+    done
+    prepare_config_sources optional || return $?
+    local _mc_source
+    for _mc_source in "${config_sources[@]}"; do
+        # Trusted executable Bash configuration, consistent with existing CLI.
+        # shellcheck disable=SC1090
+        source "$_mc_source" || return 2
+    done
+    apply_cli_verbosity || return $?
+    _mc_settings=$(jq -cn --arg a "$managed_close_timeout_ms" --arg b "$managed_close_total_timeout_ms" \
+        --arg c "$managed_close_prepare_timeout_ms" --arg d "$managed_close_x11_grab_ms" \
+        --arg e "$managed_close_poll_ms" --arg f "$managed_close_dbus_timeout_ms" \
+        '{managed_close_timeout_ms:$a,managed_close_total_timeout_ms:$b,managed_close_prepare_timeout_ms:$c,
+          managed_close_x11_grab_ms:$d,managed_close_poll_ms:$e,managed_close_dbus_timeout_ms:$f}') || return 2
+    _mc_settings=$(python3 "$_mc_helper_dir/joetoo_kwin_managed_close.py" --settings "$_mc_settings") || {
+        j_msg "-${err}" -p 'Invalid managed close timing settings; no action authorized'; return 2; }
+    coproc CLOSE_FRONTEND { python3 "$_mc_helper_dir/joetoo_kwin_managed_close.py" "$_mc_scope" "$_mc_id" "$_mc_settings" 9>&-; }
+    _mc_pid=$CLOSE_FRONTEND_PID
+    # Duplicate descriptors: Bash may unset the coproc array after child exit.
+    exec {_mc_read}<&"${CLOSE_FRONTEND[0]}" {_mc_write}>&"${CLOSE_FRONTEND[1]}"
+    _mc_original_read=${CLOSE_FRONTEND[0]}; _mc_original_write=${CLOSE_FRONTEND[1]}
+    exec {_mc_original_read}<&- {_mc_original_write}>&-
+    # Pipe closure detaches the frontend, never cancels accepted broker work.
+    # shellcheck disable=SC2064
+    trap 'exec {_mc_read}<&- {_mc_write}>&-; exit 130' INT
+    trap 'exec {_mc_read}<&- {_mc_write}>&-; exit 143' TERM HUP
+    if ! IFS= read -r _mc_preview <&"$_mc_read"; then
+        j_msg "-${err}" -p 'Managed close preview unavailable; nothing authorized'
+        exec {_mc_read}<&- {_mc_write}>&-
+        wait "$_mc_pid" || :
+        trap - INT TERM HUP
+        return 1
+    fi
+    if ! jq -e '.protocol == 1 and .state == "prepared" and (.targets | type == "array")' <<< "$_mc_preview" >/dev/null; then
+        j_msg "-${err}" -p 'Managed close rejected or native adapter unavailable; nothing authorized'
+        exec {_mc_read}<&- {_mc_write}>&-
+        wait "$_mc_pid" || :
+        trap - INT TERM HUP
+        return 1
+    fi
+    if [[ $_mc_scope == all ]]; then
+        j_msg "-${notice}" -p 'Managed clean sweep (confirmed verified removals retire registrations and reserved slots):'
+        jq -r '.targets[] | "  \(.managed_id) desktop=\(.desktop) slot=\(.slot) UUID=\(.window_uuid) action=\(.action // "close")"' <<< "$_mc_preview"
+        jq -r '.excluded[] | "  excluded: \(.managed_id) (\(.reason))"' <<< "$_mc_preview"
+    else
+        j_msg "-${notice}" -p 'Graceful close target set (registrations and reserved slots will remain):'
+        jq -r '.targets[] | "  \(.managed_id) desktop=\(.desktop) slot=\(.slot) UUID=\(.window_uuid)"' <<< "$_mc_preview"
+        jq -r '.excluded[] | "  excluded: \(.managed_id) (missing, uncertain or unavailable native identity)"' <<< "$_mc_preview"
+    fi
+    j_msg "-${notice}" -p "Retained close result: $(jq -r '.request_id' <<< "$_mc_preview")"
+    # Warn only after authenticated Konsole/session/native-UUID correlation.
+    if [[ $_mc_scope == all ]] && jq -e '.self_terminal | test("^win-[0-9]+$")' <<< "$_mc_preview" >/dev/null; then
+        j_msg "-${warn}" -p "This terminal ($(jq -r '.self_terminal' <<< "$_mc_preview")) is in the close set; broker execution continues after it closes. Consider an unmanaged Konsole to watch completion."
+    fi
+    if ! confirm_continue_or_exit; then
+        exec {_mc_read}<&- {_mc_write}>&-
+        wait "$_mc_pid" || :
+        trap - INT TERM HUP
+        return 1
+    fi
+    printf 'CONFIRM\n' >&"$_mc_write"
+    if IFS= read -r _mc_result <&"$_mc_read"; then
+        j_msg "-${notice}" -m "$_mc_result"
+    else
+        j_msg "-${err}" -p 'Close result unavailable; accepted work may continue in broker; query ManagedCloseStatus'
+    fi
+    exec {_mc_read}<&- {_mc_write}>&-
+    trap - INT TERM HUP
+    if wait "$_mc_pid"; then _mc_rc=0; else _mc_rc=$?; fi
+    return "$_mc_rc"
+}
+
 # run as regular user, not root
 checknotroot
 
@@ -725,14 +819,8 @@ case ${1:-} in
         # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-launch-functions
         source "$(dirname -- "${BASH_SOURCE[0]}")/libexec/joetoo-kwin-launch-functions" || exit 1
         open_plan "$@" ;;
-    -x) action="exit/close";   # close all managed windows
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
-    -d) action="destroy";   # close one window - eventually: -d MANAGED_ID
-                            # close only the specified positively identified,
-                            # registered managed window; never an unrelated window
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
+    -d|-x)
+        close_managed_windows "${1}" "${2:-}" ;;
     -c) action="check";   # validate configuration
         check_plan ;;
     -s) action="status";   # status of broker

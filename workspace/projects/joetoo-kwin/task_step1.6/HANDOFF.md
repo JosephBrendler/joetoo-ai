@@ -1,101 +1,73 @@
-# Step 1.6 — Managed operations HANDOFF
+# Step 1.6 — Managed operations HANDOFF (accepted)
 
-**Status (2026-11-14): Step 1.6 INITIALIZED — documentation/archive transition prepared; publication pending. Detailed implementation scope not yet approved.**
+**Status (2026-11-18): ACCEPTED by the maintainer.** The implementation and its
+principal native validation are complete. This is the accepted Step 1.6 scope,
+not a request for more implementation or native testing. **PR publication and
+merge remain pending**, independently of acceptance.
 
-## 1. Task identity and authority
+## Identity, baseline and authority
 
-**Repository:** `JosephBrendler/joetoo-ai`\
-**Project:** `workspace/projects/joetoo-kwin/`\
-**Transition branch:** `task/joetoo-kwin-step1.5-archive-step1.6-init`\
-**Reviewed base:** `231e3c3c7e77839ef9220cf1c128f7a1572726d0`\
-**Architecture:** [ARCHITECTURE.md](../ARCHITECTURE.md)\
-**Task index:** [README.md](README.md)
+- Repository: `JosephBrendler/joetoo-ai`.
+- Project: `workspace/projects/joetoo-kwin/`.
+- Task branch: `task/joetoo-kwin-step1.6-managed-close`.
+- Base: `main` at `cdcdc9e8` (PR #31 archive/init transition).
+- Latest published branch inspected for this documentation review:
+  `65e4e6be1af7eb94a472f86c08372874e5236b43` (2026-11-18).
+- The maintainer reports that `slim2` and `q552u01` have been synchronized
+  and subsequent documentation/evidence changes pushed; no old `8849e59`
+  fast-forward work remains.
+- Acceptance is a maintainer decision; this HANDOFF does not authorize repo
+  publication, native execution, protected-repository integration or a new task.
 
-Step 1.6 is the active development milestone. This HANDOFF records the current assignment and authorization boundaries; it does not independently grant permission. Neither the architecture roadmap nor historical task instructions authorize implementation, native operations or publication.
+## Accepted functionality
 
-## 2. Accepted predecessor
+`-d MANAGED_ID` requests one authenticated graceful close and retains its
+managed registration, original desktop/slot reservation and history (present
+becomes missing on verified removal). `-x` confirms a fixed set once, then
+**progressively retires** each authenticated missing entry and each verified
+closed entry. Failed or unresolved entries remain; uncertain native cleanup
+stops unsafe further dispatch without undoing prior verified retirement.
+No force kill, title/PID-only adoption or application/broker lifecycle conflation.
+No `-D`, restore, new checkpointing or extra general lifecycle framework in 1.6.
 
-Step 1.5 is complete.
+## Acceptance evidence
 
-- Step 1.5c.5d accepted and merged through [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29) at `3e9c4bf311bc65b32d332a00d3b50163a9043303`.
-- Step 1.5d accepted and merged through [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30) at `f72407278fa0a9c923079f3b38ce834440d2fef2`.
-- Accepted behavior includes configured managed launches, exact-UUID registration and placement, remote access integration, single-window `-L` launch, read-only `-l` inventory, and verified one-shot raising of newly launched managed windows.
-- Final XCB test-fixture correction and regression evidence are preserved in the [native acceptance record](../archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md) and [fixture addendum](../archive/task_step1.5/step1.5d-xcb-evidence-addendum.md): 7 focused Python, 1,000/1,000 stress repetitions, 100 additional leak-check repetitions, 949 full Python and 163 JavaScript passes. These recorded results were not rerun during this documentation task; the original 948/949 result and eleven passing reruns remain intact.
+- [q552u01 Wayland/XWayland progressive sweep](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md):
+  maintainer-run 1,016 Python OK, 163 JavaScript PASS; 8 verified live closes
+  and 1 authenticated missing retirement (9/9); empty `-l` without restart.
+- [slim2 native X11, refusal and confirmation evidence](step1.6-slim2-native-x11-evidence-2026-11-18.md):
+  KWin X11 6.7.6 native plugin build/install/owner checks; 1,016 Python OK,
+  163 JavaScript PASS; 15/15 configured launches; two successful retained `-d`
+  closes; 2 already-missing + 14 verified closes in `-x` (16/16 retired);
+  empty `-l` without restart and status queryable after CLI exit; declined `-d`
+  and `-x`; real Konsole close dialog/refusal with truthful timeout and
+  retained registration.
+- Supporting [original logs and screenshots](supporting-originals/) are indexed
+  in the slim2 evidence. Earlier [Wayland observations](step1.6-native-wayland-evidence-2026-11-16.md)
+  remain historical evidence, not current instructions.
 
-Historical records: [archived Step 1.5 README](../archive/task_step1.5/README.md) and [closed HANDOFF](../archive/task_step1.5/HANDOFF.md).
+**Acceptance qualification (explicit, not a defect):** live-compositor fixtures
+for absent `WM_DELETE_WINDOW`, stale/reused XID, mid-sweep invoking-terminal
+loss and independently traced SSH/RDP/VNC worker/remote-session behavior were
+not all demonstrated. Corresponding focused headless safety tests passed where
+implemented. The maintainer has accepted Step 1.6 with those evidence limits
+recorded; they are **not** prerequisites to this accepted milestone. Any future
+reproduction of a real failure should be addressed narrowly on its merits.
 
-These completed milestones are accepted foundations, not outstanding work.
+## Next action and actor
 
-## 3. Documentation transition
+**Next actor: maintainer — review documentation diff, commit/push if approved,
+then open the Step 1.6 PR against `main`.** Inspect the PR diff/CI; merge is
+separate from acceptance. No new Codex implementation task is necessary.
+After integration, the next version 1 development objective is recovery and
+last-good snapshots (the *proposed combined* Step 1.7–1.8 workstream).
+Its same-session checkpoint and durable restorable plan remain separate data
+and safety contracts within one potential delivery. See
+[ARCHITECTURE.md](../ARCHITECTURE.md#8-recovery-and-restorable-layout-proposed-combined-step-17-18-workstream)
+for requirements, unanswered version 1 choices and the separate
+[Version 2 Considerations](../ARCHITECTURE.md#12-version-2-considerations).
+This is a recommendation for subsequent maintainer scoping, **not an
+implementation authorization**. Step 1.9 packaging remains future version 1.
 
-The Step 1.5 archival and Step 1.6 initialization changes have been prepared on the transition branch.
-
-The initial transition was checkpointed by the maintainer at `cfb3a7b13276a31a9092b70f2f0a7334443f33d5`. This final documentation acceptance-preparation round preserves that checkpoint and the initial historical HANDOFF.
-
-Transition validation:
-
-- All 213 tracked Step 1.5 artifacts moved to `archive/task_step1.5/`, with filenames and modes preserved.
-- Historical evidence retained and closure notices added; 205 artifacts are byte-identical, with eight Markdown files changed only for closure/navigation and one equivalent Markdown hard-break spelling.
-- Project README, architecture, configuration reference and archive navigation updated.
-- New Step 1.6 HANDOFF and README created.
-- Relative Markdown navigation rechecked, with no newly broken targets. The initial scan's 27 pre-existing missing-target occurrences are distinguished from the 23 retained historical occurrences; four were repaired or removed from current navigation.
-- Runtime code, tests, installers and configuration behavior unchanged.
-- Complete rename-aware diff, file-mode checks, whitespace validation and reverse-apply consistency check prepared for review, including all new files.
-
-Current publication state (2026-11-14): The Step 1.5 archive / Step 1.6 initialization transition is committed and pushed to branch task/joetoo-kwin-step1.5-archive-step1.6-init. The initial transition checkpoint is cfb3a7b13276a31a9092b70f2f0a7334443f33d5; the final HANDOFF/README review changes were committed at 9b7868f987acc43de127352aff4154fa146fddb3.
-
-The transition is ready for documentation PR review, subject to the maintainer's final approval. PR creation and merge remain separately controlled. Step 1.6 source/contract review and implementation remain unauthorized.
-
-Upon PR merge, record the final merge commit and update this HANDOFF to identify the accepted documentation baseline.
-
-## 4. Step 1.6 objective
-
-The intended milestone is safe management of existing and newly added managed windows through:
-
-- `-a` — add a managed window; precise interface and relationship to accepted `-L` require review.
-- `-d MANAGED_ID` — selective graceful close.
-- `-x` — graceful closure of positively identified managed windows.
-
-Detailed CLI semantics, ownership proof, missing-window handling, timeout behavior, partial failures and application-specific lifecycle consequences remain to be established and approved.
-
-## 5. Invariants and exclusions
-
-Preserve exact managed UUID identity, source and ownership validation, retained missing reservations, existing broker protections and isolation of unrelated windows.
-
-Never close or adopt a window using class, title or PID alone, or substitute an observed UUID for the managed identity.
-
-Keep separately scoped outcomes distinct: window placement, managed-window lifecycle, RDP/VNC connection state, and independent broker/service lifetime.
-
-Step 1.7 runtime checkpoint/restart reconciliation, Step 1.8 durable last-good layout/restore, Step 1.9 packaging, and unrelated architectural redesign remain outside this task.
-
-## 6. Development and native testing hosts
-
-- **q552u01:** Primary development host, native KWin Wayland; first planned native testing.
-- **slim2:** Subsequent native X11 testing.
-- **gmki91:** Additional X11 development and testing when available.
-
-Host assignments do not themselves authorize native test execution, service changes or destructive operations.
-
-## 7. Next actor and authorization
-
-**Immediate next actor:** maintainer, for final file review and an explicit publication decision. No publication action is authorized by this HANDOFF.
-
-**Next engineering actor:** Codex, only upon separate maintainer authorization, for a read-only Step 1.6 source and contract review after the documentation transition is merged. That review is not started by this documentation assignment.
-
-The review should establish:
-
-1. Current implementation status of `-a`, `-d`, `-x`, `-L` and `-l`.
-2. Relevant CLI, managed registry, broker and resident interfaces.
-3. Safe-closure identity and authorization requirements.
-4. Unsettled behavioral choices requiring maintainer decisions.
-5. Proposed incremental implementation and headless/native acceptance strategy.
-
-**Not yet authorized:** Step 1.6 implementation, native host operations, service restarts, destructive window tests, commit, push, PR creation or merge.
-
-## 8. Next decision
-
-First, review and publish the documentation/archive transition.
-
-Then approve a separate read-only Step 1.6 architecture/source review. Decide the detailed implementation contract before authorizing code changes.
-
-Historical evidence and earlier draft instructions must not override this HANDOFF or subsequent explicit maintainer decisions.
+**Closed milestone boundary:** do not create new Step 1.6 implementation
+stages or treat historical draft prompts/older HANDOFFs as active work.

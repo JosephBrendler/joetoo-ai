@@ -4,7 +4,7 @@ This is the project-specific design record for `joetoo-ai/workspace/projects/joe
 It distinguishes accepted requirements, implemented and accepted contracts, proposed
 future capabilities, and open design questions. The [project README](README.md)
 records current implementation status. The [active Step 1.6 handoff](task_step1.6/HANDOFF.md)
-records current task permissions, while [Step 1.5c.4 native closure](archive/task_step1.5/step1.5c4-native-acceptance.md)
+records the accepted Step 1.6 milestone, while [Step 1.5c.4 native closure](archive/task_step1.5/step1.5c4-native-acceptance.md)
 and other task evidence retain the earlier acceptance history.
 
 Repository-root, workspace and project `AGENTS.md` instructions govern AI collaboration.
@@ -50,7 +50,8 @@ clients, close their windows, or relaunch them as a side effect. The resident
 and broker shall synchronize a complete observed-window inventory on startup
 and reconnection without adopting observations as managed windows. The manual
 `joetoo_bridge_observe` shortcut remains diagnostic. Durable registry
-reconstruction is future Step 1.7 work, not an assertion about current support.
+reconstruction is part of the proposed combined Step 1.7–1.8 workstream,
+not an assertion about current support.
 The CLI must not invoke root-level SSH or require root for GUI management.
 
 **Configuration discovery (accepted and implemented):** Explicit `-f FILE`
@@ -264,7 +265,7 @@ geometry after a manual change.
 Actual API representations and transitions follow the implemented registry;
 these are architectural dimensions, not a requirement for a new general
 state-machine framework. Broker-lifetime IDs and same-session checkpoint
-recovery remain distinct until Step 1.7. A window may support multiple
+recovery remain distinct until the proposed Step 1.7–1.8 workstream. A window may support multiple
 application sessions over its life; generalized transport telemetry was not
 implemented by Step 1.5c.4.
 
@@ -339,31 +340,60 @@ required window makes the layout incomplete. Future `-r` creates new
 connections/windows; it cannot revive old SSH processes. Application
 connection and window management remain independent.
 
-## 8. Runtime checkpoint versus restorable layout
+## 8. Recovery and restorable layout (proposed combined Step 1.7–1.8 workstream)
 
-### 8.1 Private runtime checkpoint (Step 1.7 target)
+**Version 1 objective, not yet implemented.** Steps 1.7 and 1.8 need not be
+separate milestones. They naturally form one recovery/snapshot delivery, but
+require **two independent data representations and two different trust tests**.
+Neither can safely be substituted for the other. Combining their implementation
+review is a proposal for maintainer approval, not permission to begin work.
 
-Broker memory is the active authority. A private atomic checkpoint at
-`$XDG_RUNTIME_DIR/joetoo-kwin/managed-windows.json` should copy valid current
-registry identifiers, results and compositor/session source, **not** act as a
-clean-reboot template. Restrict directory/file permissions and exclude
-credentials. On same-session restart, validate KWin source and exact live UUIDs
-conservatively; missing/uncertain identity cannot authorize destructive acts.
-Broker/service stop must not close applications. This recovery is future scope.
+### 8.1 Private same-session checkpoint and reconciliation
 
-### 8.2 Durable last-good launch layout (Step 1.8 target)
+Broker memory remains authoritative while the broker runs. A private, atomically
+replaced runtime checkpoint at
+`$XDG_RUNTIME_DIR/joetoo-kwin/managed-windows.json` may contain validated
+managed IDs, UUIDs, desktop/slot reservations, result metadata, and compositor
+session/source identity. It must be user-private, exclude credentials, and
+never turn a stale PID/UUID into destructive authority.
 
-A reusable trusted Bash `.conf` snapshot is proposed at
-`${XDG_STATE_HOME:-$HOME/.local/state}/joetoo-kwin/last-session.conf`.
-It stores validated desired launch recipes and policy, not old UUIDs/PIDs.
-An unreachable SSH target with successfully placed placeholder counts as a
-valid recipe. Write atomically; do not overwrite a valid snapshot with partial
-or empty state. `-r` launches a new set through the normal planner with new
-UUIDs/PIDs/connections. `-S` exports a chosen arrangement with verified current
-geometry once its schema is approved. `-x`/`-d` should not implicitly erase
-last-good history. Automatic advancement triggers and representation of manual
-geometry remain open design questions; trusted config files must not be
-modifiable by unrelated processes.
+On broker restart **within the same still-running KWin session**, reconcile
+against the current authenticated compositor/source and exact live UUIDs.
+Reconstruct only what can be proved; unresolved or missing identity is retained
+as uncertain/non-destructive, never treated as a new managed window. Neither
+broker stop nor checkpoint replay may close or relaunch application windows.
+A reboot/new KWin session is not a valid old-UUID recovery target.
+
+### 8.2 Durable last-good launch plan and fresh-instance restore
+
+A separate trusted Bash configuration snapshot is proposed at
+`${XDG_STATE_HOME:-$HOME/.local/state}/joetoo-kwin/last-session.conf`. It
+represents *desired launch intent*, validated recipes, and explicitly selected
+layout/policy values, **not** the prior broker's UUIDs, PIDs, active connections,
+or credentials. Write it atomically, with suitable file ownership and
+permissions. Partial, failed or empty states must not silently overwrite a
+valid last-good snapshot; `-d` and `-x` do not implicitly save or erase it.
+
+`-S` explicitly exports a chosen arrangement after validation of actual
+current geometry and source; `-r` loads the durable plan through the normal
+preflight/confirmation/launch path and creates **new** windows, identifiers
+and remote connections. An unreachable SSH endpoint with a successfully placed
+placeholder can remain a valid recipe; runtime transport success is distinct
+from layout validity. Re-running the plan cannot revive an old remote process.
+
+### Version 1 decisions to resolve before implementing this workstream
+
+- What is the exact session/source proof and fail-closed reconciliation policy,
+  including broker restart while KWin changes or goes away?
+- What makes a launch snapshot *last-good*; what triggers advancement; and how
+  should operator-adjusted positions be represented and validated?
+- What is the `-S` selection syntax/permission model, and how does it avoid
+  exporting unrelated/unmanaged windows or secret connection material?
+- What are the small acceptance cases for both independent recovery modes:
+  same-session broker restart versus new-instance restore after logout/reboot?
+
+These are internal design questions for the combined version 1 delivery, **not**
+Version 2 deferrals. Step 1.9 packaging follows the accepted version 1 scope.
 
 ## 9. CLI contract (target; not all flags implemented)
 
@@ -372,19 +402,18 @@ modifiable by unrelated processes.
 | `-c [-f CONFIG]` | Validate config and display a colorized dry-run plan without launching |
 | `-o [-f CONFIG]` | Confirm then launch and positively register/position managed windows |
 | `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | Confirm then launch one managed window above existing windows; `over` is the only implemented layer (also the default), no live-desktop reflow |
-| `-m l|r` | Two-panel active-window geometry on current desktop |
+| `-m l\|r` | Two-panel active-window geometry on current desktop |
 | `-m DESKTOP` | Change active window's desktop, preserve geometry |
-| `-m DESKTOP l|r` | Two-panel placement on specified desktop |
+| `-m DESKTOP l\|r` | Two-panel placement on specified desktop |
 | `-m DESKTOP X Y` | Change desktop/position and preserve size |
 | `-m X Y WIDTH HEIGHT` | Change position/size and preserve desktop |
 | `-m DESKTOP X Y WIDTH HEIGHT` | Specify desktop, position and size |
-| `-x` | Gracefully close all positively managed windows, not unrelated ones (future 1.6) |
-| `-a` | Add one managed window (future; syntax TBD) |
-| `-d MANAGED_ID` | Close one safely validated managed window (future 1.6) |
+| `-x` | **Accepted 1.6:** confirmed fixed-set progressive retirement of authenticated absences and verified graceful closes; retain failed/unresolved entries |
+| `-d MANAGED_ID` | **Accepted 1.6:** confirmed graceful close of one authenticated managed window; record/slot retained |
 | `-l` | List broker-managed windows read-only, one record per fixed-width table row, including stable managed ID, desktop/slot, presence, placement and UUID (Step 1.5d) |
 | `-i MANAGED_ID`, `-s` | Additional detail/application-status interfaces, not implemented in Step 1.5d |
-| `-S` | Export reusable layout (future 1.8) |
-| `-r` | Restore a saved last-good layout using new instances (future 1.8) |
+| `-S` | Proposed version 1 recovery/snapshot workstream (1.7–1.8): validated export of reusable launch intent |
+| `-r` | Proposed version 1 recovery/snapshot workstream (1.7–1.8): restore by new instances |
 | `-f FILE` | Explicit configuration precedence, no implicit symlink edits |
 | `-v`, `-q` | Adjust verbosity using established joetoo CLI conventions |
 
@@ -415,9 +444,9 @@ requirements. If a one-shot raise cannot be positively targeted and verified
 on both KWin backends, report the constraint instead of adopting a different
 window or weakening ownership.
 
-The formerly proposed live-desktop reflow and broker/resident transaction
-extension remain historical design research, **not** Step 1.5d requirements.
-See the source review under `task_step1.5/` for that earlier investigation.
+Live reflow beyond accepted `-L` behavior is deferred; see
+[Version 2 Considerations](#12-version-2-considerations) and the archived
+Step 1.5 task evidence for the earlier investigation.
 
 The `-l` command displays the broker's **managed** inventory read-only as
 aligned, fixed-width columns, **one row per managed record**. At minimum
@@ -441,7 +470,7 @@ without introducing a second geometry implementation.
 ## 10. Supervision, safety and identity invariants
 
 1. A managed UUID must be correlated to a specific launch and validated against
-   current observation/source before it is eligible for future `-d` or `-x`.
+   current authenticated native UUID/source before it is eligible for `-d` or `-x`.
 2. A raw UUID or readable alias is not a standalone destructive capability.
 3. Broker restart must not relaunch clients; application close must not imply
    broker shutdown.
@@ -464,7 +493,7 @@ identifies a product objective; it is **not** independent permission for an
 AI agent to edit code, deploy, connect to remote hosts, or merge. Later
 accepted decisions refine older scope outlines without rewriting history.
 
-### Phase 1 — Initial implementation
+### Version 1 — Initial implementation
 
 | Gate | Deliverable | Acceptance / status |
 | --- | --- | --- |
@@ -480,259 +509,127 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.5c** | Comparative RDP feasibility and decision | **Closed:** affirmative feasibility accepted; SDL3 FreeRDP selected for first RDP implementation, not as a preferred/default client |
 | **1.5c.5d** | Managed SDL FreeRDP under configured `-o` | **ACCEPTED, CLOSED AND MERGED (2026-11-11, PR #29)**: exact UUID/placement/lifecycle on native X11/Wayland, layered configuration, bounded clean-failure continuation, strict `/sec:nla /cert:deny` defaults, successful trusted GDM connection and automatic invalid-certificate refusal with verified cleanup; see final Increment 5 evidence |
 | **1.5d** | Implement `-L` one-recipe single-window launch (`over` only; no reflow), retain read-only `-l` inventory; run integrated native X11/Wayland regression | **ACCEPTED, CLOSED AND MERGED (2026-11-12, PR #30)**: `-l` implemented; `-L` implemented under simplified scope, preserving field-specific validation, safe logical-slot reservation, exact-UUID placement, one-shot raise, existing-window geometry and accepted `-o` semantics |
-| **1.6** | Managed `-a`, `-d`, `-x` | **Active milestone; detailed implementation scope unapproved.** Next engineering activity: separately authorized read-only source/contract review; selective safe close must never affect unrelated windows |
-| **1.7** | Runtime JSON checkpoint and same-session reconciliation | Broker restart and exact source/UUID reconciliation |
-| **1.8** | Restorable `.conf` snapshot, `-S`, `-r` | New-window recovery from validated last-good intent |
+| **1.6** | Managed `-d`, `-x` | **ACCEPTED by maintainer 2026-11-18**, q552u01 Wayland/XWayland and slim2 native X11; evidence in task Step 1.6; PR/merge separate |
+| **1.7–1.8 (proposed combined delivery)** | Private same-session checkpoint/reconciliation **plus** durable `.conf` last-good snapshot, `-S`, `-r` | Two distinct safety/data contracts within one version 1 workstream; planning recommendation, pending maintainer scope decision |
 | **1.9** | Packaging of the accepted optional `eselect` selector, installation/ebuild and complete integration | Maintainer-led joetoo/joetoo-upstream packaging, template guidance and version 1 lifecycle |
 
-### 1.5c.5 — Remote resource and desktop integration (incrementally authorized)
+### Accepted remote-resource contract (Step 1.5; historical detail archived)
 
-**Common contract:** Each approved new `program|mode|target` combination
-must define exact parsing, local process invocation, authentication and
-security assumptions, positive unique KWin UUID identity, desktop/slot
-placement, layer behavior, transport/session lifecycle, bounded cancellation,
-and truthful partial success. Reuse existing CLI/planner/broker/resident
-interfaces wherever possible. Do not introduce a generic remote-access
-framework or unnecessary broker expansion. Unsupported recipes reject before
-confirmation and before process or network side effects.
+Every supported `program|mode|target` recipe retains exact input validation,
+separately bounded launch/placement/transport outcomes, positive managed
+PID/UUID/source ownership, and safe owned-process teardown. Unsupported
+recipes fail before confirmation and network/application side effects.
 
-**1.5c.5a — Dolphin SFTP (first).** The maintainer approved the URL-only
-`sftp://[USER@]HOST[:PORT][/ABSOLUTE/PATH]` target contract, safe
-percent-encoding/redacted diagnostics, native KIO/libssh host trust and
-independent remote-outcome reporting. The task-branch implementation launches
-local `dolphin --new-window -- URL` using existing positive PID/UUID ownership,
-desktop/slot placement and initial layers. Maintainer X11 and Wayland native
-runs demonstrated successful managed placement and remote file browsing on the
-specified reachable destination. Those observations do not mean that the
-launcher verified SFTP authentication or listing, or that untested host-key
-prompts and active-desktop focus have been accepted. A remote navigation or
-authentication failure is not a KWin placement failure. Do not execute remote
-Dolphin or treat KIO file transfer as SSH GUI forwarding.
+- **Dolphin SFTP:** validate `sftp://[USER@]HOST[:PORT][/ABSOLUTE/PATH]`,
+  safely encode/redact URL components, and launch *local*
+  `dolphin --new-window -- URL`. Preserve KIO/libssh authentication and host
+  trust, not a second root-level SSH path. Post-confirmation reachability
+  advisories separately test bounded DNS and TCP only when the *effective*
+  endpoint can be established. Never run advisories in `-c`, before `-o`
+  confirmation or during offline validation. Explicitly distinguish success,
+  failure and indeterminate/not-attempted for each advisory; direct DNS/TCP
+  may be misleading with SSH aliases, proxies or nonstandard transports.
+  Failure/uncertainty **cannot block** a valid Dolphin/SFTP launch or turn a
+  successful local placement into a claim of authenticated SFTP usability.
+  No silent fallback to a local path is authorized.
+- **TigerVNC-over-SSH:** validate
+  `ssh://[USER@]HOST[:SSH_PORT]/display/N` (or `/port/P`) and use one owned,
+  loopback-only SSH forward; no direct/raw VNC or competing TigerVNC `-via`
+  tunnel. Positive persistent viewer-role evidence, original PID/UUID,
+  compositor source and launch transaction are required; an authentication
+  popup sharing a process/class is never silently adopted as the desktop
+  viewer. Own and clean up only the forward/viewer processes of this launch,
+  without broad PID/class killing. Viewer presence, network/authentication,
+  and actual remote usability remain independent outcomes.
+- **SDL FreeRDP:** first supported RDP peer, not a preferred/default over
+  TigerVNC. X11 and Wayland have positive, client-specific viewer-role and
+  exact-UUID selectors; configured serial launches require independently
+  bounded readiness/placement/cleanup and verified safe continuation. Accepted
+  built-in `rdp_security_protocol=nla` and `rdp_certificate_policy=strict`
+  map to `/sec:nla` and `/cert:deny`; alternate supported `negotiate`/`prompt`
+  are explicit configuration choices and do not turn permissive TLS into a
+  default. Registration and local geometry never prove remote login or trust.
 
-**Post-confirmation SFTP reachability advisories (follow-up correction).**
-The maintainer requires two separately observed, bounded checks: **(1) local
-name resolution** and **(2) a TCP connection attempt to the intended SSH
-transport endpoint/port**, where the effective destination can be determined
-reliably. They are diagnostics, not SFTP authentication or session verification.
-They must not run during `-c`, URI validation, offline capability preflight or
-before `-o` confirmation. Use configurable bounded timeouts and preserve
-separate `succeeded`, `failed`, and `not attempted/inconclusive` outcomes for
-each check. Numeric IP addresses need no DNS lookup. SSH aliases, libssh
-configuration, proxies and nonstandard ports can make direct NSS/TCP results
-incomplete or misleading: do not equate a DNS failure with TCP unreachability,
-or a TCP success with a working authenticated SFTP session. A check that cannot
-be performed must be reported as such, not silently converted to failure.
-Any negative or indeterminate advisory result must leave the accepted launch
-policy unchanged: **launch the local Dolphin window with the validated SFTP URL
-anyway**, permit KIO to present its own error/retry UI, and report the window's
-actual registration/placement separately. No automatic fallback to a local
-path or new network-management framework is authorized by these advisories.
+The accepted detailed requirements and their chronological decisions are
+preserved in [Step 1.5 archive](archive/task_step1.5/README.md),
+[final managed RDP acceptance](archive/task_step1.5/step1.5c5d-increment5-final-native-acceptance-2026-11-11.md),
+and the current [configuration reference](docs/configuration-reference.md).
+No superseded Option C/diagnostic-gate text is an active requirement.
 
-**KIO/OpenRC compatibility observation.** The maintainer observed
-`kf.kio.gui: Failed to determine systemd version, falling back to extremely legacy forking mode.`
-During KDE KIO's application-process launch selection, inability to obtain a
-systemd-manager version causes a fallback to its normal forking launcher (see
-[KIO process-runner source](https://github.com/KDE/kio/blob/4ef7a0aed32da3c5a365f2d07d637a8d821a678a/src/gui/systemd/systemdprocessrunner.cpp)).
-On the tested OpenRC session, this was nonfatal and did not prevent managed
-window registration or remote browsing. It is not evidence of a failed SSH/SFTP
-connection. No suppression, process-launch redesign or systemd dependency is
-authorized as part of Step 1.5c.5a.
+**Step 1.6 accepted contract:** A confirmed `-d MANAGED_ID` gracefully closes
+one exact managed window while retaining its original record and slot. A
+confirmed `-x` uses a fixed set, retires authenticated missing windows and
+verified closed windows progressively, and retains failed/uncertain targets
+without force kill or false rollback. The native adapter and X11 fence are
+specified in [native managed-close](native/managed-close/README.md); evidence
+and qualifications are in [the accepted Step 1.6 task](task_step1.6/README.md).
 
-**1.5c.5b — TigerVNC over SSH (second).** The implemented recipe
-`DESKTOP|vncviewer|ssh|ssh://[USER@]HOST[:SSH_PORT]/display/N[|LAYER]`
-(or `/port/P`) validates its endpoint offline and launches a dedicated,
-owned SSH forwarding process with a loopback-only local VNC listener. SSH
-host-key checks remain in force; raw/direct VNC is not supported, including
-on a local LAN. TigerVNC's own `-via` tunnel is disabled so its process and
-forwarding lifecycle do not compete with the owned SSH tunnel.
+## 12. Version 2 Considerations
 
-The actual desktop viewer is identified only after the stock TigerVNC
-desktop-role signal and correlated with the exact KWin X11/XWayland window
-UUID, process, source and launch transaction. The preceding authentication
-window is never adopted merely because it shares PID or class. The broker
-places the positively identified viewer, verifies geometry and registration,
-and preserves independent launch, transport, authentication, remote-usability
-and window-placement outcomes. Startup, failure, cancellation and teardown
-use bounded checks and owned-process cleanup rather than class-wide killing.
+This section is the **single current holding place** for explicitly deferred
+or exploratory changes. These are **not** version 1 requirements, release
+blockers, or implicitly authorized development tasks. The accepted original
+decisions remain traceable in archived Step 1.5/1.6 evidence; historical files
+should not be rewritten to imply different past outcomes. Version 1 recovery
+and snapshot work (the proposed combined Steps 1.7–1.8) and Step 1.9
+packaging are **not** deferred to Version 2.
 
-The maintainer natively demonstrated correct viewer registration/placement,
-stacking and usable remote desktop on `gmki91` X11 and `q552u01` Wayland,
-and confirmed viewer and dedicated SSH process teardown after normal close.
-These observations do not imply that the program independently verifies VNC
-authentication or remote usability, nor that all failure or host-key paths
-have been tested. The accepted TigerVNC-over-SSH implementation remains a
-fully supported peer of subsequent managed remote-desktop clients.
+### Settled deferrals and design principles
 
-**1.5c.5c — RDP feasibility and decision (third; closed).** The maintainer
-accepted an affirmative RDP feasibility determination following comparison
-of KRDC, Remmina and relevant FreeRDP graphical clients and native X11 and
-Wayland SDL FreeRDP investigations. Native-Wayland evidence includes a marked
-viewer distinct from the credential dialog, cancellation, failed NLA,
-connection refusal and coexistence with an unrelated viewer. X11 evidence
-shows successive marker-bearing temporary and persistent windows, requiring
-a separate positive role discriminator. These are observation results, not
-production registration, placement or certificate-trust acceptance. Fresh-client
-connection does not establish in-process reconnect or remote-session identity.
-See the [Step 1.5 HANDOFF](archive/task_step1.5/HANDOFF.md) for evidence and limitations.
+1. **Individual close-and-retire `-D MANAGED_ID`:** deferred to Version 2.
+   It would retire an individual verified-close reservation without performing
+   the whole collection sweep; it needs explicit command semantics and the
+   same native identity/no-force guarantees as `-d`/`-x`. `-L` already supplies
+   one-window launch; the earlier proposed `-a` is *unnecessary*, not deferred.
+2. **Concurrent interactive remote launches (historical Option D):** consider
+   independently keyed pending VNC/RDP viewer registrations so human
+   authentication can finish in an order different from recipe order. Any
+   consolidation of RDP and TigerVNC viewer-readiness/placement must preserve
+   each client's distinct role-identity and SSH/TLS/transport policies and
+   avoid a speculative generic plugin framework. Keep version 1's accepted
+   serial behavior unless a measured need warrants change.
+3. **Managed live-layout reflow:** `-L` intentionally supports only `over`;
+   panel/under live placement and rebalancing/reordering existing managed
+   *and unmanaged* windows are deferred. Do not equate an initial configured
+   `-o` layer with authority to rearrange windows later. A future explicit
+   reset-to-intended-layout action requires separate user intent and rules for
+   changed geometry/slots.
+4. **Broader managed applications:** assess additional GUI/terminal clients
+   individually, not from installed status alone. Reported on `gmki91` in
+   November 2026: QTerminal 2.4.0; Krusader 2.9.0; FileZilla 3.70.6;
+   Nautilus 49.6-r1; Nemo 6.6.4; KRDC 26.04.3; and `mc` 4.8.33 (reported
+   without SFTP). Evaluate Remmina, KRDC and other RDP/VNC clients as
+   independent peers, with real launch/window role/transport trust proofs.
+   `mc` is text-mode and would run *inside* a managed terminal, not own a
+   KWin window by itself. Versions are historical observations, not current
+   platform requirements.
+5. **Optional broader session status/reconnect:** distinguish one window
+   across multiple remote/application sessions and fresh reconnects from the
+   live KWin window. Never claim remote usability merely from local placement;
+   no general transport telemetry framework is required for version 1.
+6. **Performance refinement:** measure startup, D-Bus, launch/placement,
+   polling, CPU/memory and human-visible latency; pursue bounded changes
+   only on real measurements, preserving X11/Wayland safety and regression
+   behavior. Version 2 optimization does not postpone version 1 correctness.
+7. **Non-KWin backends:** possible separate evaluation of shared Bash
+   planning for LXQt/GNOME, without promising KWin-specific identity/movement
+   support or version 1 portability.
 
-**Peer-capability policy.** Managed TigerVNC-over-SSH, SDL FreeRDP
-(the first RDP client), and any later authorized RDP clients are independent,
-user-selectable peers. Implementation order confers no preference or default.
-RDP is the capability; SDL FreeRDP is one client implementation, and Remmina
-may be evaluated separately. Each client retains its own invocation,
-transport/security and positive viewer-role identification contract. Once a
-viewer is positively registered, its exact KWin UUID, reserved desktop/slot,
-placement, geometry verification, and eventual stacking/focus belong to
-shared managed-window infrastructure. Do not impose SDL-specific identity
-assumptions on VNC or other RDP clients or introduce a speculative plugin
-framework. Preserve the accepted TigerVNC behavior.
+### Open Version 2 decisions (maintainer)
 
-**1.5c completed milestone — accepted baseline (2026-11-11).** Steps
-1.5c.1–1.5c.5d are complete and maintainer-accepted. The final SDL FreeRDP
-increment added serial configured managed RDP for X11 and Wayland, verified
-exact-UUID placement/stacking, five-minute readiness and known-clean failure
-continuation, system/user/per-run configuration layering, optional non-root
-user-owned `eselect` profiles, configuration reference, and two validated
-security-policy settings. Built-in `rdp_security_protocol=nla` maps to
-`/sec:nla` (the alternate `negotiate` omits `/sec:`), and
-`rdp_certificate_policy=strict` maps to `/cert:deny` (the alternate
-`prompt` omits `/cert:`). Native `gmki91` verified the strict trusted-name
-connection and automatic certificate-name mismatch refusal, including
-verified terminal broker/child cleanup; native `q552u01` Wayland RDP
-interoperability and managed placement were accepted earlier. Final source
-landed in `main` via [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29)
-(merge `3e9c4bf311bc65b32d332a00d3b50163a9043303`). See
-[final Increment 5 evidence](archive/task_step1.5/step1.5c5d-increment5-final-native-acceptance-2026-11-11.md)
-and [archived Step 1.5 closure](archive/task_step1.5/HANDOFF.md).
+- Which live reflow operations, monitor/work-area/scaling policies, and
+  clickable-exposure guarantees would actually provide value beyond the
+  accepted one-shot layout?
+- What new authorization and selection rules would allow reset-to-intended
+  layout or per-window retirement without disturbing unrelated windows?
+- Is out-of-order human authentication materially limiting current RDP/VNC
+  usage, and what evidence justifies adding concurrency or common lifecycle
+  abstractions?
+- Which additional graphical applications are worth first-class managed
+  launch support, and what exact positive identity and credential policy can
+  each demonstrate on both KWin backends?
+- Is non-KWin shell planning valuable enough to justify a separately scoped
+  effort, or should version 2 stay focused on KWin?
 
-**Historical design material below:** The earlier Wayland-placement diagnostic,
-Option C proposal and historical gate sequence document decisions *before*
-completion; statements there that placement/security/configured launch remain
-unimplemented are superseded by this accepted milestone. Option D's
-multi-pending-client proposal remains deliberately deferred. Do not interpret
-historical work-in-progress language as reopening accepted Step 1.5c.
-
-**1.5c.5d — Managed RDP implementation (phased).** SDL FreeRDP is the first
-RDP client. Its native-Wayland and native-X11 registration selectors are
-implemented and have separate native acceptance evidence; they distinguish
-credential/authentication windows from the persistent viewer and establish
-positive launch/PID/lifecycle/marker/exact-UUID ownership. Controlled placement
-was demonstrated on X11; Wayland placement, timing and exact frame sizing
-remain open. Registration-only tooling must not move a window or claim a
-remote login, remote usability or validated server identity.
-
-**Immediate diagnostic gate.** On native Wayland a registered viewer remained
-present, and the placement request reported an identity/source/owner/expiry
-failure after about 15 seconds. The maintainer subsequently observed window
-movement after that terminal failure. Whether the resident claimed the request,
-when assignment occurred, and why geometry did not converge are not yet
-established. First capture bounded, sanitized claim/completion/guard/deadline
-transitions and pre-request plus post-terminal geometry observations. Do not
-infer a specific cause or simply lengthen timeouts; late effects after a
-terminal result require explicit characterization.
-
-**Option C — current serial-consolidation objective (after diagnosis).** Keep
-the proven RDP viewer selectors and per-launch reservation/identity evidence.
-Use one authoritative, bounded managed placement transaction for a positively
-identified exact UUID; consolidate overlapping SDL-specific guard evaluations,
-placement deadlines and terminal finalization without weakening genuine
-ownership/source/process-loss protections. For confirmed configured `-o`
-launches, reservation expresses the operator's placement intent: the correct
-viewer is placed when it becomes identifiable, without a second manual
-confirmation. The standalone registration-only POC and its separately
-confirmed placement test remain distinct development contracts. Preserve
-client-specific RDP transport/security handling and independent remote-session
-outcomes. This phase processes one unresolved interactive launch at a time;
-that serial policy must not be confused with an identity requirement that
-human authentication complete in launch order. The later accepted Increment 4
-policy uses finite, independently configurable **five-minute (300000 ms)**
-defaults for RDP viewer registration and TigerVNC viewer readiness. These
-limits bound identification of a persistent viewer, not a verified password-
-entry state. At timeout, cancel the pending registration, terminate only owned
-pre-registration resources, and continue serially after verified terminal
-cleanup; Busy, unresolved ownership or an active transaction still blocks
-subsequent launches. Mechanical identity, placement, and cleanup remain
-separately bounded and fail closed. TigerVNC was unchanged by Option C;
-Increment 4 may align its viewer-readiness default without a general VNC
-refactor. See [authoritative Increment 4 decisions](archive/task_step1.5/step1.5c5d_Increment_4_decisions.md).
-
-**Option D — later, separately authorized lifecycle objective.** Extend broker
-bookkeeping to support multiple independently keyed pending remote launches,
-so human NLA/VNC authentication can finish out of reservation order while
-each final viewer still maps to its originating recipe and exact UUID. Unify
-RDP and TigerVNC viewer-readiness and placement lifecycle management while
-retaining their different positive role selectors and transport policies.
-Analyze any future Remmina selector independently; a shared PID or caption
-alone is not sufficient ownership. Option D, VNC migration and concurrent
-launch orchestration are not authorized by Option C or by this architecture
-update. Maintain the working serial VNC path until separate validation.
-
-**Gates:** (1) diagnostic-only late-placement trace; (2) separately reviewed
-Option C implementation and native X11/Wayland acceptance; (3) later Option D
-concurrency and RDP/VNC lifecycle design/authorization. Documentation here
-expresses requirements and roadmap, not permission for code, deployment,
-publication or native testing.
-
-**Implementation scope:** The [Step 1.5c.5 implementation scope](archive/task_step1.5/Step1.5c5_implementation_scope.md) records the completed remote-access increments and their historical acceptance gates. It does not supersede this architecture or independently authorize implementation; current task permissions are identified by the [Step 1.6 HANDOFF](task_step1.6/HANDOFF.md).
-
-**Broader application inventory (evaluation, not automatic implementation):**
-Newly installed on `gmki91` as reported by the maintainer: QTerminal 2.4.0,
-Krusader 2.9.0, FileZilla 3.70.6, Nautilus 49.6-r1, Nemo 6.6.4,
-KRDC 26.04.3, and Midnight Commander (`mc`) 4.8.33. Verify the actual
-executables, runtime behavior and installed versions on each host before
-relying on them. Earlier “not available” assessments must not be treated as
-current evidence. Evaluate their potential for safe managed launch, local and
-SFTP workflows, application-specific PID/UUID correlation, and value over
-supported Dolphin/Konsole paths. Report feasibility and advantages/
-disadvantages **per candidate**, recommending implement/defer/reject.
-`mc` is a *text-based terminal application*, not an independent KWin graphical
-window: evaluate whether joetoo-kwin should offer it as a terminal-launched
-workflow and what it adds beyond `konsole|local|...`. On `gmki91`, the
-reported `mc` build has `-sftp`; do not assume SFTP support without
-rebuilding or inspecting capabilities. Availability does **not** establish
-that these candidates belong in the immediate implementation tranche.
-
-**Historical pre-production security rationale (superseded by accepted Increment 5):** The affirmative feasibility result did not
-establish production TLS certificate trust, server identity or secure
-negotiation policy. Validate those for each client/endpoint; do not infer
-them from `tls`, NLA or successful remote use, and do not weaken certificate
-checks to obtain a passing demonstration. Preserve TigerVNC's independently
-approved SSH tunnel/host-key protections. Increment 5 subsequently implemented
-and natively verified strict NLA/certificate-refusal defaults, as recorded above.
-Step 1.5c.5d and Step 1.5d are accepted and merged through PRs #29 and
-[#30](https://github.com/JosephBrendler/joetoo-ai/pull/30), respectively.
-Step 1.5d merge: `f72407278fa0a9c923079f3b38ce834440d2fef2`.
-Step 1.5 history is retained in [the archive](archive/task_step1.5/README.md);
-Step 1.6 is the active milestone with detailed scope awaiting approval.
-This architecture grants no source, native-execution or publication authority.
-
-### Phase 2 — Optimization and refinement
-
-Once essential Phase 1 functionality has been demonstrated on both backends,
-measure startup, launch, placement, D-Bus, polling, CPU/memory and user-visible
-latencies; then prioritize targeted improvements. Preserve safety, compatibility,
-function and both X11/Wayland regressions. Optimization does not defer
-correctness/security requirements. Split refinements into reviewable, measured
-tasks rather than broad speculative rewrites.
-
-## 12. Open questions and explicit verification tasks
-
-- How should managed-window recovery validate broker/KWin session identities
-  across restart, and what should remain unrecoverable without a live UUID?
-- Which monitor/work-area, reserved panel and scaling policy should govern
-  geometry and actual clickable exposure?
-- How should a future explicit reset-to-intended-layout action distinguish
-  original slot from current geometry and reordered configuration entries?
-- When should last-good snapshots advance, and how should manually adjusted
-  coordinates be represented in reusable configuration?
-- What are the exact syntax and selection safeguards for `-a` and `-S`?
-- Which remote-resource endpoint grammars, connection/credential policies and
-  application lifecycles best fit each 1.5c.5 candidate?
-- How should each managed RDP client establish production certificate trust,
-  exact window-role identity and authorized placement release on each KWin
-  backend, without claiming remote desktop readiness from local window state?
-- Should joetoo's Bash planner be evaluated for non-KWin environments such as
-  LXQt/GNOME in a separately authorized later effort? This is not a version 1
-  portability commitment.
-
-
+Version 2 decisions should be taken from concrete usage and evidence,
+not from previously explored but superseded design alternatives.

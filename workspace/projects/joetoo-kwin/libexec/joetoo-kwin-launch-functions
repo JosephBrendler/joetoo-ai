@@ -156,7 +156,7 @@ launch_preflight() {
         jq -e '.viewer_protocol == 1' <<< "$_lp_status" >/dev/null || {
             plan_error 'resident lacks TigerVNC X11/XWayland identity capability'; return 2; }
     fi
-    jq -e '.observation.synchronized == true and .presence_counts.uncertain == 0 and .viewer_cleanup_uncertain != true
+    jq -e '.managed_close_active != true and .observation.synchronized == true and .presence_counts.uncertain == 0 and .viewer_cleanup_uncertain != true
         and .request_counts.pending == 0 and .request_counts.running == 0
         and (.placement_transaction.state == "IDLE" or .placement_transaction.state == "OK"
              or .placement_transaction.state == "ERROR")' <<< "$_lp_status" >/dev/null || {

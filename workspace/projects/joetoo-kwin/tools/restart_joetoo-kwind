@@ -22,6 +22,7 @@ bus=org.joetoo.KWinBridge
 path=/org/joetoo/KWinBridge
 kbus=org.kde.KWin
 kpath=/org/kde/KWin
+tempdir=/var/tmp
 
 # ShellCheck thinks varlist is unused, but it is in script_header_joetoo
 # shellcheck disable=SC2034
@@ -59,7 +60,6 @@ result=$?
 j_msg "-${notice}" -p -n "Update done; result:"
 handle_result "$result" "" "" "$notice"
 
-
 j_msg "-${notice}" -p -n "Unloading joetoo-bridge KWin script"
 output=$(qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript joetoo-bridge)
 handle_result $? "$output" "$output" "$notice"
@@ -79,15 +79,15 @@ case "${answer:0:1}" in
     [yYtT])
         j_msg "-${notice}" -p "Running python unit tests"
         if (( verbosity == debug )); then
-            python3 -m unittest discover -s tests -p 'test_*.py' -v
+            TMPDIR="$tempdir" python3 -m unittest discover -s tests -p 'test_*.py' -v
         else
-            python3 -m unittest discover -s tests -p 'test_*.py'
+            TMPDIR="$tempdir" python3 -m unittest discover -s tests -p 'test_*.py'
         fi
         result=$?
         j_msg "-${notice}" -p -n "python tests done; result:"
         handle_result "$result" "" "" "$notice"
         j_msg "-${notice}" -p "Running javascript unit tests"
-        node --test tests/test_*.js
+        TMPDIR="$tempdir" node --test tests/test_*.js
         result=$?
         j_msg "-${notice}" -p -n "javascript tests done; result:"
         handle_result "$result" "" "" "$notice"
