@@ -1,7 +1,10 @@
-# Step 1.6 native managed-close adapter — candidate
+# Step 1.6 native managed-close adapter — accepted contract
 
-This source candidate has not been installed, loaded or accepted natively.
-It provides the small native boundary missing from KWin scripting. The broker
+The maintainer **accepted Step 1.6 on 2026-11-18** after
+native KWin Wayland/XWayland and X11 use; see
+[Wayland evidence](../../task_step1.6/step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md)
+and [slim2 X11 evidence](../../task_step1.6/step1.6-slim2-native-x11-evidence-2026-11-18.md).
+This adapter provides the small native boundary missing from KWin scripting. The broker
 retains authority and transaction state; the effect does no placement, rendering,
 recipe selection, application supervision or generic process-tree termination.
 
@@ -171,10 +174,15 @@ successful or authorize another close. No claim of atomic bulk close/rollback is
 made. Window disappearance, local SSH termination and remote tmux persistence
 remain independent outcomes. RDP/VNC workers keep their existing cleanup roles.
 
-## Maintainer-only acceptance, after separate install/native approval
+## Native acceptance and future regression checklist
 
-First q552u01 Wayland, then slim2 X11; gmki91 is additional X11 coverage.
-Use disposable application windows/unsaved work, never irreplaceable sessions.
+Maintainer acceptance used q552u01 Wayland/XWayland and slim2 X11.
+The live stale-XID/unsupported-`WM_DELETE_WINDOW` fixture, mid-sweep
+self-terminal disappearance and independent remote-worker checks were not
+all demonstrated; their absence was explicitly accepted as a recorded
+evidence limitation, not a passing result. The checklist below is retained
+for future regression/defect reproduction, **not** as a new acceptance gate.
+Use disposable windows/unsaved work, never irreplaceable sessions.
 
 1. Verify matching SDK/compositor, native effect namespace/version and service
    owner equality with org.kde.KWin. An unloaded/mismatched adapter must fail

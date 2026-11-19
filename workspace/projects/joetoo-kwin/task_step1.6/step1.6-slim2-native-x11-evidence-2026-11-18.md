@@ -1,8 +1,8 @@
 # Step 1.6 — slim2 native X11 acceptance evidence (2026-11-17–18)
 
-**Status:** Maintainer-executed native evidence and cloud review; **not itself a final maintainer acceptance decision**. The established positive-path behavior passed. No blocking code defect has been demonstrated. This record supplements, rather than rewrites, the [2026-11-16 q552u01 Wayland/XWayland progressive-sweep record](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md) and [original Wayland record](step1.6-native-wayland-evidence-2026-11-16.md).
+**Status:** Maintainer-executed native evidence, **accepted for Step 1.6 by the maintainer on 2026-11-18** with the explicitly listed coverage limitations. The established positive-path behavior passed; no blocking code defect was demonstrated. This record supplements, rather than rewrites, the [2026-11-16 q552u01 Wayland/XWayland progressive-sweep record](step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md) and [original Wayland record](step1.6-native-wayland-evidence-2026-11-16.md).
 
-**Source baseline reported by maintainer:** `task/joetoo-kwin-step1.6-managed-close`, `c57ab8cb4a6af5c770aa281b0dcfed295b709bae` on `slim2` and `origin`; `q552u01` at `8849e5984c10572c427c7217ceb4f2c63597c79b` without an upstream configured as of 2026-11-18. GitHub comparison verified the branch is exactly one commit ahead of `8849e59`; `c57ab8c` changes only `tools/restart_joetoo-kwind` (TMPDIR selection). The older HANDOFF's uncommitted `f26027a` status is historical, not the current published task-branch state. No source was edited for these test observations.
+**Source baseline for the native tests:** `task/joetoo-kwin-step1.6-managed-close` at `c57ab8cb4a6af5c770aa281b0dcfed295b709bae` on `slim2`. Commit `c57ab8c` updated the restart helper's TMPDIR selection; the preceding `8849e59` and uncommitted `f26027a` records describe earlier development, not outstanding changes. Following these tests, the maintainer synchronized `q552u01`, pushed the evidence and originals, and accepted Step 1.6; the task branch was inspected at `65e4e6be1af7eb94a472f86c08372874e5236b43` for this documentation pass. No source was changed in order to obtain the native test observations.
 
 ## 1. Host and build boundary
 
@@ -113,13 +113,40 @@ Two disposable managed local Konsoles (`-L 2 konsole local btop`) exercised actu
 | Local SSH process exit vs remote tmux persistence; RDP/VNC worker lifecycle | Application windows closed in positive sweep; independent worker/remote checks not captured | **Separate lifecycle coverage limitation** |
 | Test harness portability to `noexec` `/tmp` | Workaround and clean rerun passed; `c57ab8c` fixes helper TMPDIR setting | **Host-specific fixture hazard resolved for operator workflow; optional further test-harness fail-fast hardening** |
 
-**Disposition recommendation:** Step 1.6's principal implementation is ready for **maintainer acceptance review**; no coding blocker has been demonstrated. For strict compliance with every live-case item in `native/managed-close/README.md`, the untested live X11 unsupported-WM_DELETE / stale-XID fence and mid-transaction frontend-loss cases remain **evidence gaps**, not evidence of bugs. The maintainer may either perform a bounded controlled-fixture check or explicitly record acceptance with those risks understood; do not silently mark unrun native cases passed. No speculative refactor, new stage, Portage update, or additional Codex round is justified by current output.
+**Disposition (maintainer decision, 2026-11-18):** Step 1.6 is **accepted**. No coding blocker was demonstrated. For strict compliance with every live-case item in `native/managed-close/README.md`, the untested live X11 unsupported-WM_DELETE / stale-XID fence and mid-transaction frontend-loss cases remain **evidence gaps**, not evidence of bugs. These remain recorded evidence limitations accepted for this milestone, not tests that have passed; any later real defect warrants a narrow corrective investigation. No speculative refactor, new stage, Portage update, or additional Codex round is justified by current output.
 
-## 5. Git synchronization and next operator
+## 5. Maintainer acceptance and provenance
 
-- Remote `origin/task/joetoo-kwin-step1.6-managed-close`: `c57ab8c` (verified via GitHub compare, 2026-11-18).
-- `slim2`: `c57ab8c`, tracking origin (maintainer `git br -vv` output).
-- `q552u01`: `8849e59`, branch shows **no upstream tracking** in `git br -vv`; one published commit behind, assuming clean worktree. This is **not a merge conflict** or code failure; normal fast-forward synchronization is sufficient.
-- Documentation/evidence from this review is **drafted for maintainer application and diff review**, not committed/pushed by the cloud agent. Maintainer controls acceptance, source publication and merge; `joetoo`/`joetoo-upstream` are not changed.
+The maintainer accepted Step 1.6 on **2026-11-18** and reported synchronizing
+`q552u01` with the published task branch and pushing subsequent documentation
+and evidence updates. The earlier pre-sync `8849e59` versus `c57ab8c`
+comparison in this test record is historical, not outstanding Git work.
+The task-branch revision inspected for this documentation update is
+`65e4e6be1af7eb94a472f86c08372874e5236b43`. Acceptance does not
+assert that the task-branch PR has been opened or merged. See
+[HANDOFF.md](HANDOFF.md) for the publication next action. The unverified
+live-compositor safety edges in Section 4 remain explicitly documented,
+without changing the maintainer's acceptance decision.
 
-For the maintainer: verify `git status -sb` on q552u01; if clean, `git fetch origin`, `git merge --ff-only origin/task/joetoo-kwin-step1.6-managed-close`, then set upstream if desired. Apply the reviewed documentation patch, inspect `git diff --check` and diff, make the acceptance decision, then authorize/perform publication under normal workflow.
+## 6. Supporting originals (maintainer-published)
+
+The operator preserved primary captured material in this task directory:
+
+- [Regression and OpenRC restart log](supporting-originals/slim2-2026-11-18-restart-regression.log)
+  — source for the clean 1,016 Python / 163 JavaScript rerun, installer paths
+  and broker restart. The earlier contaminated `/tmp` results are contextual,
+  not replacement test evidence.
+- [15-window launch log](supporting-originals/slim2-2026-11-18-15-window-launch.log)
+  — source for the configured native-X11 multi-desktop launch and layout result.
+- [Konsole confirmation dialog and timeout](supporting-originals/image%2820261118-211052%29.png)
+  — visual evidence for the self-terminal `-d` refusal/deferred-close path.
+- [Desktop after operator accepted Konsole's close dialog](supporting-originals/image%2820261118-211137%29.png)
+  — evidence of subsequent voluntary window disappearance, not a prior verified
+  broker success.
+- [Konsole after operator canceled its close dialog](supporting-originals/image%2820261118-211458%29.png)
+  — native `not_closed_timeout` with retained registration.
+
+The screenshots supplement the command results; they do not by themselves
+prove KWin's native lifetime fence, remote SSH authentication, or SSH/RDP/VNC
+worker cleanup. The primary typed close/sweep JSON, including request
+`0073db0a81794860bda46995edb4ce26`, is preserved in Section 2 above.

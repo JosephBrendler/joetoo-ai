@@ -8,31 +8,28 @@ including managed-operation requirements.
 
 ## Current status — November 18, 2026
 
-**Step 1.5 is complete and archived.** Managed configured RDP and its five
-increments were accepted/merged in [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29);
-single-window launch and inventory in [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30);
-and archive/init in [PR #31](https://github.com/JosephBrendler/joetoo-ai/pull/31)
-(`cdcdc9e`).
+**Step 1.5 is accepted and archived** (RDP [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29),
+`-L` and `-l` [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30),
+archive transition [PR #31](https://github.com/JosephBrendler/joetoo-ai/pull/31)).
 
-**Step 1.6 is implemented on the published task branch `c57ab8c` and is
-ready for maintainer acceptance review, not yet formally accepted/merged.**
-`-d MANAGED_ID` retains the registration/slot after verified graceful close;
-confirmed fixed-set `-x` **progressively retires verified absences and verified
-closes**, without force killing or restart of the broker. Core behavior passed
-both q552u01 Wayland/XWayland (**9/9 records retired**) and slim2 native X11
-(**16/16 records retired**) with immediate empty inventory, queryable retained
-history and real Konsole refusal/timeout observations. The native X11 helper
-uses a KWin 6.7.6-specific installed effect. See the
-[active HANDOFF](task_step1.6/HANDOFF.md),
-[task index](task_step1.6/README.md), and
-[2026-11-18 slim2 evidence](task_step1.6/step1.6-slim2-native-x11-evidence-2026-11-18.md).
+**Step 1.6 was ACCEPTED by the maintainer on 2026-11-18** on branch
+`task/joetoo-kwin-step1.6-managed-close`, inspected at `65e4e6be`.
+`-d MANAGED_ID` gracefully closes only the authenticated managed window and
+**retains** its registration/slot; confirmed `-x` **progressively retires**
+authenticated missing windows and verified graceful closes, without force
+killing or restarting the broker. Native evidence: q552u01 Wayland/XWayland
+9/9 retired, slim2 X11 16/16 retired and empty `-l`, real refusal/timeouts
+without forced close, declined operations unchanged, 1,016 Python and 163
+JavaScript tests passing on each tested host. The maintainer accepted with
+explicitly documented, nonblocking live-edge coverage limits.
 
-**Disposition:** No demonstrated code blocker. Strict live X11
-unsupported-`WM_DELETE_WINDOW`/stale-XID race proof and some independent
-client-worker/frontend-loss checks remain unverified; headless safety tests
-exist. The maintainer decides whether to accept with those limitations or
-run a narrow live fixture. Publication/merge and q552u01 fast-forward remain
-separate maintainer workflow steps. No additional development stage is implied.
+**Next:** review and publish the Step 1.6 PR against `main`; acceptance does
+not mean the PR has been merged or an ebuild published. Future version 1 scope
+is the proposed unified **Step 1.7–1.8 recovery and last-good snapshot**
+workstream (two distinct artifacts); Step 1.9 packaging follows. See
+[accepted HANDOFF](task_step1.6/HANDOFF.md), [Step 1.6 evidence](task_step1.6/README.md),
+[architecture](ARCHITECTURE.md) and the consolidated
+[Version 2 Considerations](ARCHITECTURE.md#12-version-2-considerations).
 
 | Completed capability | Accepted outcome / evidence |
 | --- | --- |
@@ -58,29 +55,13 @@ built-in defaults remain `/sec:nla` and `/cert:deny`.
 
 ### Completed development evidence
 
-| Gate | Delivered capability | Evidence |
-| --- | --- | --- |
-| 1.2a–1.3b | OpenRC user broker, resident KWin lifecycle, observation, PID/UUID correlation | [Archive](archive/README.md), [PR #16](https://github.com/JosephBrendler/joetoo-ai/pull/16), [PR #17](https://github.com/JosephBrendler/joetoo-ai/pull/17) |
-| 1.4a–1.4d | Managed registry, UUID-based reconciliation, public read-only queries and multiwindow placement | [Step 1.4 closure](archive/step1.4/HANDOFF.md), PRs #19–#22 |
-| 1.5a | Configurable planner/shared geometry, colorized descriptive `-c` | [Step 1.5 history](archive/task_step1.5/HANDOFF.md), PR #23 |
-| 1.5b | Interactive `-m` operands, independent preservation, native X11/Wayland acceptance | [Step 1.5 history](archive/task_step1.5/HANDOFF.md), PR #24 |
-| 1.5c.1–1.5c.3 | Confirmation before launch, safe coordinated managed slots and original Bash/SSH placeholders | [Step 1.5 history](archive/task_step1.5/HANDOFF.md), PR #25 |
-| 1.5c.4 | KWin desktop capacity, Dolphin local, application-independent layers, group finalization, bounded initial stack/focus, XDG discovery | [Native closure](archive/task_step1.5/step1.5c4-native-acceptance.md), [audit](archive/task_step1.5/step1.5c4-review.md) |
-| 1.5d | `-l` list managed windows, `-L` launch one window | [step 1.5 history](archive/task_step1.5/)
-
-The maintainer ran **287 Python tests and 50 JavaScript tests** on
-`q552u01` at tested baseline `a3c50fc`; syntax and lint checks also passed.
-Native graphical-layer tests passed on `gmki91` (KWin X11) and `q552u01`
-(KWin Wayland), including mixed panel/under/over stacks, four panels plus an
-underlay, independent desktop-group finalization, inactive-desktop focus
-suppression, and displayed-desktop focus verification (X11 bounded delayed
-observation, Wayland immediate observation). On Wayland, 21 initial windows
-were positively registered/placed; a further SSH Konsole on desktop 9 was
-registered as `win-022`. Manual move/resize/raise persisted across desktop
-switches, duplicate slots rejected, and SSH logout returned to the **original
-local Bash** in the same managed Konsole. These were maintainer-executed
-native tests, not AI-run host operations. They are not universal timing or
-multi-monitor guarantees.
+Step 1.1–1.4 and 1.5's accepted capabilities, detailed test counts,
+intermediate corrections and native limitations are documented in the
+[Step 1.4 closure](archive/step1.4/HANDOFF.md),
+[Step 1.5 archive](archive/task_step1.5/README.md),
+[Step 1.5d native acceptance](archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md),
+and [Step 1.6 evidence](task_step1.6/README.md).
+Those historical materials remain primary evidence, not active instructions.
 
 ## Accepted configuration and lifecycle baseline
 
@@ -113,35 +94,21 @@ the per-run plan without suppressing defaults. Otherwise the XDG user
 for validation and optional profile selection. OpenRC service configuration
 remains separate.
 
-## Historical application-evaluation inventory
+## Future application evaluation
 
-The maintainer reported the following **installed on `gmki91`** (November 1,
-2026); the corresponding `q552u01` installation and real launch behavior
-must be verified independently. These are evaluation inputs, not verified
-managed-launch implementations.
-
-| Candidate | Reported installed version | Evaluation role |
-| --- | --- | --- |
-| QTerminal | 2.4.0 | Alternative terminal launch, shell and process/window identity |
-| Krusader | 2.9.0 | Local/remote dual-pane graphical file management |
-| FileZilla | 3.70.6 | SFTP/FTP GUI behavior and identity/delegation |
-| Nautilus | 49.6-r1 | GNOME file navigation and remote URI support |
-| Nemo | 6.6.4 | Cinnamon file navigation, Wayland behavior |
-| KRDC | 26.04.3 (`rdp`, `ssh`, `vnc`, `wayland` USE enabled) | RDP/VNC client evaluated during feasibility; possible separately authorized managed integration |
-| Midnight Commander (`mc`) | 4.8.33 (`-sftp`) | **Text-mode** file manager; assess utility through a managed terminal, not as a separate KWin GUI |
-
-The subsequent RDP comparison included KRDC, Remmina, `xfreerdp` and SDL
-FreeRDP; see the [GNOME interoperability study](archive/task_step1.5/README_gnome_remote_desktop.md)
-and [feasibility record](archive/task_step1.5/HANDOFF.md). Installed candidates are not
-automatically managed capabilities. Each future integration needs its own
-launch, identity, lifecycle and security contract; TigerVNC remains fully supported.
+Additional clients such as KRDC, Remmina, QTerminal, alternative file managers
+and terminal-hosted `mc` are **not currently supported managed launch recipes**
+merely because they were installed or considered. The reported historical
+candidate inventory and unresolved choices are consolidated in
+[Version 2 Considerations](ARCHITECTURE.md#12-version-2-considerations).
+Prior comparisons remain in the [Step 1.5 archive](archive/task_step1.5/README.md).
 
 ## Development and validation platforms
 
 | Host | Current maintainer-designated role | Native KWin backend |
 | --- | --- | --- |
-| `q552u01` | Initial Step 1.6 development/acceptance host | Wayland |
-| `slim2` | Subsequent native X11 testing | X11 |
+| `q552u01` | Step 1.6 native acceptance completed | Wayland/XWayland |
+| `slim2` | Step 1.6 native acceptance completed | X11 |
 | `gmki91` | Additional native X11 validation | X11 |
 
 These roles do not authorize native execution. Step 1.5d's `iota01` Wayland
