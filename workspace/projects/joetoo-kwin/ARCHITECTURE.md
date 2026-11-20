@@ -4,8 +4,9 @@ This is the project-specific design record for `joetoo-ai/workspace/projects/joe
 It distinguishes accepted requirements, implemented and accepted contracts, proposed
 future capabilities, and open design questions. The [project README](README.md)
 records current implementation status. The [accepted Step 1.6 archive](archive/task_step1.6/README.md)
-preserves its merged result and evidence. The [active Step 1.7 handoff](task_1.7/HANDOFF.md)
-tracks the combined recovery and snapshot workstream, while [Step 1.5c.4 native closure](archive/task_step1.5/step1.5c4-native-acceptance.md)
+and [Step 1.7 archive](archive/task_step1.7/README.md) preserve their merged
+results and evidence. The [active Step 1.9 HANDOFF](task_1.9/HANDOFF.md)
+tracks version 1 packaging/integration; [Step 1.5c.4 native closure](archive/task_step1.5/step1.5c4-native-acceptance.md)
 and other task evidence retain the earlier acceptance history.
 
 Repository-root, workspace and project `AGENTS.md` instructions govern AI collaboration.
@@ -50,9 +51,9 @@ contracts. Additive, specifically approved methods may extend this interface.
 clients, close their windows, or relaunch them as a side effect. The resident
 and broker shall synchronize a complete observed-window inventory on startup
 and reconnection without adopting observations as managed windows. The manual
-`joetoo_bridge_observe` shortcut remains diagnostic. Durable registry
-reconstruction is part of the combined Step 1.7 recovery/snapshot workstream,
-not an assertion about current support.
+`joetoo_bridge_observe` shortcut remains diagnostic. Private same-session
+checkpoint/reconciliation is implemented and accepted in Step 1.7; this does
+not authorize adoption of stale identities after a new KWin session.
 The CLI must not invoke root-level SSH or require root for GUI management.
 
 **Configuration discovery (accepted and implemented):** Explicit `-f FILE`
@@ -265,10 +266,10 @@ geometry after a manual change.
 
 Actual API representations and transitions follow the implemented registry;
 these are architectural dimensions, not a requirement for a new general
-state-machine framework. Broker-lifetime IDs and same-session checkpoint
-recovery remain distinct until the proposed Step 1.7–1.8 workstream. A window may support multiple
-application sessions over its life; generalized transport telemetry was not
-implemented by Step 1.5c.4.
+state-machine framework. Broker-lifetime IDs and the accepted Step 1.7
+same-session checkpoint/recovery remain distinct from fresh-instance restore.
+A window may support multiple application sessions over its life; generalized
+transport telemetry was not implemented by Step 1.5c.4.
 
 ## 6. Shared geometry, layers and visibility
 
@@ -337,65 +338,69 @@ ownership or transaction ambiguity stops further submissions. Preserve
 already created windows and report partial success; do not automatically roll
 back. Layout completeness means positively registered and placed requested
 windows regardless of SSH connection availability. An unregistered or unplaced
-required window makes the layout incomplete. Future `-r` creates new
+required window makes the layout incomplete. Step 1.7 `-r` creates new
 connections/windows; it cannot revive old SSH processes. Application
 connection and window management remain independent.
 
 ## 8. Recovery and restorable layout (combined version 1 Step 1.7)
 
-**Accepted scope organization; not yet implemented.** The maintainer agreed
-to combine the formerly separate Steps 1.7 and 1.8 into one Step 1.7
-recovery/snapshot milestone. The two responsibilities retain **distinct data
-representations, trust requirements and verification**, not separate delivery
-gates. This documentation transition does not authorize implementation. See
-the [active Step 1.7 HANDOFF](task_1.7/HANDOFF.md) for current next actions.
+**ACCEPTED AND MERGED (2026-11-19, [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33),
+`df118da`).** The maintainer combined the formerly separate Steps 1.7 and 1.8
+into one delivered recovery/snapshot milestone. The two responsibilities retain
+**distinct data representations, trust and verification contracts**. See the
+[Step 1.7 archive](archive/task_step1.7/README.md),
+[formal acceptance](archive/task_step1.7/step1.7-maintainer-acceptance-2026-11-19.md)
+and [PR #33 merge closure](archive/task_step1.7/step1.7-pr33-merge-closure-2026-11-19.md).
 
 ### 8.1 Private same-session checkpoint and reconciliation
 
-Broker memory remains authoritative while the broker runs. A private, atomically
-replaced runtime checkpoint at
-`$XDG_RUNTIME_DIR/joetoo-kwin/managed-windows.json` may contain validated
-managed IDs, UUIDs, desktop/slot reservations, result metadata, and compositor
-session/source identity. It must be user-private, exclude credentials, and
-never turn a stale PID/UUID into destructive authority.
+Broker memory remains authoritative while the broker runs. The private,
+atomically replaced runtime checkpoint at
+`$XDG_RUNTIME_DIR/joetoo-kwin/managed-windows.json` stores validated
+managed identities, desktop/slot reservations and bounded last-known metadata
+for same-session reconciliation. It excludes credentials; historical PIDs,
+UUIDs and observations never become standalone destructive authority.
 
 On broker restart **within the same still-running KWin session**, reconcile
 against the current authenticated compositor/source and exact live UUIDs.
-Reconstruct only what can be proved; unresolved or missing identity is retained
-as uncertain/non-destructive, never treated as a new managed window. Neither
-broker stop nor checkpoint replay may close or relaunch application windows.
-A reboot/new KWin session is not a valid old-UUID recovery target.
+Reconstruct only what current authenticated evidence proves; missing or
+uncertain identities are retained non-destructively, never adopted as new
+managed windows. Neither broker stop nor checkpoint replay closes or relaunches
+application windows. A reboot/new KWin session is not an old-UUID recovery
+target; any later restore uses fresh instances through `-r`.
 
 ### 8.2 Durable last-good launch plan and fresh-instance restore
 
-A separate trusted Bash configuration snapshot is proposed at
-`${XDG_STATE_HOME:-$HOME/.local/state}/joetoo-kwin/last-session.conf`. It
-represents *desired launch intent*, validated recipes, and explicitly selected
-layout/policy values, **not** the prior broker's UUIDs, PIDs, active connections,
-or credentials. Write it atomically, with suitable file ownership and
-permissions. Partial, failed or empty states must not silently overwrite a
-valid last-good snapshot; `-d` and `-x` do not implicitly save or erase it.
+The separate durable last-good store uses
+`${XDG_STATE_HOME:-$HOME/.local/state}/joetoo-kwin/last-session.conf` as a
+relative pointer to immutable timestamped snapshot files. Protocol 2 saves
+normalized *launch intent*: verified managed recipes and shared effective
+settings, **not** old UUIDs, PIDs, active connections, credentials or
+operator-adjusted window geometry. Private modes, atomic publication and
+configurable history retention protect the store. Legacy protocol-1 snapshots
+remain readable/migratable. Partial, failed or empty arrangements cannot
+silently replace last-good; `-d` and `-x` do not save or erase it.
 
-`-S` explicitly exports a chosen arrangement after validation of actual
-current geometry and source; `-r` loads the durable plan through the normal
-preflight/confirmation/launch path and creates **new** windows, identifiers
-and remote connections. An unreachable SSH endpoint with a successfully placed
-placeholder can remain a valid recipe; runtime transport success is distinct
-from layout validity. Re-running the plan cannot revive an old remote process.
+`-S` explicitly exports a complete, authenticated, positively registered and
+placed managed arrangement, refusing incomplete/missing entries; it does not
+copy arbitrary unmanaged windows. `-r` validates the saved plan through the
+normal preflight, confirmation and launch path, creating **new** windows,
+identifiers and remote connections. A correctly placed unreachable-SSH
+placeholder may be an eligible recipe; transport success remains independent
+of layout validity. Restore never revives an old remote process.
 
-### Version 1 decisions to resolve before implementing this workstream
+### Accepted Step 1.7 boundary and evidence
 
-- What is the exact session/source proof and fail-closed reconciliation policy,
-  including broker restart while KWin changes or goes away?
-- What makes a launch snapshot *last-good*; what triggers advancement; and how
-  should operator-adjusted positions be represented and validated?
-- What is the `-S` selection syntax/permission model, and how does it avoid
-  exporting unrelated/unmanaged windows or secret connection material?
-- What are the small acceptance cases for both independent recovery modes:
-  same-session broker restart versus new-instance restore after logout/reboot?
+The delivered contract uses authenticated KWin source/UUID reconciliation for
+an unchanged session and complete managed launch recipes for new-instance
+restore. It refuses incomplete snapshots and occupied desktop/slot restores;
+manual frame adjustments are not promised by `-r`. The accepted native X11 and
+Wayland tests, including failed-save preservation and retained missing-record
+history, are documented in the [Step 1.7 archive](archive/task_step1.7/README.md).
+A fresh KWin session must never inherit destructive authority over old UUIDs.
 
-These are internal design questions for the combined version 1 delivery, **not**
-Version 2 deferrals. Step 1.9 packaging follows the accepted version 1 scope.
+Step 1.9 packaging is the next distinct version 1 workstream; these accepted
+Step 1.7 decisions are not Version 2 deferrals.
 
 ## 9. CLI contract (target; not all flags implemented)
 
@@ -414,8 +419,8 @@ Version 2 deferrals. Step 1.9 packaging follows the accepted version 1 scope.
 | `-d MANAGED_ID` | **Accepted 1.6:** confirmed graceful close of one authenticated managed window; record/slot retained |
 | `-l` | List broker-managed windows read-only, one record per fixed-width table row, including stable managed ID, desktop/slot, presence, placement and UUID (Step 1.5d) |
 | `-i MANAGED_ID`, `-s` | Additional detail/application-status interfaces, not implemented in Step 1.5d |
-| `-S` | Proposed version 1 recovery/snapshot workstream (1.7–1.8): validated export of reusable launch intent |
-| `-r` | Proposed version 1 recovery/snapshot workstream (1.7–1.8): restore by new instances |
+| `-S` | **Accepted Step 1.7:** export a complete verified managed arrangement as private last-good launch intent with timestamped history; refuse incomplete saves |
+| `-r` | **Accepted Step 1.7:** preflight and confirm restore of saved recipes as **new** managed instances, never adopting old UUIDs or PIDs |
 | `-f FILE` | Explicit configuration precedence, no implicit symlink edits |
 | `-v`, `-q` | Adjust verbosity using established joetoo CLI conventions |
 
@@ -512,8 +517,8 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5c.5d** | Managed SDL FreeRDP under configured `-o` | **ACCEPTED, CLOSED AND MERGED (2026-11-11, PR #29)**: exact UUID/placement/lifecycle on native X11/Wayland, layered configuration, bounded clean-failure continuation, strict `/sec:nla /cert:deny` defaults, successful trusted GDM connection and automatic invalid-certificate refusal with verified cleanup; see final Increment 5 evidence |
 | **1.5d** | Implement `-L` one-recipe single-window launch (`over` only; no reflow), retain read-only `-l` inventory; run integrated native X11/Wayland regression | **ACCEPTED, CLOSED AND MERGED (2026-11-12, PR #30)**: `-l` implemented; `-L` implemented under simplified scope, preserving field-specific validation, safe logical-slot reservation, exact-UUID placement, one-shot raise, existing-window geometry and accepted `-o` semantics |
 | **1.6** | Managed `-d`, `-x` | **ACCEPTED AND MERGED** (2026-11-18, [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32), `a6999e2`); [archived evidence](archive/task_step1.6/README.md) on Wayland/XWayland and native X11 |
-| **1.7 (includes former 1.8)** | Private same-session checkpoint/reconciliation **plus** durable `.conf` last-good snapshot, `-S`, `-r` | **Next version 1 milestone**; one delivery with two separate data/trust contracts; [active HANDOFF](task_1.7/HANDOFF.md); implementation not yet begun |
-| **1.9** | Packaging of the accepted optional `eselect` selector, installation/ebuild and complete integration | Maintainer-led joetoo/joetoo-upstream packaging, template guidance and version 1 lifecycle |
+| **1.7 (includes former 1.8)** | Private same-session checkpoint/reconciliation **plus** durable `.conf` last-good snapshot, `-S`, `-r` | **ACCEPTED AND MERGED** (2026-11-19, [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33), `df118da`); [archived Wayland/X11 evidence](archive/task_step1.7/README.md) |
+| **1.9** | Packaging of the accepted optional `eselect` selector, installation/ebuild and complete integration | **NEXT (kickoff/planning):** maintainer-led joetoo/joetoo-upstream packaging, templates and version 1 lifecycle; [active HANDOFF](task_1.9/HANDOFF.md) |
 
 ### Accepted remote-resource contract (Step 1.5; historical detail archived)
 
@@ -571,10 +576,10 @@ and qualifications are in [the archived Step 1.6 task](archive/task_step1.6/READ
 This section is the **single current holding place** for explicitly deferred
 or exploratory changes. These are **not** version 1 requirements, release
 blockers, or implicitly authorized development tasks. The accepted original
-decisions remain traceable in archived Step 1.5/1.6 evidence; historical files
-should not be rewritten to imply different past outcomes. Version 1 recovery
-and snapshot work (combined Step 1.7 (formerly 1.7–1.8)) and Step 1.9
-packaging are **not** deferred to Version 2.
+decisions remain traceable in archived Step 1.5/1.6/1.7 evidence; historical
+files should not be rewritten to imply different past outcomes. Accepted
+Step 1.7 recovery and snapshot work is complete; Step 1.9 packaging remains
+version 1 work, **not** deferred to Version 2.
 
 ### Settled deferrals and design principles
 

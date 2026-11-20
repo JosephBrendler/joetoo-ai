@@ -9,7 +9,7 @@ examples were not executed to write this manual. Replace `.example` endpoints
 with destinations you are authorized to contact. Never put passwords in recipes.
 
 [Configuration reference](configuration-reference.md) · [Architecture](../ARCHITECTURE.md)
-· [Step 1.7 results](../task_1.7/README.md) · [Broker source](../libexec/joetoo-kwind)
+· [Step 1.7 results](../archive/task_step1.7/README.md) · [Broker source](../libexec/joetoo-kwind)
 
 ## Part A — Concepts, installation and ordinary CLI use
 

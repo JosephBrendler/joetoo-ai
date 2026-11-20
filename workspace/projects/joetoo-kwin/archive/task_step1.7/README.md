@@ -1,12 +1,14 @@
 # Step 1.7 — Combined recovery and last-good snapshot
 
-**Status (2026-11-19): formally ACCEPTED by the maintainer; PR/merge not yet
-verified.** The combined Step 1.7 (former Steps 1.7 and 1.8) implementation
-at `33bbbee` passed native Wayland (`q552u01`) and X11 (`slim2`) review. The
-prior evidence/doc update was fast-forwarded to `2985113` on `q552u01`.
-See the [formal acceptance record](step1.7-maintainer-acceptance-2026-11-19.md),
-[current HANDOFF](HANDOFF.md) and
-[native validation summary](#native-validation-and-acceptance-review--2026-11-19).
+> **Archive closure (2026-11-19): FORMALLY ACCEPTED AND MERGED.**
+> The combined Step 1.7 (former Steps 1.7 and 1.8) implementation, native
+> Wayland (`q552u01`) and X11 (`slim2`) evidence, and formal acceptance were
+> merged via [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33)
+> to `main` at `df118da`; the task branch was deleted. See the
+> [merge closure record](step1.7-pr33-merge-closure-2026-11-19.md),
+> [formal acceptance](step1.7-maintainer-acceptance-2026-11-19.md), and
+> [archived HANDOFF](HANDOFF.md). The active task is
+> [Step 1.9 packaging](../../task_1.9/HANDOFF.md).
 
 ## What this milestone covers
 
@@ -22,18 +24,18 @@ independent of remote login. Avoid an additional generic lifecycle framework.
 
 ## Continuity and sources
 
-- [Architecture §8 and unresolved version 1 decisions](../ARCHITECTURE.md#8-recovery-and-restorable-layout-combined-version-1-step-17).
-- [Step 1.6 archived HANDOFF](../archive/task_step1.6/HANDOFF.md) and
-  [accepted task index](../archive/task_step1.6/README.md).
-- [Native X11 acceptance and original logs/screenshots](../archive/task_step1.6/step1.6-slim2-native-x11-evidence-2026-11-18.md).
-- [Wayland/XWayland progressive-sweep evidence](../archive/task_step1.6/step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md).
-- [Project README](../README.md), [project instructions](../AGENTS.md).
+- [Accepted architecture §8](../../ARCHITECTURE.md#8-recovery-and-restorable-layout-combined-version-1-step-17).
+- [Step 1.6 archived HANDOFF](../task_step1.6/HANDOFF.md) and
+  [accepted task index](../task_step1.6/README.md).
+- [Native X11 predecessor evidence](../task_step1.6/step1.6-slim2-native-x11-evidence-2026-11-18.md).
+- [Wayland/XWayland predecessor evidence](../task_step1.6/step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md).
+- [Project README](../../README.md), [project instructions](../../AGENTS.md).
 
 **Previous milestone:** Step 1.6 accepted and merged through
 [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32)
 (`a6999e2`). No additional Step 1.6 tests or implementation are prerequisites
 for starting the next *authorized* work. Step 1.9 packaging follows this
-version 1 objective; [Version 2](../ARCHITECTURE.md#12-version-2-considerations)
+version 1 objective; [Version 2](../../ARCHITECTURE.md#12-version-2-considerations)
 remains deferred.
 
 
@@ -205,7 +207,7 @@ The existing uncommitted candidate was preserved at local HEAD `f18fea2` on
   facts instead of crashing or inventing values. Geometry/caption-only updates
   do not write on each event; authoritative changes and clean broker shutdown
   persist last-known facts. They never substitute for fresh identity proof.
-- [The user manual](../docs/joetoo-kwin_user_manual.md): all implemented CLI
+- [The user manual](../../docs/joetoo-kwin_user_manual.md): all implemented CLI
   forms, configuration/profiles/recovery/history, practical examples and
   troubleshooting, every one of the 41 exposed bridge methods and all four
   native methods, with wire signatures and caller/state/use boundaries.
@@ -291,8 +293,9 @@ output](step1.7-maintainer-acceptance-2026-11-19.md).
 
 The implementation commit is `33bbbee`; the subsequent nine-file evidence
 update reached task-branch commit `2985113` (`git pull --ff-only` on `q552u01`).
-**Acceptance does not imply a PR or merge to `main`.** Next: review the final
-acceptance-documentation diff, reconcile stale project `README.md` and
-`ARCHITECTURE.md` status wording under separate approval, then complete
-PR/merge and task archival. Distinct Step 1.9 packaging follows; Version 2
-remains deferred. The [HANDOFF](HANDOFF.md) is the active dispatcher.
+Acceptance and merge were separate maintainer actions: both are now complete.
+The final [PR #33 merge record](step1.7-pr33-merge-closure-2026-11-19.md)
+confirms `main` at `df118da` and the deleted task branch. Project status and
+architecture language were reconciled in the documentation-only Step 1.7
+closure/Step 1.9 kickoff transition. Packaging proceeds under the distinct
+[Step 1.9 active HANDOFF](../../task_1.9/HANDOFF.md); Version 2 remains deferred.
