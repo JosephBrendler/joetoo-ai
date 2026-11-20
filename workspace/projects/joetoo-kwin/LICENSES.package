@@ -1,0 +1,20 @@
+# SPDX license text requirements for the joetoo-kwin source archive
+# Copyright 2026 Joseph Brendler
+#
+# tarup reads uncommented, nonblank lines as SPDX license identifiers,
+# copies their texts from joetoo-upstream/LICENSES/, and adds the root LICENSE.
+# joetoo_license_src_install later installs the staged texts in the ebuild.
+#
+# PROVISIONAL PROVENANCE REVIEW (2026-11-20): the reviewed joetoo-kwin
+# project software (CLI, Python, KWin C++ effect and protocol helper, resident
+# JS) carries SPDX-License-Identifier: GPL-3.0-or-later.
+# The eselect/joetoo-kwin.eselect module uses Gentoo's documented interface
+# and conventions. A source comparison with published Gentoo module examples
+# and joetoolkit's earlier selector showed those conventions but did not find
+# substantial matching copied implementation sequences. Its own SPDX remains
+# GPL-3.0-or-later; attribution acknowledges the Gentoo API and AI assistance.
+#
+# IMPORTANT: Review every file in the FINAL curated upstream distribution,
+# including any third-party or adapted code, before tarup. Add any additional
+# actually applicable SPDX identifiers; this is NOT a completed release audit.
+GPL-3.0-or-later
