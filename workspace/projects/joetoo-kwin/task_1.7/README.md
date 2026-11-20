@@ -1,12 +1,11 @@
 # Step 1.7 — Combined recovery and last-good snapshot
 
-**Status (2026-11-19): implementation complete as a candidate; native Wayland
-and X11 acceptance evidence collected; ready for an explicit maintainer
-acceptance decision, not yet accepted or merged.** Candidate commit `33bbbee`
-on `task/joetoo-kwin-step1.7-recovery-snapshot` was pushed from `q552u01`
-and fetched/verified on `slim2`. The former Steps **1.7** (same-session
-checkpoint) and **1.8** (durable layout) remain one delivery with separate data
-and trust contracts. See the [current HANDOFF](HANDOFF.md) and
+**Status (2026-11-19): formally ACCEPTED by the maintainer; PR/merge not yet
+verified.** The combined Step 1.7 (former Steps 1.7 and 1.8) implementation
+at `33bbbee` passed native Wayland (`q552u01`) and X11 (`slim2`) review. The
+prior evidence/doc update was fast-forwarded to `2985113` on `q552u01`.
+See the [formal acceptance record](step1.7-maintainer-acceptance-2026-11-19.md),
+[current HANDOFF](HANDOFF.md) and
 [native validation summary](#native-validation-and-acceptance-review--2026-11-19).
 
 ## What this milestone covers
@@ -283,11 +282,17 @@ succeeded; this is a startup-readiness UX item, not an observed lasting failure.
 No reboot/new-KWin-session adoption is claimed. Historical geometry is only
 informational and is never restored as live placement or close authority.
 
-**Acceptance decision:** The evidence supports accepting the combined Step
-1.7 implementation on both backends without another coding increment or
-repeating the RDP/VNC matrix. The maintainer must still explicitly accept or
-request the optional one-case declined-restore check, then separately approve
-PR/merge. Project `README.md` and `ARCHITECTURE.md` still contain outdated
-pre-implementation status text; reconcile it with maintainer approval in the
-acceptance/publication pass. Next milestone: maintainer-led Step 1.9 packaging;
-Version 2 remains deferred.
+**Formal maintainer acceptance — 2026-11-19:** Step 1.7 is **ACCEPTED**.
+The maintainer made that decision after the evidence above, including both
+native backends, complete-snapshot refusal and fresh-instance restore. The
+small coverage qualifications described above are recorded without reopening
+acceptance. See the [acceptance record and verbatim q552u01 fast-forward
+output](step1.7-maintainer-acceptance-2026-11-19.md).
+
+The implementation commit is `33bbbee`; the subsequent nine-file evidence
+update reached task-branch commit `2985113` (`git pull --ff-only` on `q552u01`).
+**Acceptance does not imply a PR or merge to `main`.** Next: review the final
+acceptance-documentation diff, reconcile stale project `README.md` and
+`ARCHITECTURE.md` status wording under separate approval, then complete
+PR/merge and task archival. Distinct Step 1.9 packaging follows; Version 2
+remains deferred. The [HANDOFF](HANDOFF.md) is the active dispatcher.
