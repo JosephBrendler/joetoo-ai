@@ -1,26 +1,27 @@
 # Step 1.7 — Recovery and last-good layout HANDOFF
 
-**Current status (2026-11-19): FORMALLY ACCEPTED by the maintainer;
-PR/merge not yet evidenced.** Combined Step 1.7 (including former Step 1.8)
-has passed its maintainer-run Wayland and X11 acceptance review. The acceptance
-decision, evidence-commit synchronization and remaining publication boundaries
-are recorded in the [formal acceptance evidence](step1.7-maintainer-acceptance-2026-11-19.md).
+> **Archive closure (2026-11-19): FORMALLY ACCEPTED AND MERGED into `main`**
+> through [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33),
+> merge commit `df118da`. The task branch was deleted locally/remotely;
+> this HANDOFF is historical, **not an active task dispatcher**. The current
+> task is [Step 1.9 packaging](../../task_1.9/HANDOFF.md). See the
+> [merge closure evidence](step1.7-pr33-merge-closure-2026-11-19.md).
 
 ## Source, scope and authority
 
 - Repository/project: `JosephBrendler/joetoo-ai`, `workspace/projects/joetoo-kwin/`.
-- Branch: `task/joetoo-kwin-step1.7-recovery-snapshot`.
+- Historical branch: `task/joetoo-kwin-step1.7-recovery-snapshot` (deleted after merge).
+- Integrated baseline: `main` at `df118da`, [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33).
 - Accepted implementation commit: `33bbbee03a5effbf1c4c31b5600254ab28374510`
   (`joetoo-kwin: Step 1.7 recovery and snapshot history candidate`), signed-off
   and signed by the maintainer, tested on `q552u01` and `slim2`. Starting
   baseline was `f18fea2`, after accepted Step 1.6
   [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32).
 - Evidence/documentation commit: `2985113`, fast-forwarded on `q552u01` from
-  `33bbbee` by `git pull --ff-only` (maintainer output); this is a task-branch
-  commit, **not** evidence of a PR merge. See the
-  [acceptance record](step1.7-maintainer-acceptance-2026-11-19.md).
+  `33bbbee` by `git pull --ff-only`; the later PR #33 merge is separately
+  evidenced in the [closure record](step1.7-pr33-merge-closure-2026-11-19.md).
 - Governing instructions: repository root, `workspace/`, project `AGENTS.md`
-  and [architecture §8](../ARCHITECTURE.md#8-recovery-and-restorable-layout-combined-version-1-step-17).
+  and [architecture §8](../../ARCHITECTURE.md#8-recovery-and-restorable-layout-combined-version-1-step-17).
 - This HANDOFF records work and decisions; it grants no further native,
   publication, merge, packaging or protected-repository authority.
 
@@ -71,26 +72,17 @@ are recorded in the [formal acceptance evidence](step1.7-maintainer-acceptance-2
   synchronized inventory. It is a startup-readiness/diagnostic UX observation,
   not a proven recovery failure and not a reason to reset checkpoints.
 
-## Next actor and concrete next steps
+## Closure and next task
 
-**Next actor: maintainer — close and publish the already-accepted Step 1.7.**
+**Step 1.7 has no remaining implementation, test, acceptance or merge gate.**
+The maintainer accepted its documented X11/Wayland coverage qualifications.
+PR #33 was merged, the remote/local task branch deleted and `q552u01` updated
+to `main` at `df118da`; see the [merge record](step1.7-pr33-merge-closure-2026-11-19.md).
 
-1. Review and integrate this focused acceptance-documentation update. The
-   maintainer has already decided acceptance; no further Step 1.7 code or
-   native tests are required by that decision. The untested X11 declined-`-r`
-   case and incomplete native-effect introspection remain documented coverage
-   qualifications, not acceptance blockers.
-2. Reconcile the stale **project-level** `README.md` and `ARCHITECTURE.md`
-   pre-implementation language to show Step 1.7 accepted, in a separately
-   reviewed/authorized project-documentation change. Do not alter historical
-   requirements or treat acceptance as evidence of a merge.
-3. Verify whether a Step 1.7 PR already exists; if not, create/review one.
-   Obtain separate publication/merge authorization, merge to `main`, verify
-   the actual merge commit, and archive the task through the normal workflow.
-   Neither `33bbbee` nor evidence commit `2985113` proves a merge.
-4. Start the distinct, maintainer-led **Step 1.9 packaging** workstream from
-   the accepted/merged baseline when authorized. Version 2 and a full RDP/VNC
-   retest are not Step 1.7 closure requirements.
+**Next actor: maintainer**, to review the documentation-only archive/kickoff
+transition and authorize the separate [Step 1.9 packaging task](../../task_1.9/HANDOFF.md).
+The version 1 packaging work is not an extension of Step 1.7, and neither
+Version 2 features nor a full RDP/VNC retest are closure prerequisites.
 
 **Operational reminder:** The X11 test ended after fresh `win-003`/`win-004`
 were launched; no subsequent cleanup was shown. Only the maintainer should

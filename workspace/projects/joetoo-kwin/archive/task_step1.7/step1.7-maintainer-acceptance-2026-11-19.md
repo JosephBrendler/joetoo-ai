@@ -1,5 +1,12 @@
 # Step 1.7 — formal maintainer acceptance and evidence synchronization
 
+> **Post-acceptance publication (2026-11-19):** The previously accepted Step
+> 1.7 was subsequently merged into `main` by
+> [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33) at `df118da`.
+> The local and remote task branches were deleted. See the
+> [separate merge record](step1.7-pr33-merge-closure-2026-11-19.md).
+> The chronological pre-merge statements below describe the time of acceptance.
+
 **Decision date:** 2026-11-19. **Decision maker:** project maintainer.
 **Decision:** **Step 1.7 formally accepted.** The former Step 1.8 durable
 layout work is included in the accepted combined Step 1.7 milestone. This is

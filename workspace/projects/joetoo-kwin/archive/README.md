@@ -46,6 +46,6 @@ as evidence, not rewritten into current instructions. Maintainer-run commands
 or external configuration symlinks referring to `task_step1.5/` may need an
 explicit path adjustment; this transition does not modify user profiles.
 
-Current work is indexed by the [Step 1.7 HANDOFF](../task_1.7/HANDOFF.md)
-and [task README](../task_1.7/README.md). Archived records are historical,
-not active permission or instructions.
+Current work is indexed by the [Step 1.9 HANDOFF](../task_1.9/HANDOFF.md)
+and [task README](../task_1.9/README.md). [Step 1.7](task_step1.7/README.md)
+is accepted/merged and archived; archival records are not active permission.

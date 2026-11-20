@@ -1,6 +1,6 @@
 # Step 1.6 — Managed operations HANDOFF (accepted)
 
-> **Archive closure (2026-11-18):** Step 1.6 was accepted and merged into `main` by [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32) (`a6999e2`). This document preserves its historical stage and may refer to then-pending publication or authorization; the current work is [Step 1.7](../../task_1.7/HANDOFF.md).
+> **Archive closure (2026-11-18):** Step 1.6 was accepted and merged into `main` by [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32) (`a6999e2`). This document preserves its historical stage and may refer to then-pending publication or authorization. Step 1.7 is [also archived](../task_step1.7/README.md); current work is [Step 1.9](../../task_1.9/HANDOFF.md).
 
 **Status (2026-11-18): ACCEPTED by the maintainer.** The implementation and its
 principal native validation are complete. This is the accepted Step 1.6 scope,
