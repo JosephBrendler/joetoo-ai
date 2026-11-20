@@ -1,82 +1,88 @@
 # Step 1.7 — Recovery and last-good layout HANDOFF
 
-**Current status (2026-11-18):** This is the **next version 1 milestone**.
-The maintainer accepted and merged Step 1.6 through
-[PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32)
-(`a6999e2`) and agreed to combine the previously separate Steps **1.7 and
-1.8** into **one Step 1.7 recovery/snapshot delivery**. The two underlying
-contracts remain distinct. **Implementation has not yet been authorized or
-reported as started.**
+**Current status (2026-11-19): Ready for maintainer acceptance decision;
+NOT yet recorded as accepted or merged.** The combined Step 1.7 (including
+former Step 1.8) candidate is implemented, committed and pushed to the existing
+task branch. The maintainer completed substantive native validation on both
+Wayland (`q552u01`) and X11 (`slim2`). No demonstrated Step 1.7 code defect
+remains in the supplied test evidence. [Detailed disposition](README.md#native-validation-and-acceptance-review--2026-11-19).
 
-## Source and authority
+## Source, scope and authority
 
 - Repository/project: `JosephBrendler/joetoo-ai`, `workspace/projects/joetoo-kwin/`.
-- Accepted starting point: `main` at PR #32 merge `a6999e2`; recheck actual
-  HEAD/worktree before starting a future task branch.
-- Governing instructions: repository root, `workspace/` and project
-  `AGENTS.md`; current [architecture](../ARCHITECTURE.md#8-recovery-and-restorable-layout-combined-version-1-step-17).
-- Accepted predecessor: [archived Step 1.6 HANDOFF](../archive/task_step1.6/HANDOFF.md),
-  [task README](../archive/task_step1.6/README.md),
-  [native X11 evidence](../archive/task_step1.6/step1.6-slim2-native-x11-evidence-2026-11-18.md)
-  and [Wayland/XWayland sweep](../archive/task_step1.6/step1.6-progressive-sweep-implementation-native-evidence-2026-11-16.md).
-- This HANDOFF is a planning/continuity record, **not** permission to edit code,
-  run native tests, deploy, publish or change protected repositories.
+- Branch: `task/joetoo-kwin-step1.7-recovery-snapshot`.
+- Candidate HEAD: `33bbbee03a5effbf1c4c31b5600254ab28374510`
+  (`joetoo-kwin: Step 1.7 recovery and snapshot history candidate`), signed-off
+  and signed by the maintainer, pushed from `q552u01`, fetched and verified
+  identical on `slim2`. Starting baseline was `f18fea2`, after accepted Step 1.6
+  [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32).
+- Governing instructions: repository root, `workspace/`, project `AGENTS.md`
+  and [architecture §8](../ARCHITECTURE.md#8-recovery-and-restorable-layout-combined-version-1-step-17).
+- This HANDOFF records work and decisions; it grants no further native,
+  publication, merge, packaging or protected-repository authority.
 
-## Objective — one delivery, two bounded responsibilities
+## Delivered contract (one milestone; two distinct data/trust boundaries)
 
-**A. Private same-session checkpoint/reconciliation.** Allow a broker restart
-inside an unchanged KWin session to recover only authenticated, still-live
-managed UUIDs and their logical reservations. Keep broker memory authoritative
-while running. Checkpoint privately/atomically; verify source/session and exact
-UUID on replay; unknown or changed identity must be non-destructive. Broker
-stop/restart must neither close nor automatically relaunch applications.
+1. **Same-KWin-session checkpoint:** private atomic runtime checkpoint and
+   authenticated reconciliation of existing exact managed UUIDs, desktop/slot
+   reservations and diagnostic last-known observations. Broker restarts neither
+   close nor relaunch applications; unproven or missing records remain
+   non-destructive. Historical frames never confer fresh ownership or restore
+   operator-adjusted geometry.
+2. **Durable last-good snapshot:** `-S` saves complete authorized launch intent,
+   not PIDs/UUIDs/credentials, as timestamped private history, with an atomic
+   relative `last-session.conf` symlink, configurable pruning and legacy
+   protocol-1 read/migration. Protocol 2 holds common settings once. `-r`
+   validates the latest plan and, after the normal confirmation, launches
+   **new** identities using the ordinary planner. `-d` and `-x` do not erase
+   last-good. These responsibilities must not be conflated.
 
-**B. Durable last-good launch intent.** Maintain a separate validated `.conf`
-that describes selected launch recipes and layout without reusing old PIDs,
-UUIDs, ephemeral process/connection state or secrets. `-S` exports an authorized
-selection; `-r` performs ordinary validated, confirmed launches of **new**
-instances after a logout/reboot or explicit restore. Failed or empty activity
-must not silently replace last-good state. `-d` / `-x` must not erase it.
+## Maintainer-run evidence and assessment
 
-These artifacts **must not be conflated**: the runtime checkpoint is a
-same-session identity aid, not a reboot restore recipe; the durable plan is
-launch intent, not authority to adopt or close an existing window.
+- [q552u01 Wayland native evidence](step1.7-q552u01-native-evidence-2026-11-19.md):
+  incomplete save refused; legacy regular-file migration byte-for-byte;
+  timestamp collisions avoided; history pruning and modes; protocol 2;
+  occupied-slot refusal; missing-record full observation survived broker-only
+  restart with `diff` result 0; symlink/history unchanged after failed save.
+- [slim2 X11 native evidence](step1.7-slim2-native-x11-evidence-2026-11-19.md):
+  two-window launch; broker-only restart preserved exact IDs/UUIDs and same KWin
+  owner; X11 verified close; missing record and observation survived restart;
+  failed save preserved latest; `-x` retired; `-r` launched two new instances.
+- [q552u01 refined headless transcript](step1.7-q552u01-refined-headless-console-2026-11-19.txt):
+  79 focused Python PASS, 1080 full Python PASS, 163 JavaScript PASS. One
+  combined ShellCheck invocation was `Killed`; all four files subsequently
+  passed individual `validate_scripts` checks. Original console logs are
+  linked from each evidence record. These are **operator-run**, not agent-run.
+- X11 `-r` **decline** was not demonstrated in the refined X11 transcript;
+  confirmed `-r` passed, and the previous Wayland candidate's declined flow
+  was maintainer-reported. Native-effect introspection/owner equality was not
+  independently completed in this X11 run, although exact verified X11 close
+  passed. Neither is a demonstrated defect or necessarily a blocking retest.
+- An immediate post-OpenRC-start introspection sometimes preceded D-Bus
+  registration; bounded polling subsequently showed `recovery: ready` and
+  synchronized inventory. It is a startup-readiness/diagnostic UX observation,
+  not a proven recovery failure and not a reason to reset checkpoints.
 
-## Next actor and decisions before coding
+## Next actor and concrete next steps
 
-**Next actor: maintainer**, reviewing the four focused open design questions in
-[Architecture §8](../ARCHITECTURE.md#version-1-decisions-to-resolve-before-implementing-this-workstream):
+**Next actor: maintainer — explicit Step 1.7 acceptance decision.**
 
-1. Which broker/KWin session and source proof is sufficient for conservative
-   same-session reconciliation, particularly when a restart races with KWin exit?
-2. When does a desired arrangement become **last-good**, including partial
-   runs, unreachable SSH placeholders and manually adjusted geometry?
-3. What exact selection/permission contract should `-S` provide, and how are
-   unmanaged windows, credentials and accidental overwrite excluded?
-4. What is the minimal same-session-restart versus new-instance-restore
-   acceptance matrix on native X11 and Wayland/XWayland?
+1. Review the two native evidence records and their complete logs. Decide
+   whether the small untested X11 declined-restore branch needs another check
+   or can be accepted under existing confirmation coverage. No additional
+   implementation milestone or large test matrix is supported by these results.
+2. If satisfied, **record maintainer acceptance** in task status/evidence and
+   reconcile the stale Step 1.7 “not yet implemented” wording in project
+   `README.md` and `ARCHITECTURE.md` with maintainer-approved wording. Those
+   project-wide edits are *proposed*, not silently authorized here.
+3. With separate maintainer publication authorization, create/review the Step
+   1.7 PR and merge to `main`; verify final merge SHA and archive the task
+   using normal project procedures. The pushed candidate commit is **not** a
+   merge or acceptance by itself.
+4. Step 1.9 packaging is the subsequent distinct, maintainer-led version 1
+   milestone. Deferred Version 2 work and a full RDP/VNC rerun are not Step
+   1.7 acceptance criteria.
 
-Resolve these inside **one** Step 1.7 scope, not by creating another stage or
-independent Step 1.8 authorization gate. After a bounded maintainer review,
-prepare the existing project branch/diff/test workflow. Do not reimplement
-accepted `-d`, `-x`, registry identity, or remote-launch machinery.
-
-**Following Step 1.7:** Step 1.9 version 1 packaging remains separate and
-maintainer-led. [Version 2 Considerations](../ARCHITECTURE.md#12-version-2-considerations)
-are explicitly deferred and not acceptance criteria here.
-
-
-## Latest result — local agent (2026-11-19)
-
-The existing uncommitted Step 1.7 candidate on
-`task/joetoo-kwin-step1.7-recovery-snapshot` (`f18fea2`) now includes the
-maintainer-authorized history, historical-observation, normalized snapshot and
-user-manual refinements. See [current results and narrow additional native
-checks](README.md#refinement-candidate--2026-11-19). Earlier positive Wayland
-results are maintainer-reported and are not relabelled as agent-run validation.
-Maintainer-owned planning/authorization text above has not been rewritten.
-
-**Next actor: maintainer**, reviewing the complete uncommitted diff and exact
-headless evidence, with separate authority for publication and any remaining
-native checks. No installation, service action, publication or milestone
-acceptance is claimed by the agent.
+**Operational reminder:** The X11 test ended after fresh `win-003`/`win-004`
+were launched; no subsequent cleanup was shown. Only the maintainer should
+close disposable test windows after deciding they are no longer needed.

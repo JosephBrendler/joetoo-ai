@@ -1,0 +1,123 @@
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ cd ~/joetoo-ai/workspace/projects/joetoo-kwin
+
+echo "=== BRANCH AND HEAD ==="
+git branch --show-current
+git rev-parse --short HEAD
+git status --short
+git diff --check
+
+echo "=== STEP 1.7 MODULES ==="
+ls -l \
+    libexec/joetoo_kwin_persistence.py \
+    libexec/joetoo_kwin_recovery.py \
+    tests/test_recovery_snapshot.py
+
+echo "=== PLASMA SESSION ==="
+echo "XDG_SESSION_TYPE=$XDG_SESSION_TYPE"
+echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+pgrep -a kwin_wayland
+
+echo "=== CURRENT SERVICE ==="
+rc-service -U joetoo-kwind status
+
+echo "=== EXISTING MANAGED WINDOWS ==="
+./joetoo-kwin -l
+
+# End of commands
+=== BRANCH AND HEAD ===
+task/joetoo-kwin-step1.7-recovery-snapshot
+f18fea2
+ M joetoo-kwin
+ M joetoo-kwin-template.conf
+ M libexec/joetoo-kwin-launch-functions
+ M libexec/joetoo-kwin-plan-functions
+ M libexec/joetoo-kwind
+ M libexec/joetoo_kwin_rdp_launch.py
+ M libexec/joetoo_kwin_registry.py
+ M libexec/joetoo_kwin_vnc_launch.py
+ M task_1.7/HANDOFF.md
+ M task_1.7/README.md
+ M tests/test_config_presentation.py
+ M tests/test_openrc_user_setup.py
+ M tests/test_single_recipe_launch.py
+ M tests/test_step1_2a.py
+ M tests/test_step1_5a_plan.py
+ M tests/test_step1_5c_corrections.py
+ M tests/test_step1_5c_launch.py
+ M tools/joetoo-kwind-install-poc
+?? libexec/joetoo_kwin_persistence.py
+?? libexec/joetoo_kwin_recovery.py
+?? tests/test_recovery_snapshot.py
+=== STEP 1.7 MODULES ===
+-rw-r--r-- 1 joe joe 12954 Nov 18 21:13 libexec/joetoo_kwin_persistence.py
+-rw-r--r-- 1 joe joe 16431 Nov 18 21:21 libexec/joetoo_kwin_recovery.py
+-rw-r--r-- 1 joe joe 27791 Nov 18 21:21 tests/test_recovery_snapshot.py
+=== PLASMA SESSION ===
+XDG_SESSION_TYPE=wayland
+XDG_RUNTIME_DIR=/run/user/1000
+3174159 /usr/bin/kwin_wayland_wrapper --xwayland
+3174160 /usr/bin/kwin_wayland --wayland-fd 7 --socket wayland-0 --xwayland-fd 8 --xwayland-fd 9 --xwayland-display :1 --xwayland-xauthority /run/user/1000/xauth_XovPxF --xwayland
+=== CURRENT SERVICE ===
+ * status: started
+=== EXISTING MANAGED WINDOWS ===
+No managed windows (no retained managed reservations).
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tests \
+    python3 -m unittest -v \
+    test_recovery_snapshot \
+    test_managed_close_native
+
+# End of commands
+test_additive_launch_captures_complete_original_recipe_without_granting_ownership (test_recovery_snapshot.LaunchIntentTests.test_additive_launch_captures_complete_original_recipe_without_granting_ownership) ... ok
+test_configured_rdp_job_validates_intent_target_and_destination_binding (test_recovery_snapshot.LaunchIntentTests.test_configured_rdp_job_validates_intent_target_and_destination_binding) ... ok
+test_invalid_metadata_rejected_before_transaction_or_registration (test_recovery_snapshot.LaunchIntentTests.test_invalid_metadata_rejected_before_transaction_or_registration) ... ok
+test_legacy_launch_still_valid_without_fabricated_restore_metadata (test_recovery_snapshot.LaunchIntentTests.test_legacy_launch_still_valid_without_fabricated_restore_metadata) ... ok
+test_sdl_authenticated_begin_keeps_complete_recipe_through_real_pidfd_registration (test_recovery_snapshot.LaunchIntentTests.test_sdl_authenticated_begin_keeps_complete_recipe_through_real_pidfd_registration) ... ok
+test_vnc_positive_viewer_selection_keeps_original_remote_recipe (test_recovery_snapshot.LaunchIntentTests.test_vnc_positive_viewer_selection_keeps_original_remote_recipe) ... ok
+test_changed_compositor_or_bus_retains_only_uncertain_reservations (test_recovery_snapshot.RecoveryTests.test_changed_compositor_or_bus_retains_only_uncertain_reservations) ... ok
+test_checkpoint_write_failure_preserves_memory_and_blocks_followup (test_recovery_snapshot.RecoveryTests.test_checkpoint_write_failure_preserves_memory_and_blocks_followup) ... ok
+test_corrupt_incomplete_bad_permissions_or_duplicate_checkpoint_blocks (test_recovery_snapshot.RecoveryTests.test_corrupt_incomplete_bad_permissions_or_duplicate_checkpoint_blocks) ... ok
+test_delayed_native_reply_after_deadline_cannot_revive_identity (test_recovery_snapshot.RecoveryTests.test_delayed_native_reply_after_deadline_cannot_revive_identity) ... ok
+test_export_exact_native_proof_and_no_runtime_identity_or_caption (test_recovery_snapshot.RecoveryTests.test_export_exact_native_proof_and_no_runtime_identity_or_caption) ... ok
+test_export_rejects_empty_partial_missing_uncertain_or_incomplete_metadata (test_recovery_snapshot.RecoveryTests.test_export_rejects_empty_partial_missing_uncertain_or_incomplete_metadata) ... ok
+test_export_rejects_foreign_operator_and_native_mismatch (test_recovery_snapshot.RecoveryTests.test_export_rejects_foreign_operator_and_native_mismatch) ... ok
+test_legitimate_resident_reload_is_not_a_new_compositor (test_recovery_snapshot.RecoveryTests.test_legitimate_resident_reload_is_not_a_new_compositor) ... ok
+test_missing_checkpoint_record_does_not_regain_live_authority (test_recovery_snapshot.RecoveryTests.test_missing_checkpoint_record_does_not_regain_live_authority) ... ok
+test_missing_processfd_never_establishes_compositor_authentication (test_recovery_snapshot.RecoveryTests.test_missing_processfd_never_establishes_compositor_authentication) ... ok
+test_missing_wrong_uuid_pid_or_class_is_not_adopted (test_recovery_snapshot.RecoveryTests.test_missing_wrong_uuid_pid_or_class_is_not_adopted) ... ok
+test_new_registration_is_not_published_when_checkpoint_write_fails (test_recovery_snapshot.RecoveryTests.test_new_registration_is_not_published_when_checkpoint_write_fails) ... ok
+test_owner_loss_during_native_reply_or_expiry_cannot_be_reported_ready (test_recovery_snapshot.RecoveryTests.test_owner_loss_during_native_reply_or_expiry_cannot_be_reported_ready) ... ok
+test_recovered_record_uses_existing_close_preview_and_retention_rules (test_recovery_snapshot.RecoveryTests.test_recovered_record_uses_existing_close_preview_and_retention_rules) ... ok
+test_revision_gap_requires_fresh_authenticated_full_inventory (test_recovery_snapshot.RecoveryTests.test_revision_gap_requires_fresh_authenticated_full_inventory) ... ok
+test_same_session_restart_preserves_exact_identity_and_new_alias_counter (test_recovery_snapshot.RecoveryTests.test_same_session_restart_preserves_exact_identity_and_new_alias_counter) ... ok
+test_sweep_after_recovery_updates_checkpoint_but_never_erases_last_good (test_recovery_snapshot.RecoveryTests.test_sweep_after_recovery_updates_checkpoint_but_never_erases_last_good) ... ok
+test_untrusted_sender_does_not_replace_inventory_or_recover (test_recovery_snapshot.RecoveryTests.test_untrusted_sender_does_not_replace_inventory_or_recover) ... ok
+test_restore_bad_file_is_not_executed (test_recovery_snapshot.SnapshotCliTests.test_restore_bad_file_is_not_executed) ... ok
+test_restore_decline_or_reserved_slot_creates_no_window (test_recovery_snapshot.SnapshotCliTests.test_restore_decline_or_reserved_slot_creates_no_window) ... ok
+test_restore_uses_real_open_plan_confirmation_and_new_launch (test_recovery_snapshot.SnapshotCliTests.test_restore_uses_real_open_plan_confirmation_and_new_launch) ... ok
+test_save_validates_and_advances_explicitly_without_confirmation_or_launch (test_recovery_snapshot.SnapshotCliTests.test_save_validates_and_advances_explicitly_without_confirmation_or_launch) ... ok
+test_unused_legacy_policy_does_not_prevent_local_launch_without_export_claim (test_recovery_snapshot.SnapshotCliTests.test_unused_legacy_policy_does_not_prevent_local_launch_without_export_claim) ... ok
+test_atomic_valid_snapshot_and_actual_offline_planner (test_recovery_snapshot.SnapshotTests.test_atomic_valid_snapshot_and_actual_offline_planner) ... ok
+test_bad_plan_does_not_overwrite_last_good (test_recovery_snapshot.SnapshotTests.test_bad_plan_does_not_overwrite_last_good) ... ok
+test_failed_atomic_replace_preserves_prior_bytes_and_cleans_temporary (test_recovery_snapshot.SnapshotTests.test_failed_atomic_replace_preserves_prior_bytes_and_cleans_temporary) ... ok
+test_mixed_effective_policy_refused_instead_of_silently_changed (test_recovery_snapshot.SnapshotTests.test_mixed_effective_policy_refused_instead_of_silently_changed) ... ok
+test_original_explicit_frame_override_validates_but_manual_geometry_is_not_captured (test_recovery_snapshot.SnapshotTests.test_original_explicit_frame_override_validates_but_manual_geometry_is_not_captured) ... ok
+test_original_slot_order_preserved_without_runtime_ids (test_recovery_snapshot.SnapshotTests.test_original_slot_order_preserved_without_runtime_ids) ... ok
+test_private_file_symlink_and_permissions_rejected (test_recovery_snapshot.SnapshotTests.test_private_file_symlink_and_permissions_rejected) ... ok
+test_secret_targets_unknown_variables_and_recipe_fields_rejected (test_recovery_snapshot.SnapshotTests.test_secret_targets_unknown_variables_and_recipe_fields_rejected) ... ok
+test_tampering_and_arbitrary_bash_are_never_sourced (test_recovery_snapshot.SnapshotTests.test_tampering_and_arbitrary_bash_are_never_sourced) ... ok
+test_kernel_credentials_on_isolated_socketpair (test_managed_close_native.KernelCredentialAvailabilityTests.test_kernel_credentials_on_isolated_socketpair) ... ok
+test_absent_wm_delete_has_no_kill_fallback (test_managed_close_native.XcbCloseWireTests.test_absent_wm_delete_has_no_kill_fallback) ... ok
+test_expired_dispatch_lease_never_connects_or_dispatches (test_managed_close_native.XcbCloseWireTests.test_expired_dispatch_lease_never_connects_or_dispatches) ... ok
+test_foreign_credential_packet_is_rejected_before_xcb (test_managed_close_native.XcbCloseWireTests.test_foreign_credential_packet_is_rejected_before_xcb) ... ok
+test_independent_watchdog_bounds_blocking_setup (test_managed_close_native.XcbCloseWireTests.test_independent_watchdog_bounds_blocking_setup) ... ok
+test_no_go_cannot_dispatch_even_for_reused_numeric_xid (test_managed_close_native.XcbCloseWireTests.test_no_go_cannot_dispatch_even_for_reused_numeric_xid) ... ok
+test_stale_badwindow_property_has_no_dispatch (test_managed_close_native.XcbCloseWireTests.test_stale_badwindow_property_has_no_dispatch) ... ok
+test_supported_delete_is_one_checked_protocol_request (test_managed_close_native.XcbCloseWireTests.test_supported_delete_is_one_checked_protocol_request) ... ok
+test_wrong_type_and_truncated_property_fail_closed (test_managed_close_native.XcbCloseWireTests.test_wrong_type_and_truncated_property_fail_closed) ... ok
+
+----------------------------------------------------------------------
+Ran 47 tests in 5.828s
+
+OK
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $

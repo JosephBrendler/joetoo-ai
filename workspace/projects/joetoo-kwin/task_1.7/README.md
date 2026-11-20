@@ -1,13 +1,13 @@
 # Step 1.7 — Combined recovery and last-good snapshot
 
-**Status:** uncommitted Step 1.7 implementation candidate for maintainer review;
-headless validation is recorded below. Native acceptance and publication remain
-separately authorized maintainer actions. The maintainer
-agreed that the former Steps **1.7 (same-session checkpoint)** and **1.8
-(durable restorable layout)** should be developed and reviewed as one Step 1.7
-milestone with **two separate data and trust contracts**. See the
-[current HANDOFF](HANDOFF.md) for decisions and actor; it does not itself grant
-code, native-operation or publication authorization.
+**Status (2026-11-19): implementation complete as a candidate; native Wayland
+and X11 acceptance evidence collected; ready for an explicit maintainer
+acceptance decision, not yet accepted or merged.** Candidate commit `33bbbee`
+on `task/joetoo-kwin-step1.7-recovery-snapshot` was pushed from `q552u01`
+and fetched/verified on `slim2`. The former Steps **1.7** (same-session
+checkpoint) and **1.8** (durable layout) remain one delivery with separate data
+and trust contracts. See the [current HANDOFF](HANDOFF.md) and
+[native validation summary](#native-validation-and-acceptance-review--2026-11-19).
 
 ## What this milestone covers
 
@@ -144,7 +144,7 @@ applicable. KWin/native transport and application launches are synthetic.
 Development installer tests use disposable HOME directories and service mocks.
 They are **not** evidence of native KWin recovery or real RDP/VNC connectivity.
 
-### Maintainer-native acceptance still required
+### Maintainer-native acceptance plan (historical; executed 2026-11-19)
 
 On q552u01 Wayland first, then slim2 X11, after separately approved update:
 
@@ -230,10 +230,64 @@ evidence was changed. No native installation/service/window/network action or
 publication was performed. The native results above remain attributed to the
 maintainer. The new Markdown manual is authoritative; no PDF/HTML was generated.
 
-Only additional native checks after review: on the working disposable Wayland
-arrangement, verify regular-file migration, two identical saves, relative latest
-link/modes and configured retention; use `-r`'s existing reservation refusal to
-exercise the latest reader without launching replacements. Verify one already
-missing disposable record's full `GetManaged` history after a broker-only restart.
-Reuse these storage/query checks during remaining X11 acceptance; no new native
-adapter build, renderer experiment or PKI matrix is needed for these changes.
+The narrowly scoped native checks listed above were pending when the refinement
+candidate was written. They were subsequently executed by the maintainer;
+see the evidence and disposition below.
+
+## Native validation and acceptance review — 2026-11-19
+
+**Status: ready for maintainer acceptance decision, NOT yet accepted or merged.**
+Maintainer committed and pushed the exact refined 25-file candidate as
+`33bbbee03a5effbf1c4c31b5600254ab28374510` on
+`task/joetoo-kwin-step1.7-recovery-snapshot`; the `slim2` checkout matched
+`origin` at that commit with a clean worktree. This is a task-branch candidate,
+not a merge to `main`. Native tests below were run by the maintainer.
+
+### Evidence with complete terminal logs (trailing whitespace normalized)
+
+- [q552u01 native Wayland and snapshot refinement](step1.7-q552u01-native-evidence-2026-11-19.md):
+  [initial native-context 47-test console](step1.7-q552u01-initial-native-focused-console-2026-11-19.txt),
+  [full native console](step1.7-q552u01-refined-native-console-2026-11-19.txt),
+  [full focused/headless console](step1.7-q552u01-refined-headless-console-2026-11-19.txt).
+- [slim2 native X11 recovery and restore](step1.7-slim2-native-x11-evidence-2026-11-19.md):
+  [initial baseline/launch console](step1.7-slim2-initial-native-console-2026-11-19.txt),
+  [complete X11 snapshot/restart/close/restore console](step1.7-slim2-recovery-native-console-2026-11-19.txt).
+
+### Observed outcomes
+
+| Capability | q552u01 Wayland | slim2 X11 |
+| --- | --- | --- |
+| Native managed launch | Three of three restored from legacy snapshot | Two of two on desktop 3, duplicate-slot refusal |
+| Broker-only restart | Original IDs/UUIDs and missing history retained; recovery ready | IDs, UUIDs, reservations and KWin owner unchanged; 2 present, recovery ready |
+| Snapshot save | Complete `-S`, protocol 2, shared 47 settings; regular legacy file migrated byte-identically | Three distinct saves, protocol 2, two recipes, 47 settings |
+| History and private files | Relative latest link, `0700` directory, `0600` files, depth 2 | Relative latest link, `0700` directory, `0600` files, depth 2 |
+| Native single close and missing record | `-d` retained missing identity and full last-known observation after broker restart (`diff` status 0) | Verified native X11 `-d`, missing record and observation survived broker restart |
+| Fail-closed snapshot | Missing record refused; preserved legacy file, then later latest symlink and complete history | Missing record refused; preserved latest symlink |
+| Progressive close and restore | `-x` retired missing/live records; legacy `-r` launched three new UUIDs; occupied-slot `-r` refused | `-x` retired missing/live records; confirmed `-r` launched two new UUIDs |
+
+**Regression/static validation on q552u01:** 79 focused Python PASS; full
+Python 1080 PASS (no skip on this native host); JavaScript 163 PASS. Four
+scripts passed *separate* `validate_scripts` runs. The earlier **combined**
+ShellCheck command printed `Killed`, so it is not called a combined PASS; its
+cause remains undetermined, with no OOM evidence in the shown `dmesg` excerpt.
+Existing earlier candidate/sandbox results remain documented above and are
+not conflated with these host-run results.
+
+**Remaining qualifications (no demonstrated source-code blocker):** the
+refined X11 console demonstrates confirmed `-r`, but not a declined `-r` (the
+maintainer had reported a declined Wayland case with the prior candidate).
+Native-effect owner/method introspection was not independently completed on
+this X11 run; a verified X11 close did succeed. The restart helper sometimes
+queried D-Bus before registration completed, while later bounded polling
+succeeded; this is a startup-readiness UX item, not an observed lasting failure.
+No reboot/new-KWin-session adoption is claimed. Historical geometry is only
+informational and is never restored as live placement or close authority.
+
+**Acceptance decision:** The evidence supports accepting the combined Step
+1.7 implementation on both backends without another coding increment or
+repeating the RDP/VNC matrix. The maintainer must still explicitly accept or
+request the optional one-case declined-restore check, then separately approve
+PR/merge. Project `README.md` and `ARCHITECTURE.md` still contain outdated
+pre-implementation status text; reconcile it with maintainer approval in the
+acceptance/publication pass. Next milestone: maintainer-led Step 1.9 packaging;
+Version 2 remains deferred.
