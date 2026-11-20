@@ -42,6 +42,85 @@ requirements.
 | OpenRC user service | `joetoo-kwind` | Broker process supervision and user-session lifecycle | Terminate managed applications on service stop |
 | KWin resident JavaScript | `joetoo-kwin-resident.js` | KWin observations, exact UUID resolution, window placement, one-shot initial stack/focus, future safe close | Own launch configuration; infer transport connection from window presence |
 | Configuration/profile | `joetoo-kwin.conf` | Desired layout and configurable operational parameters, user override plus system fallback | Persist transient PID/UUID identity or credentials |
+| Native C++ KWin effect, separately built per compositor | `joetoo_managed_close.so` | Authenticated actual-window inspection, exact UUID identity and graceful managed close of Wayland/XWayland; optional legacy native X11 | Own launch configuration, supervise clients, or force-kill windows |
+| X11 protocol helper executable | `joetoo-kwin-close-x11` | Bounded XCB lifetime fence and graceful `WM_DELETE_WINDOW` for XWayland/native X11 | Act as a KWin plugin, adopt an unverified window, or kill applications |
+
+### Native compiled components: two plugin variants, one protocol helper
+
+**The C++ component is not solely for legacy native X11.** It provides the
+compositor-authenticated identity checks used by managed close and same-session
+recovery, for native Wayland and XWayland windows. The same plugin source can
+also be built separately for a legacy native-X11 KWin session.
+
+| Build source | Installed artifact | Role |
+| --- | --- | --- |
+| `native/managed-close/adapter.cpp`, built with `KWin::kwin` | **Wayland** `joetoo_managed_close.so` | KWin effect plugin loaded *inside `kwin_wayland`*. Inspects and gracefully closes both native Wayland and XWayland windows. |
+| **Same** `adapter.cpp`, built separately with `KWinX11::kwin` | **Legacy native-X11** `joetoo_managed_close.so` | A *different compiled variant* loaded inside `kwin_x11`. Installed in the separate `kwin-x11` plugin directory. |
+| `native/managed-close/x11.cpp`, built with `libxcb` | `joetoo-kwin-close-x11` | A standalone **executable protocol helper**, launched by either plugin for X11-protocol close; also needed on Wayland for **XWayland** windows. |
+| `native/managed-close/CMakeLists.txt` | Build definitions | Selects the SDK, linked compositor target, installed plugin namespace and helper path. |
+
+The temporary compiler outputs `adapter.o` and `x11.o` are **not** the
+installed plugin or helper. The two plugin variants share a basename but are
+separate, SDK-specific `.so` binaries and **not interchangeable**. The helper
+is an ordinary executable, **not a plugin**, and does not depend on `KWinX11`.
+
+**Compiling does not require running graphics.** An `emerge` can build from SSH
+or a text console. CMake finds the installed KWin SDK's headers, libraries and
+CMake package metadata; the build does not inspect the caller's `DISPLAY` or
+require a session bus. Only *loading and using* the finished effect requires a
+compatible running KWin compositor. The effect is not loaded automatically by
+compilation or package installation.
+
+**Control and identity boundaries:**
+
+1. `joetoo-kwin -d MANAGED_ID` or `-x` requests a preview; the non-root Python
+   broker authenticates the caller and only proceeds after explicit confirmation.
+2. The broker calls the **loaded C++ effect** through the private D-Bus service
+   `org.joetoo.KWinCloseNative` at `/org/joetoo/KWinCloseNative`. The effect
+   rechecks the compositor's original UUID, PID, class, backend and closeability.
+3. For **native Wayland** windows the effect calls `EffectWindow::closeWindow()`.
+   No standalone helper runs.
+4. For **XWayland** windows inside Wayland, and for X11 windows under the
+   optional legacy native-X11 plugin, the effect starts `joetoo-kwin-close-x11`.
+   This helper establishes a short, authenticated XCB lifetime fence and sends
+   only `WM_DELETE_WINDOW`, not a force-kill or process signal.
+5. Native status/disappearance evidence returns to the broker, which owns the
+   transaction and registry. A refused or uncertain close is not success.
+
+The effect's four private methods are `Inspect(uuid)` (positive original-window
+identity/closeability), `Terminal(pid)` (unique terminal hint), `Close(...)`
+(authenticated single-window graceful dispatch) and `Status(token)` (native
+outcome). **Step 1.7 same-session recovery also calls `Inspect()`**; losing
+this plugin affects authenticated recovery verification as well as managed
+close, *including native Wayland windows*. The KWin resident JavaScript is a
+separate component responsible for observation, placement and focus.
+
+**Three distinct APIs:** KWin's **C++ effects API** (`KWin::Effect`,
+`EffectWindow`, `closeWindow()`) is linked into code running *inside* KWin.
+The public D-Bus `org.kde.KWin` `/Effects` service requests loading installed
+effects; it does not itself expose those C++ functions. The private
+`org.joetoo.KWinCloseNative` D-Bus interface is implemented by our loaded
+C++ effect and accepts authenticated broker requests.
+
+**SDK ABI and transition:** KWin effect factories carry version-specific
+loader identity, so a plugin built against one KWin release may be rejected
+by another. The source currently specifies `KWin 6.7.6 EXACT` and, for the
+legacy variant, `KWinX11 6.7.6 EXACT`. These describe the *accepted development
+baseline*, not a permanent production dependency. Step 1.9 must test building
+against newer installed SDKs, record each plugin's compiled-against version,
+and warn if it differs from the running compositor. Unavailable native identity
+and close functionality must fail closed; ordinary KWin title-bar close buttons
+are unaffected. A warning limited to XWayland would be misleading because
+native Wayland managed close and recovery identity also depend on the effect.
+
+**Plasma 6.8 and XWayland:** retiring the standalone `kwin_x11` desktop
+session does *not* retire XWayland. The **Wayland plugin plus the standalone
+X11 protocol helper remain required** for managed XWayland close. If retained,
+a temporary `USE=x11` would govern **only** the *separate legacy native-X11
+plugin variant*, never the Wayland plugin or the helper. Whether to ship that
+legacy variant at all in `0.1.0` remains a packaging choice; no extra plugin
+is needed for XWayland. The accepted protocol and safety requirements remain
+in [native/managed-close/README.md](native/managed-close/README.md).
 
 **D-Bus compatibility:** The service `org.joetoo.KWinBridge`, object
 `/org/joetoo/KWinBridge`, and established method signatures are compatibility

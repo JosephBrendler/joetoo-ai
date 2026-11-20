@@ -1,6 +1,13 @@
 # -*-eselect-*-  vim: ft=eselect
 # Copyright 2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Implements the standard Gentoo eselect module interface,
+# including its list/show/set actions, numbered-list display,
+# and selected-item highlighting conventions.
+#
+# Developed and implemented (with AI assistance) for joetoo-kwin,
+# under Joseph Brendler's direction and maintainer review.
 
 # Module metadata is consumed by the eselect framework.
 # shellcheck disable=SC2034

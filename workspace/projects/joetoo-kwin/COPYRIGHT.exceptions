@@ -1,0 +1,13 @@
+# Copyright header exceptions for the joetoo-kwin source tarball
+# Copyright 2026 Joseph Brendler
+#
+# Paths are relative to curated upstream joetoo-kwin/ root with leading ./.
+# tarup does not check each listed file for a Joseph Brendler copyright header.
+# The licensing metadata are exempt from the code/doc source-header rule.
+# JSON forbids comments, so plugin metadata cannot contain a normal header.
+# Do NOT list normal code, CMake, .conf, README, or test sources merely to
+# bypass a missing header; fix their proper copyright attribution instead.
+# Re-audit after selecting the final upstream source set.
+./COPYRIGHT.exceptions
+./LICENSES.package
+./native/managed-close/metadata.json
