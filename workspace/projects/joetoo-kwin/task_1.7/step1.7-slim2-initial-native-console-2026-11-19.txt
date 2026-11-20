@@ -1,0 +1,246 @@
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ cd ~/joetoo-ai/workspace/projects/joetoo-kwin
+
+bus=org.joetoo.KWinBridge
+path=/org/joetoo/KWinBridge
+
+echo "=== SESSION ==="
+printf 'Type=%s  Display=%s\n' "$XDG_SESSION_TYPE" "$DISPLAY"
+
+echo "=== SERVICE ==="
+rc-service -U joetoo-kwind status
+
+echo "=== RECOVERY AND INVENTORY ==="
+status=$(qdbus6 "$bus" "$path" "$bus.RegistryStatus") || {
+    echo "FAIL: broker D-Bus query"
+    exit 1
+}
+
+printf '%s\n' "$status" |
+    jq '{recovery, managed_count, presence_counts, observation}'
+
+echo "=== VERIFY CLEAN BASELINE ==="
+jq -e '
+    .recovery == "ready" and
+    .managed_count == 0 and
+    .observation.synchronized == true
+' <<< "$status" &&
+    echo "PASS: ready, empty managed registry, synchronized KWin inventory"
+
+echo "=== MANAGED WINDOWS ==="
+./joetoo-kwin -l
+
+echo "=== SOURCE COMMIT ==="
+git log -1 --oneline
+=== SESSION ===
+Type=x11  Display=:0
+=== SERVICE ===
+ * status: started
+=== RECOVERY AND INVENTORY ===
+{
+  "recovery": "ready",
+  "managed_count": 0,
+  "presence_counts": {
+    "missing": 0,
+    "present": 0,
+    "uncertain": 0
+  },
+  "observation": {
+    "observed_count": 3,
+    "revision": 27,
+    "source": "1795123492725-bd5sr4cb7y45d4vnlgkvp",
+    "synchronized": true
+  }
+}
+=== VERIFY CLEAN BASELINE ===
+true
+PASS: ready, empty managed registry, synchronized KWin inventory
+=== MANAGED WINDOWS ===
+No managed windows (no retained managed reservations).
+=== SOURCE COMMIT ===
+33bbbee (HEAD -> task/joetoo-kwin-step1.7-recovery-snapshot, origin/task/joetoo-kwin-step1.7-recovery-snapshot) joetoo-kwin: Step 1.7 recovery and snapshot history candidate
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== KWIN AND NATIVE SERVICE ==="
+
+kbus=org.kde.KWin
+native_bus=org.joetoo.KWinCloseNative
+native_path=/org/joetoo/KWinCloseNative
+
+dbus=org.freedesktop.DBus
+dbus_path=/org/freedesktop/DBus
+
+kwin_owner=$(
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TESTjoe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== CREATE PRIVATE X11 TEST CONFIGURATION ==="
+
+test_state=$(mktemp -d "$HOME/.local/joetoo-step17-x11.XXXXXXXX")
+test_conf="$test_state/plan.conf"
+snapshot_dir="$test_state/joetoo-kwin"
+test_snapshot="$snapshot_dir/last-session.conf"
+
+dimensions=$(xdpyinfo | awk '/dimensions:/ {print $2; exit}')
+
+screen_width=${dimensions%x*}
+screen_height=${dimensions#*x}
+
+printf 'Test directory: %s\n' "$test_state"
+printf 'Display dimensions: %s x %s\n' \
+    "$screen_width" "$screen_height"
+
+cat > "$test_conf" <<EOF
+# Step 1.7 native X11 acceptance — slim2
+
+screen_width=$screen_width
+screen_height=$screen_height
+
+snapshot_history_depth=2
+
+desktop_session_list=(
+    '3|konsole|local|btop|panel'
+    '3|dolphin|local||over'
+)
+
+desktop_session_frames=()
+EOF
+
+chmod 600 "$test_conf"
+
+echo "=== TEST CONFIGURATION ==="
+cat "$test_conf"
+
+echo "=== VALIDATE WITHOUT LAUNCHING ==="
+./joetoo-kwin -c -f "$test_conf"
+=== CREATE PRIVATE X11 TEST CONFIGURATION ===
+Test directory: /home/joe/.local/joetoo-step17-x11.E58ze7cm
+Display dimensions: 1366 x 768
+=== TEST CONFIGURATION ===
+# Step 1.7 native X11 acceptance — slim2
+
+screen_width=1366
+screen_height=768
+
+snapshot_history_depth=2
+
+desktop_session_list=(
+    '3|konsole|local|btop|panel'
+    '3|dolphin|local||over'
+)
+
+desktop_session_frames=()
+=== VALIDATE WITHOUT LAUNCHING ===
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: (completed)                      [ ✅ ]
+---[ joetoo-kwin-1.0.17 (configuration) ]-----------------------------------------------
+ * PN .............: [ joetoo-kwin ]
+ * BUILD ..........: [ 1.0.17 ]
+ * config .........: [ /home/joe/.local/joetoo-step17-x11.E58ze7cm/plan.conf ]
+ * screen_width ...: [ 1366 ]
+ * screen_height ..: [ 768 ]
+ ✨ DRY RUN: [2] windows; planner launches no applications
+ ✨ Execution desktop groups: [3]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1366x768] (not autodetected); terminal width budget: [87%]
+ * Desktop  Slot  Program  Mode   Target  Layer  X   Y   Width  Height
+ * 3        1     konsole  local  btop    panel  13  38  1188   652
+ * 3        2     dolphin  local  -       over   68  23  1284   691
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== LAUNCH DISPOSABLE X11 ARRANGEMENT ==="
+
+./joetoo-kwin -o -f "$test_conf"
+
+echo "=== MANAGED INVENTORY ==="
+./joetoo-kwin -l
+
+echo "=== BROKER STATUS ==="
+qdbus6 "$bus" "$path" "$bus.RegistryStatus" |
+    jq '{recovery, managed_count, presence_counts}'
+
+echo "=== RECORD ORIGINAL IDENTITIES ==="
+qdbus6 "$bus" "$path" "$bus.ListManaged" |
+    tee "$test_state/before-restart.json" |
+    jq .
+=== LAUNCH DISPOSABLE X11 ARRANGEMENT ===
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: (completed)                      [ ✅ ]
+---[ joetoo-kwin-1.0.17 (configuration) ]-----------------------------------------------
+ * PN .............: [ joetoo-kwin ]
+ * BUILD ..........: [ 1.0.17 ]
+ * config .........: [ /home/joe/.local/joetoo-step17-x11.E58ze7cm/plan.conf ]
+ * screen_width ...: [ 1366 ]
+ * screen_height ..: [ 768 ]
+ ✨ LAUNCH PLAN: [2] windows; confirmation required
+ ✨ Execution desktop groups: [3]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1366x768] (not autodetected); terminal width budget: [87%]
+ * Desktop  Slot  Program  Mode   Target  Layer  X   Y   Width  Height
+ * 3        1     konsole  local  btop    panel  13  38  1188   652
+ * 3        2     dolphin  local  -       over   68  23  1284   691
+ ✨ KWin desktops: current [9], required [3]; existing desktop capacity is adequate
+
+ ✨ Do you want to continue? [Y/n]: Y
+ ✨ Affirmative response from user; continuing
+ ✨ [20261119-18:27:28] Launching desktop [3] slot [1]
+ ✨ Armed managed launch [d055bb2b524349c7a7ee5364d3a06239], placement [f122ba6bced74cbabb9332495ad60d04]
+ ✨ Launched Konsole operation; launch-process PID [146916] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-001] UUID [7ab74f31-9a74-4d9e-b931-d195cfbfcb2a]
+ ✨ OK launch: Konsole (pid=146916) before=[6] (68,23) 738x691 after=[3] (13,38) 1188x652 tiled=false fullscreen=false
+ ✨ [20261119-18:27:30] Launching desktop [3] slot [2]
+ ✨ Armed managed launch [8f1f87da11834577a1ceef002c976ff1], placement [80be860fc21c49f8b3a0316c26aeb512]
+ ✨ Launched [dolphin] operation; launch-process PID [147128]
+ ✨ Registered [win-002] UUID [2e977cb3-393a-484c-a016-f7d325dcffcd]
+ ✨ OK launch: Downloads — Dolphin (pid=147128) before=[6] (68,23) 1284x691 after=[3] (68,23) 1284x691 tiled=false fullscreen=false
+ ✨ Initializing desktop [3] stack/focus; geometry remains separately verified
+ ✨ Desktop [3] initial stacking/focus result: (completed)                       [ ✅ ]
+ ✨ Entries: completed [2], failed [0], skipped [0]; incomplete desktop cohorts [0]
+ ✨ Configured layout: [2/2] windows completed ... (completed)                   [ ✅ ]
+=== MANAGED INVENTORY ===
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     3        1     present   succeeded  7ab74f31-9a74-4d9e-b931-d195cfbfcb2a
+win-002     3        2     present   succeeded  2e977cb3-393a-484c-a016-f7d325dcffcd
+=== BROKER STATUS ===
+{
+  "recovery": "ready",
+  "managed_count": 2,
+  "presence_counts": {
+    "missing": 0,
+    "present": 2,
+    "uncertain": 0
+  }
+}
+=== RECORD ORIGINAL IDENTITIES ===
+{
+  "count": 2,
+  "windows": [
+    {
+      "connection": "not_attempted",
+      "intended": {
+        "desktop": 3,
+        "slot": 1
+      },
+      "managed_id": "win-001",
+      "placement": "succeeded",
+      "presence": "present",
+      "request_id": "d055bb2b524349c7a7ee5364d3a06239",
+      "run_id": null,
+      "window_uuid": "7ab74f31-9a74-4d9e-b931-d195cfbfcb2a"
+    },
+    {
+      "connection": "not_attempted",
+      "intended": {
+        "desktop": 3,
+        "slot": 2
+      },
+      "managed_id": "win-002",
+      "placement": "succeeded",
+      "presence": "present",
+      "request_id": "8f1f87da11834577a1ceef002c976ff1",
+      "run_id": null,
+      "window_uuid": "2e977cb3-393a-484c-a016-f7d325dcffcd"
+    }
+  ]
+}
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ kf.config.core: Access to "/home/joe/Downloads/google-chrome.desktop" denied, not owned by root and executable flag not set.

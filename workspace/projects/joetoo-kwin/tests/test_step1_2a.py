@@ -75,6 +75,7 @@ def load_with_fake_dbus():
 
     fake_dbus.DBusException = DbusException
     fake_dbus.SessionBus = SessionBus
+    fake_dbus.Interface = lambda obj, iface: obj
     fake_dbus.service = service
     service.Object = Object
     service.BusName = BusName
@@ -120,7 +121,9 @@ class BrokerTests(unittest.TestCase):
     def test_no_spawn_and_signal_registration(self):
         self.assertFalse(hasattr(self.broker, "launch_window"))
         # Validate main's signal wiring without starting a real user bus.
-        with patch.object(self.module, "validate_session_environment"), patch("builtins.print"):
+        with tempfile.TemporaryDirectory() as runtime, \
+                patch.dict(os.environ, XDG_RUNTIME_DIR=runtime), \
+                patch.object(self.module, "validate_session_environment"), patch("builtins.print"):
             self.assertEqual(self.module.main(), 0)
         signals = [n for n, _ in self.glib.signals]
         self.assertEqual(signals, [self.module.signal.SIGTERM, self.module.signal.SIGINT])

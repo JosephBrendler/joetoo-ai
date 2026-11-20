@@ -50,6 +50,8 @@ usage() {
     j_msg "-${notice}" -p "       ${PN} [-v|-q ...] -l (read-only managed inventory, including missing reservations)"
     j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -d MANAGED_ID (confirmed graceful close; record/slot retained)"
     j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -x (confirmed progressive clean sweep; verified registrations/slots retired)"
+    j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -S (save timestamped managed recipes/policy; not manual geometry)"
+    j_msg "-${notice}" -p "       ${PN} -r (validate, confirm and launch new instances from last-good recipes)"
 }
 
 # Retain the positional move/test grammar. getopts handles common options and
@@ -65,11 +67,11 @@ parse_cmdline() {
         move|test-launch|test-multi-launch|--help)
             cli_operation=$1; shift; cli_args=("$@"); return 0 ;;
     esac
-    while getopts ':cmof:vqhLxdsSli' _pc_opt; do
+    while getopts ':cmof:vqhLxdsSlir' _pc_opt; do
         case $_pc_opt in
             v|q) cli_verbosity+=("$_pc_opt") ;;
             f) config=$OPTARG; CONFIG_SELECTED=$TRUE ;;
-            c|m|o|h|L|x|d|s|S|l|i)
+            c|m|o|h|L|x|d|s|S|l|i|r)
                 [[ -z $cli_operation ]] || { bad_args 'select exactly one operation'; return 2; }
                 cli_operation=-$_pc_opt
                 [[ $_pc_opt != m && $_pc_opt != L ]] || break ;;
@@ -80,8 +82,8 @@ parse_cmdline() {
     shift "$((OPTIND - 1))"
     cli_args=("$@")
     [[ -n $cli_operation ]] || { bad_args 'select an operation'; return 2; }
-    if [[ $CONFIG_SELECTED && $cli_operation != -c && $cli_operation != -o && $cli_operation != -m && $cli_operation != -L && $cli_operation != -d && $cli_operation != -x ]]; then
-        bad_args '-f is supported only with -c, -o, -L, -d, -x or layout movement'; return 2
+    if [[ $CONFIG_SELECTED && $cli_operation != -c && $cli_operation != -o && $cli_operation != -m && $cli_operation != -L && $cli_operation != -d && $cli_operation != -x && $cli_operation != -S ]]; then
+        bad_args '-f is supported only with -c, -o, -L, -d, -x, -S or layout movement'; return 2
     fi
     if [[ $cli_operation == -L ]]; then
         validate_single_operands "$@" || return $?
@@ -236,6 +238,7 @@ check_plan() {
     if [[ ${_op_single:-} ]]; then
         printf -v _cp_record '%s|%s|%s|%s|over' "${_op_single_fields[@]:0:4}"
         desktop_session_list=("$_cp_record")
+        desktop_session_frames=() # A one-recipe -L uses ordinary graphical policy.
     fi
     plan_stage "$notice" 'Validating configured launch intent' validate_plan || return $?
     if [[ ${_op_single:-} ]]; then
@@ -246,12 +249,12 @@ check_plan() {
     plan_stage "$info" 'Calculating shared geometry' calculate_plan || return $?
     # Explicit varlist avoids unrelated workflow/status-file initialization.
     local notice_varlist="PN BUILD rlv.config screen_width screen_height"
-    local info_varlist="verbosity desktop_limit dt_win_limit min_window_exposure_px"
+    local info_varlist="snapshot_history_depth verbosity desktop_limit dt_win_limit min_window_exposure_px"
     info_varlist+=" terminal_width_percent terminal_gap_percent terminal_height_percent terminal_left_percent terminal_top_percent terminal_row_gap_percent"
     info_varlist+=" graphical_left_percent graphical_top_percent graphical_width_percent graphical_height_percent"
     info_varlist+=" rdp_registration_timeout_ms rdp_windowing_backend rdp_security_protocol rdp_certificate_policy rdp_x11_renderer rdp_remote_width rdp_remote_height bool.RDP_SMART_SIZING rdp_initial_client_width rdp_initial_client_height"
     info_varlist+=" vnc_viewer_ready_timeout_ms bool.sftp_advisory_enabled sftp_advisory_timeout_ms sftp_advisory_ssh_port"
-    local debug_varlist="initial_focus_timeout_ms initial_focus_poll_interval_ms sftp_capability_timeout_ms"
+    local debug_varlist="snapshot_validation_timeout_ms initial_focus_timeout_ms initial_focus_poll_interval_ms sftp_capability_timeout_ms"
     debug_varlist+=" rdp_registration_poll_ms rdp_registration_event_limit rdp_registration_window_limit rdp_backend_log_byte_limit rdp_x11_identity_settle_ms"
     debug_varlist+=" vnc_ssh_start_timeout_ms vnc_supervisor_poll_interval_ms vnc_cleanup_timeout_ms vnc_local_port_attempts vnc_identity_event_limit vnc_identity_settle_ms vnc_dbus_timeout_ms vnc_placement_timeout_ms vnc_identity_start_timeout_ms"
     debug_varlist+=" managed_close_timeout_ms managed_close_total_timeout_ms managed_close_prepare_timeout_ms managed_close_x11_grab_ms managed_close_poll_ms managed_close_dbus_timeout_ms"
@@ -543,8 +546,16 @@ launch_managed_window() {
         j_msg "-${err}" -p "${PN}: program not found [${1}]"
         return 1
     fi
+    if [[ -n ${launch_intent_json:-} && $launch_intent_json != null ]]; then
+        _lm_payload=$(jq -cn --argjson intent "$launch_intent_json" \
+            --argjson x "${_lm_geometry[1]}" --argjson y "${_lm_geometry[2]}" \
+            --argjson width "${_lm_geometry[3]}" --argjson height "${_lm_geometry[4]}" \
+            '{intent:$intent,frame:[$x,$y,$width,$height]}') || return 1
+        _lm_payload=$(qdbus6 "$bus" "$path" "$iface.SubmitManagedLaunchIntent" "$_lm_payload") || return 1
+    else
     _lm_payload=$(qdbus6 "$bus" "$path" "$iface.SubmitManagedLaunch" \
         "$_lm_class" "${_lm_geometry[0]}" "$_lm_slot" "${_lm_geometry[@]:1}") || return 1
+    fi
     _lm_placement=$(jq -er '.placement_request_id | select(type == "string" and length > 0)' \
         <<< "$_lm_payload") || return 1
     _lm_registration=$(jq -er '.registration_request_id | select(type == "string" and length > 0)' \
@@ -786,6 +797,53 @@ close_managed_windows() {
     return "$_mc_rc"
 }
 
+# Snapshots are generated data, not copies of arbitrary executable config files.
+save_managed_snapshot() {
+    local _ss_dir _ss_text _ss_layer _ss_result
+    _ss_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+    # Retention is current operator configuration, independent of launch intent
+    # and of which authenticated managed windows belong to the complete save.
+    source "$_ss_dir/libexec/joetoo-kwin-plan-functions" || return 1
+    plan_defaults
+    prepare_config_sources optional || return $?
+    for _ss_layer in "${config_sources[@]}"; do
+        source "$_ss_layer" || return 2
+    done
+    apply_cli_verbosity || return $?
+    validate_snapshot_history || return $?
+    _ss_text=$(qdbus6 "$bus" "$path" "$iface.ExportManagedSnapshot") || return 1
+    _ss_result=$(printf '%s\n' "$_ss_text" | python3 "$_ss_dir/libexec/joetoo_kwin_persistence.py" --save "$_ss_dir/joetoo-kwin" "$snapshot_history_depth") || return $?
+    j_msg "-${notice}" -p "Last-good managed recipes saved privately [$(jq -r '.snapshot' <<< "$_ss_result")]; manual geometry and remote authentication are not saved"
+    if jq -e '.migrated_legacy' <<< "$_ss_result" >/dev/null; then
+        j_msg "-${notice}" -p "Prior regular last-good migrated to history; retention depth [$snapshot_history_depth] applies (depth 1 retains only the newest save)"
+    fi
+    if jq -e '.publication_warning' <<< "$_ss_result" >/dev/null; then
+        j_msg "-${warn}" -p 'Snapshot published; directory durability unverified, so history was not pruned'
+    elif jq -e '.pruning_warning' <<< "$_ss_result" >/dev/null; then
+        j_msg "-${warn}" -p 'Snapshot published; history pruning incomplete; inspect the private history directory'
+    fi
+}
+
+restore_managed_snapshot() {
+    local _rs_dir _rs_file _rs_rc
+    _rs_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+    _rs_file=$(mktemp "${XDG_RUNTIME_DIR:?}/joetoo-restore.XXXXXXXX.conf") || return 1
+    trap 'rm -f -- "$_rs_file"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM HUP
+    if ! python3 "$_rs_dir/libexec/joetoo_kwin_persistence.py" --restore > "$_rs_file"; then
+        rm -f -- "$_rs_file"; trap - EXIT INT TERM HUP; return 2
+    fi
+    config=$_rs_file; CONFIG_SELECTED=$TRUE
+    # Same configured launcher: lock, complete preflight, confirmation, new
+    # children/identities and one shared initial-layout cohort per desktop.
+    source "$_rs_dir/libexec/joetoo-kwin-launch-functions" || { rm -f -- "$_rs_file"; trap - EXIT INT TERM HUP; return 1; }
+    if open_plan; then _rs_rc=0; else _rs_rc=$?; fi
+    rm -f -- "$_rs_file"
+    trap - EXIT INT TERM HUP
+    return "$_rs_rc"
+}
+
 # run as regular user, not root
 checknotroot
 
@@ -793,7 +851,7 @@ checknotroot
 parse_cmdline "$@" || exit $?
 # -c loads configuration before applying these overrides; other operations do
 # not need layout configuration and retain their existing operational behavior.
-if [[ $cli_operation != -c && $cli_operation != -o && $cli_operation != -L && $cli_operation != -m && $cli_operation != move ]]; then apply_cli_verbosity || exit $?; fi
+if [[ $cli_operation != -S && $cli_operation != -c && $cli_operation != -o && $cli_operation != -r && $cli_operation != -L && $cli_operation != -m && $cli_operation != move ]]; then apply_cli_verbosity || exit $?; fi
 set -- "$cli_operation" "${cli_args[@]}"
 case ${1:-} in
     -m|move)
@@ -827,8 +885,8 @@ case ${1:-} in
         j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
         exit 2 ;;
     -S) action="save";   # save current managed window configuration
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
+        save_managed_snapshot ;;
+    -r) restore_managed_snapshot ;;
     -l) action="list";   # list managed windows
         list_managed_windows ;;
     -i) action="info";   # info on one window

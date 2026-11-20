@@ -23,6 +23,10 @@ confirm_continue_or_exit() {
 eval "$(declare -f qdbus6 | sed '1s/qdbus6/preflight_bus/')"
 qdbus6() {
     case $3 in
+    *.SubmitManagedLaunchIntent)
+        _intent_desktop=$(jq -r '.intent.desktop' <<< "$4")
+        printf 'submit:%s\n' "$_intent_desktop" >> "$TRACE"
+        printf '{"placement_request_id":"place-%s","registration_request_id":"reg-%s"}\n' "$_intent_desktop" "$_intent_desktop" ;;
     *.SubmitManagedLaunch)
         printf 'submit:%s\n' "$5" >> "$TRACE"
         printf '{"placement_request_id":"place-%s","registration_request_id":"reg-%s"}\n' "$5" "$5" ;;

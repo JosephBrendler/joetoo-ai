@@ -1,0 +1,301 @@
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ cd ~/joetoo-ai/workspace/projects/joetoo-kwin
+
+bus=org.joetoo.KWinBridge
+path=/org/joetoo/KWinBridge
+
+test_state="$HOME/.local/joetoo-step17-x11.HcLZK1ax"
+test_conf="$test_state/plan.conf"
+snapshot_dir="$test_state/joetoo-kwin"
+test_snapshot="$snapshot_dir/last-session.conf"
+
+echo "=== EXISTING TEST ==="
+ls -l "$test_conf" "$test_state/before-restart.json"
+./joetoo-kwin -l
+=== EXISTING TEST ===
+-rw-r--r-- 1 joe joe 560 Nov 19 18:31 /home/joe/.local/joetoo-step17-x11.HcLZK1ax/before-restart.json
+-rw------- 1 joe joe 220 Nov 19 18:30 /home/joe/.local/joetoo-step17-x11.HcLZK1ax/plan.conf
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     3        1     present   succeeded  7ab74f31-9a74-4d9e-b931-d195cfbfcb2a
+win-002     3        2     present   succeeded  2e977cb3-393a-484c-a016-f7d325dcffcd
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ XDG_STATE_HOME="$test_state" ./joetoo-kwin -f "$test_conf" -S
+first=$(readlink "$test_snapshot")
+
+XDG_STATE_HOME="$test_state" ./joetoo-kwin -f "$test_conf" -S
+second=$(readlink "$test_snapshot")
+
+XDG_STATE_HOME="$test_state" ./joetoo-kwin -f "$test_conf" -S
+third=$(readlink "$test_snapshot")
+
+printf 'First:  %s\nSecond: %s\nThird:  %s\n' \
+    "$first" "$second" "$third"
+
+echo "=== HISTORY ==="
+ls -la "$snapshot_dir"
+
+echo "=== FORMAT ==="
+sed -n '2s/^# data: //p' "$test_snapshot" |
+    jq '{protocol, settings_count:(.settings|length), entries:.entries}'
+ ✨ Last-good managed recipes saved privately [snapshot-20261119T234836.826823494Z-ef1b5c849fdb0aeeaf5bce70b22f3431.conf]; manual geometry and remote authentication are not saved
+ ✨ Last-good managed recipes saved privately [snapshot-20261119T234838.015450572Z-6a4edf433dfef971bce780583953546c.conf]; manual geometry and remote authentication are not saved
+ ✨ Last-good managed recipes saved privately [snapshot-20261119T234839.226960577Z-2b47d786c0517aca891a716312963ee0.conf]; manual geometry and remote authentication are not saved
+First:  snapshot-20261119T234836.826823494Z-ef1b5c849fdb0aeeaf5bce70b22f3431.conf
+Second: snapshot-20261119T234838.015450572Z-6a4edf433dfef971bce780583953546c.conf
+Third:  snapshot-20261119T234839.226960577Z-2b47d786c0517aca891a716312963ee0.conf
+=== HISTORY ===
+total 20
+drwx------ 2 joe joe 4096 Nov 19 18:48 .
+drwx------ 3 joe joe 4096 Nov 19 18:48 ..
+-rw------- 1 joe joe    0 Nov 19 18:48 .snapshot.lock
+lrwxrwxrwx 1 joe joe   73 Nov 19 18:48 last-session.conf -> snapshot-20261119T234839.226960577Z-2b47d786c0517aca891a716312963ee0.conf
+-rw------- 1 joe joe 3167 Nov 19 18:48 snapshot-20261119T234838.015450572Z-6a4edf433dfef971bce780583953546c.conf
+-rw------- 1 joe joe 3167 Nov 19 18:48 snapshot-20261119T234839.226960577Z-2b47d786c0517aca891a716312963ee0.conf
+=== FORMAT ===
+{
+  "protocol": 2,
+  "settings_count": 47,
+  "entries": [
+    {
+      "desktop": 3,
+      "layer": "panel",
+      "mode": "local",
+      "program": "konsole",
+      "slot": 1,
+      "target": "btop"
+    },
+    {
+      "desktop": 3,
+      "layer": "over",
+      "mode": "local",
+      "program": "dolphin",
+      "slot": 2,
+      "target": ""
+    }
+  ]
+}
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ XDG_STATE_HOME="$test_state" ./joetoo-kwin -f "$test_conf" -S
+first=$(readlink "$test_snapshot")
+
+XDG_STATE_HOME="$test_state" ./joetoo-kwin -f "$test_conf" -S
+second=$(readlink "$test_snapshot")
+
+XDG_STATE_HOME="$test_state" ./joetoo-kwin -f "$test_conf" -S
+third=$(readlink "$test_snapshot")
+
+printf 'First:  %s\nSecond: %s\nThird:  %s\n' \
+    "$first" "$second" "$third"
+
+echo "=== HISTORY ==="
+ls -la "$snapshot_dir"
+
+echo "=== FORMAT ==="
+sed -n '2s/^# data: //p' "$test_snapshot" |
+    jq '{protocol, settings_count:(.settings|length), entries:.entries}'
+ ✨ Last-good managed recipes saved privately [snapshot-20261119T234913.484583580Z-47f167b891d84561c63df475a9ffcb39.conf]; manual geometry and remote authentication are not saved
+ ✨ Last-good managed recipes saved privately [snapshot-20261119T234914.612246356Z-b29823b63f20e2e8e9acbc3a5f02fbd4.conf]; manual geometry and remote authentication are not saved
+ ✨ Last-good managed recipes saved privately [snapshot-20261119T234915.712534614Z-965c78ef5aa868269cfba5b51e855244.conf]; manual geometry and remote authentication are not saved
+First:  snapshot-20261119T234913.484583580Z-47f167b891d84561c63df475a9ffcb39.conf
+Second: snapshot-20261119T234914.612246356Z-b29823b63f20e2e8e9acbc3a5f02fbd4.conf
+Third:  snapshot-20261119T234915.712534614Z-965c78ef5aa868269cfba5b51e855244.conf
+=== HISTORY ===
+total 20
+drwx------ 2 joe joe 4096 Nov 19 18:49 .
+drwx------ 3 joe joe 4096 Nov 19 18:48 ..
+-rw------- 1 joe joe    0 Nov 19 18:48 .snapshot.lock
+lrwxrwxrwx 1 joe joe   73 Nov 19 18:49 last-session.conf -> snapshot-20261119T234915.712534614Z-965c78ef5aa868269cfba5b51e855244.conf
+-rw------- 1 joe joe 3167 Nov 19 18:49 snapshot-20261119T234914.612246356Z-b29823b63f20e2e8e9acbc3a5f02fbd4.conf
+-rw------- 1 joe joe 3167 Nov 19 18:49 snapshot-20261119T234915.712534614Z-965c78ef5aa868269cfba5b51e855244.conf
+=== FORMAT ===
+{
+  "protocol": 2,
+  "settings_count": 47,
+  "entries": [
+    {
+      "desktop": 3,
+      "layer": "panel",
+      "mode": "local",
+      "program": "konsole",
+      "slot": 1,
+      "target": "btop"
+    },
+    {
+      "desktop": 3,
+      "layer": "over",
+      "mode": "local",
+      "program": "dolphin",
+      "slot": 2,
+      "target": ""
+    }
+  ]
+}
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ dbus=org.freedesktop.DBus
+dbus_path=/org/freedesktop/DBus
+
+kwin_before=$(
+    qdbus6 "$dbus" "$dbus_path" \
+        "$dbus.GetNameOwner" org.kde.KWin
+)
+
+rc-service -U joetoo-kwind stop
+rc-service -U joetoo-kwind start
+ * Stopping joetoo-kwind ...                                                      [ ok ]
+ * Starting joetoo-kwind ...                                                      [ ok ]
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ready=0
+
+for attempt in {1..20}; do
+    status=$(qdbus6 "$bus" "$path" "$bus.RegistryStatus" 2>/dev/null) || status=''
+
+    if jq -e '.recovery == "ready" and .observation.synchronized == true' \
+        >/dev/null 2>&1 <<< "$status"; then
+        ready=1
+        break
+    fi
+
+    sleep 1
+done
+
+if (( ready )); then
+    echo "PASS: broker recovery ready"
+    jq '{recovery, managed_count, presence_counts, observation}' <<< "$status"
+else
+    echo "FAIL: broker did not become ready within bounded check"
+fi
+PASS: broker recovery ready
+{
+  "recovery": "ready",
+  "managed_count": 2,
+  "presence_counts": {
+    "missing": 0,
+    "present": 2,
+    "uncertain": 0
+  },
+  "observation": {
+    "observed_count": 5,
+    "revision": 61,
+    "source": "1795123492725-bd5sr4cb7y45d4vnlgkvp",
+    "synchronized": true
+  }
+}
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ qdbus6 "$bus" "$path" "$bus.ListManaged" \
+    > "$test_state/after-restart.json"
+
+diff -u \
+    <(jq -S '[.windows[] | {managed_id,window_uuid,intended}]' \
+        "$test_state/before-restart.json") \
+    <(jq -S '[.windows[] | {managed_id,window_uuid,intended}]' \
+        "$test_state/after-restart.json")
+
+kwin_after=$(
+    qdbus6 "$dbus" "$dbus_path" \
+        "$dbus.GetNameOwner" org.kde.KWin
+)
+
+[[ "$kwin_before" == "$kwin_after" ]] &&
+    echo "PASS: same KWin process ownership"
+
+./joetoo-kwin -l
+PASS: same KWin process ownership
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     3        1     present   succeeded  7ab74f31-9a74-4d9e-b931-d195cfbfcb2a
+win-002     3        2     present   succeeded  2e977cb3-393a-484c-a016-f7d325dcffcd
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -d win-001
+ ✨ Graceful close target set (registrations and reserved slots will remain):
+  win-001 desktop=3 slot=1 UUID=7ab74f31-9a74-4d9e-b931-d195cfbfcb2a
+ ✨ Retained close result: a1512b4ba49b41dd99a76ed2b3c1ad0c
+
+ ✨ Do you want to continue? [Y/n]: y
+ ✨ Affirmative response from user; continuing
+ * {"excluded": [], "protocol": 1, "reason": "verified", "registration_retained": true, "request_id": "a1512b4ba49b41dd99a76ed2b3c1ad0c", "reservations_retained": true, "self_terminal": "excluded", "state": "succeeded", "targets": [{"backend": "x11", "desktop": 3, "managed_id": "win-001", "request_id": "d055bb2b524349c7a7ee5364d3a06239", "slot": 1, "state": "closed", "window_uuid": "7ab74f31-9a74-4d9e-b931-d195cfbfcb2a"}]}
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ qdbus6 "$bus" "$path" "$bus.GetManaged" win-001 |
+    jq . > "$test_state/missing-before.json"
+
+rc-service -U joetoo-kwind stop
+rc-service -U joetoo-kwind start
+ * Stopping joetoo-kwind ...                                                      [ ok ]
+ * Starting joetoo-kwind ...                                                      [ ok ]
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ qdbus6 "$bus" "$path" "$bus.GetManaged" win-001 |
+    jq . > "$test_state/missing-after.json"
+
+diff -u \
+    <(jq -S '.window.observation' "$test_state/missing-before.json") \
+    <(jq -S '.window.observation' "$test_state/missing-after.json")
+
+./joetoo-kwin -l
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     3        1     missing   succeeded  7ab74f31-9a74-4d9e-b931-d195cfbfcb2a
+win-002     3        2     present   succeeded  2e977cb3-393a-484c-a016-f7d325dcffcd
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ before_link=$(readlink "$test_snapshot")
+
+if XDG_STATE_HOME="$test_state" ./joetoo-kwin -f "$test_conf" -S; then
+    echo "FAIL: incomplete arrangement saved"
+else
+    echo "PASS: incomplete arrangement refused"
+fi
+
+[[ "$(readlink "$test_snapshot")" == "$before_link" ]] &&
+    echo "PASS: last-good snapshot preserved"
+PASS: incomplete arrangement refused
+PASS: last-good snapshot preserved
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ before_link=$(readlink "$test_snapshot")
+
+if XDG_STATE_HOME="$test_state" ./joetoo-kwin -f "$test_conf" -S; then
+    echo "FAIL: incomplete arrangement saved"
+else
+    echo "PASS: incomplete arrangement refused"
+fi
+
+[[ "$(readlink "$test_snapshot")" == "$before_link" ]] &&
+    echo "PASS: last-good snapshot preserved"
+PASS: incomplete arrangement refused
+PASS: last-good snapshot preserved
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -x
+./joetoo-kwin -l
+ ✨ Managed clean sweep (confirmed verified removals retire registrations and reserved slots):
+  win-001 desktop=3 slot=1 UUID=7ab74f31-9a74-4d9e-b931-d195cfbfcb2a action=retire_missing
+  win-002 desktop=3 slot=2 UUID=2e977cb3-393a-484c-a016-f7d325dcffcd action=close
+ ✨ Retained close result: 3f0347c501de45a798f44116d5f3d915
+
+ ✨ Do you want to continue? [Y/n]: y
+ ✨ Affirmative response from user; continuing
+ * {"excluded": [], "protocol": 1, "reason": "verified", "registration_retained": false, "request_id": "3f0347c501de45a798f44116d5f3d915", "reservations_retained": false, "self_terminal": "excluded", "state": "succeeded", "targets": [{"action": "retire_missing", "desktop": 3, "managed_id": "win-001", "reason": "verified", "request_id": "d055bb2b524349c7a7ee5364d3a06239", "retired": true, "slot": 1, "state": "already_missing", "window_uuid": "7ab74f31-9a74-4d9e-b931-d195cfbfcb2a"}, {"action": "close", "backend": "x11", "desktop": 3, "managed_id": "win-002", "reason": "verified", "request_id": "8f1f87da11834577a1ceef002c976ff1", "retired": true, "slot": 2, "state": "closed", "window_uuid": "2e977cb3-393a-484c-a016-f7d325dcffcd"}]}
+No managed windows (no retained managed reservations).
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $ XDG_STATE_HOME="$test_state" ./joetoo-kwin -r
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: (completed)                      [ ✅ ]
+---[ joetoo-kwin-1.0.17 (configuration) ]-----------------------------------------------
+ * PN .............: [ joetoo-kwin ]
+ * BUILD ..........: [ 1.0.17 ]
+ * config .........: [ /run/user/1000/joetoo-restore.xXC2KkSd.conf ]
+ * screen_width ...: [ 1366 ]
+ * screen_height ..: [ 768 ]
+ ✨ LAUNCH PLAN: [2] windows; confirmation required
+ ✨ Execution desktop groups: [3]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1366x768] (not autodetected); terminal width budget: [87%]
+ * Desktop  Slot  Program  Mode   Target  Layer  X   Y   Width  Height
+ * 3        1     konsole  local  btop    panel  13  38  1188   652
+ * 3        2     dolphin  local  -       over   68  23  1284   691
+ ✨ KWin desktops: current [9], required [3]; existing desktop capacity is adequate
+
+ ✨ Do you want to continue? [Y/n]: y
+ ✨ Affirmative response from user; continuing
+ ✨ [20261119-18:55:54] Launching desktop [3] slot [1]
+ ✨ Armed managed launch [bde35b19f884496ab6a72627fb48f0af], placement [961328bfd0c946b0bcde3edafd36e0ab]
+ ✨ Launched Konsole operation; launch-process PID [163089] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-003] UUID [2bd87084-0ce2-4367-8718-f95c6d02fc8f]
+ ✨ OK launch: Konsole (pid=163089) before=[6] (225,118) 915x496 after=[3] (13,38) 1188x652 tiled=false fullscreen=false
+ ✨ [20261119-18:55:55] Launching desktop [3] slot [2]
+ ✨ Armed managed launch [7f632f71668946819560d1ec39676194], placement [60e8da28f23d460d90fbcf81fe5a7577]
+ ✨ Launched [dolphin] operation; launch-process PID [163262]
+ ✨ Registered [win-004] UUID [c8b8414b-5de7-4b35-9290-946ec18c57d5]
+kf.config.core: Access to "/home/joe/Downloads/google-chrome.desktop" denied, not owned by root and executable flag not set.
+ ✨ OK launch: Downloads — Dolphin (pid=163262) before=[6] (299,92) 768x548 after=[3] (68,23) 1284x691 tiled=false fullscreen=false
+ ✨ Initializing desktop [3] stack/focus; geometry remains separately verified
+ ✨ Desktop [3] initial stacking/focus result: (completed)                       [ ✅ ]
+ ✨ Entries: completed [2], failed [0], skipped [0]; incomplete desktop cohorts [0]
+ ✨ Configured layout: [2/2] windows completed ... (completed)                   [ ✅ ]
+joe@slim2 ~/joetoo-ai/workspace/projects/joetoo-kwin $

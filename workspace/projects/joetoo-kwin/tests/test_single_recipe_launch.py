@@ -16,7 +16,7 @@ class SingleRecipeTests(configured.ConfiguredLaunchTests):
         super().setUp()
         self.env['BROKER_STATE']=json.dumps(dict(observation=dict(synchronized=True),
             presence_counts=dict(uncertain=0),request_counts=dict(pending=0,running=0),
-            placement_transaction=dict(state='IDLE'),initial_layout_protocol=1,
+            placement_transaction=dict(state='IDLE'),initial_layout_protocol=1,recovery_snapshot_protocol=1,
             single_raise_protocol=1,viewer_protocol=1,initial_layout_active=False))
         self.env['MANAGED']=json.dumps(dict(count=0,windows=[]))
         shutil.copyfile(ROOT/'libexec/joetoo_kwin_rdp_target.py',self.folder/'libexec/joetoo_kwin_rdp_target.py')

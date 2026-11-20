@@ -25,9 +25,21 @@ sftp_launch_advisory() {
     return 0
 }
 
+# Capture only allowlisted effective settings and the complete original recipe.
+# The implied logical slot is retained independently from physical panel index.
+configured_restore_intent() {
+    local _ri_helper _ri_name _ri_names
+    _ri_helper="$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_persistence.py"
+    _ri_names=$(python3 "$_ri_helper" --setting-names) || return 2
+    for _ri_name in $_ri_names; do printf '%s\0%s\0' "$_ri_name" "${!_ri_name}"; done | \
+        python3 "$_ri_helper" --intent "${planned_desktop[$_op_i]}" "${planned_slot[$_op_i]}" \
+        "${planned_program[$_op_i]}" "${planned_mode[$_op_i]}" "${planned_target[$_op_i]}" "${planned_layer[$_op_i]}" "${desktop_session_frames[$_op_i]:-}"
+}
+
 # Encode a validated recipe and existing budgets; targets never become shell code.
 rdp_configured_job() {
     printf '%s' "${planned_target[$_op_i]}" | jq -Rs \
+        --argjson intent "${launch_intent_json:-null}" \
         --argjson settings "$rdp_settings" \
         --argjson bounds "$rdp_bounds" --arg call "$vnc_dbus_timeout_ms" \
         --arg placement "$vnc_placement_timeout_ms" \
@@ -36,7 +48,8 @@ rdp_configured_job() {
         --argjson width "${planned_width[$_op_i]}" --argjson height "${planned_height[$_op_i]}" '
         {target:.,settings:$settings,desktop:$desktop,slot:$slot,x:$x,y:$y,width:$width,height:$height,
          bounds:$bounds,
-         mechanical:{call_timeout_ms:$call,placement_timeout_ms:$placement}}'
+         mechanical:{call_timeout_ms:$call,placement_timeout_ms:$placement}} +
+         (if $intent == null then {} else {intent:$intent} end)'
 }
 
 launch_configured_rdp() {
@@ -73,9 +86,11 @@ launch_configured_window() {
     launch_registration_id=""; launch_placement_id=""
     _vl_dir=$(dirname -- "${BASH_SOURCE[0]}")
     _vl_job=$(printf '%s' "${planned_target[$_op_i]}" | jq -Rs \
+        --argjson intent "${launch_intent_json:-null}" \
         --argjson bounds "$vnc_bounds" --argjson slot "$2" --argjson desktop "$3" \
         --argjson x "$4" --argjson y "$5" --argjson width "$6" --argjson height "$7" \
-        '$bounds + {target:.,slot:$slot,desktop:$desktop,x:$x,y:$y,width:$width,height:$height}') || return 2
+        '$bounds + {target:.,slot:$slot,desktop:$desktop,x:$x,y:$y,width:$width,height:$height} +
+         (if $intent == null then {} else {intent:$intent} end)') || return 2
     j_msg "-${notice}" -p "[$launch_attempt_timestamp] Starting TigerVNC over dedicated SSH; desktop readiness may wait for VNC authentication"
     if _vl_result=$(printf '%s' "$_vl_job" | python3 "$_vl_dir/joetoo_kwin_vnc_launch.py" 9>&-); then _vl_rc=0
     else _vl_rc=$?; fi
@@ -152,11 +167,13 @@ launch_preflight() {
         esac
     done
     _lp_status=$(qdbus6 "$bus" "$path" "$iface.RegistryStatus") || return 1
+    jq -e '.recovery_snapshot_protocol == 1' <<< "$_lp_status" >/dev/null || {
+        plan_error 'compatible Step 1.7 broker required for launch-intent capture'; return 1; }
     if [[ -n ${vnc_bounds:-} ]]; then
         jq -e '.viewer_protocol == 1' <<< "$_lp_status" >/dev/null || {
             plan_error 'resident lacks TigerVNC X11/XWayland identity capability'; return 2; }
     fi
-    jq -e '.managed_close_active != true and .observation.synchronized == true and .presence_counts.uncertain == 0 and .viewer_cleanup_uncertain != true
+    jq -e '((.recovery // "inactive") == "inactive" or .recovery == "ready") and .managed_close_active != true and .observation.synchronized == true and .presence_counts.uncertain == 0 and .viewer_cleanup_uncertain != true
         and .request_counts.pending == 0 and .request_counts.running == 0
         and (.placement_transaction.state == "IDLE" or .placement_transaction.state == "OK"
              or .placement_transaction.state == "ERROR")' <<< "$_lp_status" >/dev/null || {
@@ -217,7 +234,7 @@ lock_configured_launcher() {
 
 open_plan() {
     local _op_dir _op_i _op_failed=0 _op_initial_failed=0 _op_rc _op_state _op_status _op_group _op_payload _op_layout _op_try
-    local _op_attempted=0 _op_completed=0 _op_single="" launch_attempt_timestamp
+    local _op_attempted=0 _op_completed=0 _op_single="" launch_attempt_timestamp launch_intent_json=""
     local -a _op_single_fields=("$@")
     (( $# == 0 )) || _op_single=single
     local -A launch_finished=() launch_done_entry=()
@@ -250,6 +267,7 @@ open_plan() {
         [[ ${planned_desktop[$_op_i]} == "$_op_group" ]] || continue
         # Recheck after confirmation and between entries; broker independently
         # guards each actual submission against concurrent conflicting launches.
+        launch_intent_json=""
         if ! launch_preflight "$_op_i"; then
             j_msg "-${err}" -p "Incomplete layout: completed [$_op_completed], failed [$_op_failed], skipped [$(( ${#planned_desktop[@]} - _op_attempted ))]; current cohort not finalized"
             return 1
@@ -271,6 +289,10 @@ open_plan() {
         else
             _op_argv=(env JOETOO_SESSION_MODE="${planned_mode[$_op_i]}" JOETOO_SESSION_TARGET="${planned_target[$_op_i]}"
                 konsole --separate -e bash --rcfile "$launch_session_file" -i)
+        fi
+        launch_intent_json=$(configured_restore_intent) || return 2
+        if [[ $launch_intent_json == null ]]; then
+            j_msg "-${warn}" -p 'Recipe remains launchable but cannot be faithfully exported by -S'
         fi
         _op_attempted=$((_op_attempted + 1))
         if launch_configured_window "$_op_class" "${planned_slot[$_op_i]}" "${planned_desktop[$_op_i]}" \

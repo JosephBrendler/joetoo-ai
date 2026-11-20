@@ -18,6 +18,8 @@ plan_defaults() {
     managed_close_x11_grab_ms=100
     managed_close_poll_ms=100
     managed_close_dbus_timeout_ms=3000
+    snapshot_history_depth=10
+    snapshot_validation_timeout_ms=30000
     screen_width=""
     screen_height=""
     desktop_limit=20
@@ -66,6 +68,7 @@ plan_defaults() {
     graphical_width_percent=94
     graphical_height_percent=90
     declare -ga desktop_session_list=()
+    declare -ga desktop_session_frames=() # Optional original per-recipe frame policy, never observed geometry.
 }
 
 plan_error() {
@@ -136,9 +139,20 @@ validate_close_settings() {
         plan_error 'managed close total timeout must cover per-window timeout'; return 2; }
 }
 
+validate_snapshot_history() {
+    if [[ ! $snapshot_history_depth =~ ^[1-9][0-9]{0,3}$ ]] || (( snapshot_history_depth > 1000 )); then
+        plan_error 'snapshot_history_depth must be 1..1000'; return 2
+    fi
+}
+
 validate_plan() {
+    validate_snapshot_history || return $?
     local _vp_name _vp_value _vp_record _vp_delimiters _vp_declaration
     local _vp_desktop _vp_program _vp_mode _vp_target _vp_layer _vp_explicit _vp_total _vp_sftp_dir _vp_uri _vp_rdp_target
+    if [[ ! $snapshot_validation_timeout_ms =~ ^[1-9][0-9]{0,5}$ ]] ||
+        (( snapshot_validation_timeout_ms < 100 || snapshot_validation_timeout_ms > 120000 )); then
+        plan_error 'snapshot_validation_timeout_ms must be 100..120000 ms'; return 2
+    fi
     # Reset all derived state so rebuilding a plan cannot accumulate old entries.
     declare -ga planned_desktop=() planned_slot=() planned_program=() planned_mode=() planned_target=()
     declare -ga planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
@@ -334,6 +348,27 @@ calculate_plan() {
         if (( geometry_width < 1 || geometry_height < 1 || geometry_x < 0 || geometry_y < 0 ||
             geometry_x + geometry_width > screen_width || geometry_y + geometry_height > screen_height )); then
             plan_error 'calculated geometry cannot fit configured display'; return 2
+        fi
+        # Optional explicit policy overrides use the same validation and
+        # placement path; ordinary recipes retain the shared calculations.
+        if (( ${#desktop_session_frames[@]} > 0 )); then
+            if (( ${#desktop_session_frames[@]} != ${#planned_desktop[@]} )); then
+                plan_error 'desktop_session_frames must match recipe count'; return 2
+            fi
+            [[ -v desktop_session_frames[$_cp_i] ]] || {
+                plan_error 'desktop_session_frames must not contain missing indexes'; return 2; }
+            if [[ -n ${desktop_session_frames[$_cp_i]:-} ]]; then
+                local _cp_frame=${desktop_session_frames[$_cp_i]} _cp_fx _cp_fy _cp_fw _cp_fh
+                [[ $_cp_frame =~ ^[0-9]{1,5}\|[0-9]{1,5}\|[0-9]{1,5}\|[0-9]{1,5}$ ]] || {
+                    plan_error 'invalid per-recipe frame; expected X|Y|WIDTH|HEIGHT'; return 2; }
+                IFS='|' read -r _cp_fx _cp_fy _cp_fw _cp_fh <<< "$_cp_frame"
+                geometry_x=$((10#$_cp_fx)); geometry_y=$((10#$_cp_fy))
+                geometry_width=$((10#$_cp_fw)); geometry_height=$((10#$_cp_fh))
+                if (( geometry_width < 1 || geometry_height < 1 || geometry_x + geometry_width > screen_width ||
+                      geometry_y + geometry_height > screen_height )); then
+                    plan_error 'per-recipe frame cannot fit configured display'; return 2
+                fi
+            fi
         fi
         planned_slot+=("$_cp_slot")
         planned_x+=("$geometry_x"); planned_y+=("$geometry_y")

@@ -13,6 +13,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from dataclasses import dataclass, field
 import uuid
+import math
 
 
 TERMINAL_REQUEST_STATES = frozenset(
@@ -34,6 +35,48 @@ def canonical_uuid(value):
         return str(uuid.UUID(str(value)))
     except (ValueError, TypeError, AttributeError) as exc:
         raise RegistryError("invalid KWin UUID") from exc
+
+
+def historical_observation(value):
+    """Bounded last-known facts; optional legacy fields remain absent, not invented.
+
+    This validation never establishes current presence or destructive authority.
+    Only the broker's authenticated inventory/native verification can do that.
+    """
+    if not isinstance(value, dict):
+        raise RegistryError('invalid historical observation')
+    result = dict(uuid=canonical_uuid(value.get('uuid')))
+    if type(value.get('pid')) is not int or value['pid'] <= 0:
+        raise RegistryError('invalid historical PID')
+    app = value.get('resource_class')
+    if not isinstance(app, str) or len(app) > 256:
+        raise RegistryError('invalid historical class')
+    result.update(pid=value['pid'], resource_class=app)
+    for name in ('resource_name', 'desktop_file', 'caption'):
+        if name in value:
+            if not isinstance(value[name], str):
+                raise RegistryError('invalid historical text')
+            result[name] = value[name][:256]
+    if 'desktops' in value:
+        desktops = value['desktops']
+        if (not isinstance(desktops, list) or len(desktops) > 256
+                or any(type(v) is not int or not 1 <= v <= 256 for v in desktops)
+                or len(set(desktops)) != len(desktops)):
+            raise RegistryError('invalid historical desktops')
+        result['desktops'] = list(desktops)
+    if 'on_all_desktops' in value:
+        if type(value['on_all_desktops']) is not bool:
+            raise RegistryError('invalid historical desktop membership')
+        result['on_all_desktops'] = value['on_all_desktops']
+    if 'geometry' in value:
+        frame = value['geometry']
+        if (not isinstance(frame, dict) or any(type(frame.get(k)) not in (int, float)
+                or not math.isfinite(frame[k]) or abs(frame[k]) > 2147483647
+                for k in ('x', 'y', 'width', 'height'))
+                or frame['width'] < 0 or frame['height'] < 0):
+            raise RegistryError('invalid historical frame')
+        result['geometry'] = {k: frame[k] for k in ('x', 'y', 'width', 'height')}
+    return result
 
 
 @dataclass
@@ -61,6 +104,7 @@ class ManagedWindow:
     connection: str = "not_attempted"
     # No general application-session monitor is implemented in Step 1.4a.
     application_sessions: list = field(default_factory=list)
+    restore_intent: dict | None = None  # Validated recipe/settings, never ownership.
 
 
 class WindowRegistry:
@@ -81,6 +125,8 @@ class WindowRegistry:
         self._completed_limit = completed_limit
         self._active_request_id = None  # serialize in-flight correlations
         self._next_managed_number = 1   # do not reuse aliases this broker lifetime
+        self._before_register = lambda record: None  # Durable publication seam, not identity validation.
+        self._changed = lambda: None  # Broker persistence adapter; model tests remain offline.
 
     def begin_launch(self, request_id, *, source, synchronized, baseline,
                      recipe, run_id=None):
@@ -153,10 +199,15 @@ class WindowRegistry:
         managed_id = f"win-{self._next_managed_number:03d}"
         record = ManagedWindow(managed_id, identifier, request_id, request.run_id,
                                deepcopy(request.recipe), deepcopy(observed))
+        record.restore_intent = deepcopy(request.recipe.get("restore_intent"))
+        if record.restore_intent is not None:
+            record.recipe.update({k: record.restore_intent[k] for k in ("desktop", "slot", "program", "mode", "target", "layer")})
+        self._before_register(record)  # All correlation checks passed; persist before acknowledging a new ID.
         self.managed_windows[identifier] = record
         self.uuid_by_managed_id[managed_id] = identifier
         self._next_managed_number += 1
         self._finish(request, "succeeded", managed_id)
+        self._changed()
         return deepcopy(record)
 
     def get_window(self, identifier):
@@ -186,6 +237,7 @@ class WindowRegistry:
             record.observation = deepcopy(observation)
         else:
             record.presence = state
+        self._changed()
         return True
 
     def retire_missing(self, managed_id, *, window_uuid, request_id):
@@ -204,6 +256,7 @@ class WindowRegistry:
             raise RegistryError("retirement requires the same inactive missing registration")
         del self.managed_windows[identifier]
         del self.uuid_by_managed_id[managed_id]
+        self._changed()
         # Launch and close result histories remain independently bounded.
         return True
 
@@ -224,6 +277,7 @@ class WindowRegistry:
                 or (state != "failed" and record.presence != "present")):
             raise RegistryError("invalid placement transition")
         record.placement = state
+        self._changed()
 
     def set_connection(self, window_uuid, state, *, application_reported=False):
         """Store an explicitly reported connection outcome, not inferred SSH.

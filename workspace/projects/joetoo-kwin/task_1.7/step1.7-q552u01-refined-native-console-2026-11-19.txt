@@ -1,0 +1,766 @@
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ cd ~/joetoo-ai/workspace/projects/joetoo-kwin
+
+bus=org.joetoo.KWinBridge
+path=/org/joetoo/KWinBridge
+
+test_state="$HOME/.local/joetoo-step17-native.wTRHPBiU"
+test_conf="$test_state/plan.conf"
+snapshot_dir="$test_state/joetoo-kwin"
+test_snapshot="$snapshot_dir/last-session.conf"
+legacy_backup="$test_state/legacy-last-session-before-refinement.conf"
+
+echo "=== CURRENT INVENTORY ==="
+./joetoo-kwin -l
+
+echo "=== EXISTING LEGACY SNAPSHOT ==="
+stat -c '%F %a %U %n' "$test_snapshot"
+
+if [[ -f $test_snapshot && ! -L $test_snapshot && ! -e $legacy_backup ]]; then
+    cp -p -- "$test_snapshot" "$legacy_backup"
+fi
+
+cmp -- "$test_snapshot" "$legacy_backup"
+sha256sum "$legacy_backup"
+
+echo "=== CANDIDATE FILE STATUS ==="
+git status --short
+git diff --check
+
+# End of commands
+=== CURRENT INVENTORY ===
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-004     3        1     missing   succeeded  2aa6d149-a763-4e25-88e1-db28924b7eae
+win-005     3        2     present   succeeded  a44360e9-9df8-49ef-94d2-afa8918a96ca
+win-006     3        3     present   succeeded  801c8aaa-e936-485d-9445-61c90482a114
+=== EXISTING LEGACY SNAPSHOT ===
+regular file 600 joe /home/joe/.local/joetoo-step17-native.wTRHPBiU/joetoo-kwin/last-session.conf
+7caf9ea13902e808c89d4150cdc3210d2e67bb793e9228849b009d6926aa5068  /home/joe/.local/joetoo-step17-native.wTRHPBiU/legacy-last-session-before-refinement.conf
+=== CANDIDATE FILE STATUS ===
+ M docs/configuration-reference.md
+ M joetoo-kwin
+ M joetoo-kwin-template.conf
+ M libexec/joetoo-kwin-launch-functions
+ M libexec/joetoo-kwin-plan-functions
+ M libexec/joetoo-kwind
+ M libexec/joetoo_kwin_rdp_launch.py
+ M libexec/joetoo_kwin_registry.py
+ M libexec/joetoo_kwin_vnc_launch.py
+ M task_1.7/HANDOFF.md
+ M task_1.7/README.md
+ M tests/test_config_presentation.py
+ M tests/test_openrc_user_setup.py
+ M tests/test_single_recipe_launch.py
+ M tests/test_step1_2a.py
+ M tests/test_step1_5a_plan.py
+ M tests/test_step1_5c_corrections.py
+ M tests/test_step1_5c_launch.py
+ M tools/joetoo-kwind-install-poc
+?? docs/joetoo-kwin_user_manual.md
+?? libexec/joetoo_kwin_persistence.py
+?? libexec/joetoo_kwin_recovery.py
+?? tests/test_recovery_snapshot.py
+?? tests/test_snapshot_refinements.py
+?? tests/test_user_manual.py
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./tools/restart_joetoo-kwind notest
+
+rc-service -U joetoo-kwind status
+./tools/joetoo-kwind-install-poc --check
+
+qdbus6 "$bus" "$path" "$bus.RegistryStatus" |
+    jq '{recovery_snapshot_protocol, recovery, managed_count, presence_counts}'
+
+./joetoo-kwin -l
+
+# End of commands
+---[ q552u01 restart_joetoo-kwind-20261119 ]------------------------------------------------------
+---[ restart_joetoo-kwind-20261119 (configuration) ]----------------------------------------------
+ * PN ...............: [ restart_joetoo-kwind ]
+ * BUILD ............: [ 20261119 ]
+ * user .............: [ joe ]
+ * project_dir ......: [ /home/joe/joetoo-ai/workspace/projects/joetoo-kwin ]
+ * bus ..............: [ org.joetoo.KWinBridge ]
+ * path .............: [ /org/joetoo/KWinBridge ]
+
+ ✨ PWD: [/home/joe/joetoo-ai/workspace/projects/joetoo-kwin]
+ ✨ Moving to [/home/joe/joetoo-ai/workspace/projects/joetoo-kwin]                         [ ✅ ]
+ ✨ Stopping joetoo-kwind service                                                          [ ✅ ]
+ ✨ Running ./tools/joetoo-kwind-install-poc --update
+    OpenRC user service: /home/joe/.config/rc/init.d/joetoo-kwind
+    Daemon executable:  /home/joe/.local/libexec/joetoo-kwind
+    Registry module:     /home/joe/.local/libexec/joetoo_kwin_registry.py
+    VNC identity module: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+    VNC target module:   /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+    VNC launch module:   /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+    SDL RDP module:      /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+    RDP target module:   /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+    Managed close:       /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+    Persistence module:  /home/joe/.local/libexec/joetoo_kwin_persistence.py
+    Recovery module:     /home/joe/.local/libexec/joetoo_kwin_recovery.py
+    Resident JavaScript: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+    Bash CLI:           /home/joe/.local/bin/joetoo-kwin
+    OpenRC user override: /home/joe/.config/rc/conf.d/joetoo-kwind
+    OpenRC user config:  /home/joe/.config/rc/rc.conf
+    Backup: /home/joe/.local/state/joetoo-kwin/archive/daemon/adadd507ed8f3577498eaf6e1c1cce469ba7483b097d8a484edeb84907e83990/joetoo-kwind
+    Backup: /home/joe/.local/state/joetoo-kwin/archive/registry/bb26e9883833d0e0b246e00b923a54d084acc7db34f03884d4f87887a77afe0d/joetoo_kwin_registry.py
+    Backup: /home/joe/.local/state/joetoo-kwin/archive/cli/b643a0e6ece0f80d9b5bd1a7afa817d8a15d2a3323781a6be728d636d07cf170/joetoo-kwin
+    Backup: /home/joe/.local/state/joetoo-kwin/archive/persistence/48a526442bb0769baf0f8ac40becba31c073e108ced69e774e42acff9460db77/joetoo_kwin_persistence.py
+    Backup: /home/joe/.local/state/joetoo-kwin/archive/recovery/894ffff95ec1efea834785b5a50e9d61beed281a576ebf4088daa336e9aba621/joetoo_kwin_recovery.py
+    OpenRC allowlist already correct: /home/joe/.config/rc/rc.conf
+    Installed fourteen user-owned joetoo-kwind files. No service was started.
+    From a local Plasma Konsole, run:
+      rc-service -U joetoo-kwind start
+      rc-service -U joetoo-kwind status
+ ✨ Update done; result: (success!)                                                        [ ✅ ]
+ ✨ Unloading joetoo-bridge KWin script (true)                                             [ ✅ ]
+ ✨ Starting joetoo-kwind service                                                          [ ✅ ]
+ ✨ Running ./tools/joetoo-kwind-install-poc --check
+    OpenRC user service: /home/joe/.config/rc/init.d/joetoo-kwind
+    Daemon executable:  /home/joe/.local/libexec/joetoo-kwind
+    Registry module:     /home/joe/.local/libexec/joetoo_kwin_registry.py
+    VNC identity module: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+    VNC target module:   /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+    VNC launch module:   /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+    SDL RDP module:      /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+    RDP target module:   /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+    Managed close:       /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+    Persistence module:  /home/joe/.local/libexec/joetoo_kwin_persistence.py
+    Recovery module:     /home/joe/.local/libexec/joetoo_kwin_recovery.py
+    Resident JavaScript: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+    Bash CLI:           /home/joe/.local/bin/joetoo-kwin
+    OpenRC user override: /home/joe/.config/rc/conf.d/joetoo-kwind
+    OpenRC user config:  /home/joe/.config/rc/rc.conf
+    Current: /home/joe/.config/rc/init.d/joetoo-kwind
+    Current: /home/joe/.local/libexec/joetoo-kwind
+    Current: /home/joe/.local/libexec/joetoo_kwin_registry.py
+    Current: /home/joe/.config/rc/conf.d/joetoo-kwind
+    Current: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+    Current: /home/joe/.local/bin/joetoo-kwin
+    Current: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_persistence.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_recovery.py
+    OpenRC allowlist correct: /home/joe/.config/rc/rc.conf
+ ✨ Checks done; result: (success!)                                                        [ ✅ ]
+---[ restart_joetoo-kwind-20261119 (available methods) ]------------------------------------------
+ ✨ Running "dbus introspection" with: qdbus6 $bus $path
+Service 'org.joetoo.KWinBridge' does not exist.
+ ✨ dbus introspection done; result: (error!)                                              [ ❌ ]
+ ✨ Returning to [/home/joe/joetoo-ai/workspace/projects/joetoo-kwin]                      [ ✅ ]
+
+ ✨ Make these abbreviation assignments to facilitate use of these methods
+bus="org.joetoo.KWinBridge";  path="/org/joetoo/KWinBridge"
+kbus="org.kde.KWin";  kpath="/org/kde/KWin"
+
+ ✨ Use these to list all interface/methods for each service
+qdbus6 $bus $path
+qdbus6 $kbus $kpath
+
+ ✨ Use these for more focused queries in the joetoo KWinBridge service
+qdbus6 $bus $path $bus.ListManaged
+qdbus6 $bus $path $bus.RegistryStatus
+
+qdbus6 $bus $path $bus.ListManaged | jq .
+qdbus6 $bus $path $bus.RegistryStatus | jq .
+ * status: started
+OpenRC user service: /home/joe/.config/rc/init.d/joetoo-kwind
+Daemon executable:  /home/joe/.local/libexec/joetoo-kwind
+Registry module:     /home/joe/.local/libexec/joetoo_kwin_registry.py
+VNC identity module: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+VNC target module:   /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+VNC launch module:   /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+SDL RDP module:      /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+RDP target module:   /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+Managed close:       /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+Persistence module:  /home/joe/.local/libexec/joetoo_kwin_persistence.py
+Recovery module:     /home/joe/.local/libexec/joetoo_kwin_recovery.py
+Resident JavaScript: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+Bash CLI:           /home/joe/.local/bin/joetoo-kwin
+OpenRC user override: /home/joe/.config/rc/conf.d/joetoo-kwind
+OpenRC user config:  /home/joe/.config/rc/rc.conf
+Current: /home/joe/.config/rc/init.d/joetoo-kwind
+Current: /home/joe/.local/libexec/joetoo-kwind
+Current: /home/joe/.local/libexec/joetoo_kwin_registry.py
+Current: /home/joe/.config/rc/conf.d/joetoo-kwind
+Current: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+Current: /home/joe/.local/bin/joetoo-kwin
+Current: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+Current: /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+Current: /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+Current: /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+Current: /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+Current: /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+Current: /home/joe/.local/libexec/joetoo_kwin_persistence.py
+Current: /home/joe/.local/libexec/joetoo_kwin_recovery.py
+OpenRC allowlist correct: /home/joe/.config/rc/rc.conf
+{
+  "recovery_snapshot_protocol": 1,
+  "recovery": "ready",
+  "managed_count": 3,
+  "presence_counts": {
+    "missing": 1,
+    "present": 2,
+    "uncertain": 0
+  }
+}
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-004     3        1     missing   succeeded  2aa6d149-a763-4e25-88e1-db28924b7eae
+win-005     3        2     present   succeeded  a44360e9-9df8-49ef-94d2-afa8918a96ca
+win-006     3        3     present   succeeded  801c8aaa-e936-485d-9445-61c90482a114
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== REFUSAL TEST ==="
+
+if XDG_STATE_HOME="$test_state" \
+    ./joetoo-kwin -f "$test_conf" -S; then
+    echo "UNEXPECTED: incomplete arrangement was saved"
+else
+    echo "EXPECTED: incomplete arrangement was refused"
+fi
+
+echo "=== LEGACY FILE MUST BE UNCHANGED ==="
+test ! -L "$test_snapshot" &&
+    cmp -- "$test_snapshot" "$legacy_backup" &&
+    echo "Original last-good preserved"
+
+# End of commands
+=== REFUSAL TEST ===
+EXPECTED: incomplete arrangement was refused
+=== LEGACY FILE MUST BE UNCHANGED ===
+Original last-good preserved
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -x
+./joetoo-kwin -l
+
+# The old regular snapshot must still be restorable.
+XDG_STATE_HOME="$test_state" ./joetoo-kwin -r
+
+./joetoo-kwin -l
+
+# End of commands
+ ✨ Managed clean sweep (confirmed verified removals retire registrations and reserved slots):
+  win-004 desktop=3 slot=1 UUID=2aa6d149-a763-4e25-88e1-db28924b7eae action=retire_missing
+  win-005 desktop=3 slot=2 UUID=a44360e9-9df8-49ef-94d2-afa8918a96ca action=close
+  win-006 desktop=3 slot=3 UUID=801c8aaa-e936-485d-9445-61c90482a114 action=close
+ ✨ Retained close result: 6e83eecdf04941f4a742545992eac302
+
+ ✨ Do you want to continue? [Y/n]: y
+ ✨ Affirmative response from user; continuing
+ * {"excluded": [], "protocol": 1, "reason": "verified", "registration_retained": false, "request_id": "6e83eecdf04941f4a742545992eac302", "reservations_retained": false, "self_terminal": "excluded", "state": "succeeded", "targets": [{"action": "retire_missing", "desktop": 3, "managed_id": "win-004", "reason": "verified", "request_id": "d74c222c0f26405ba544e190f3c778f9", "retired": true, "slot": 1, "state": "already_missing", "window_uuid": "2aa6d149-a763-4e25-88e1-db28924b7eae"}, {"action": "close", "backend": "wayland", "desktop": 3, "managed_id": "win-005", "reason": "verified", "request_id": "9d54b9be9ed24363a7f800943de10865", "retired": true, "slot": 2, "state": "closed", "window_uuid": "a44360e9-9df8-49ef-94d2-afa8918a96ca"}, {"action": "close", "backend": "wayland", "desktop": 3, "managed_id": "win-006", "reason": "verified", "request_id": "26cca08e6dd743658679bdaa1596c145", "retired": true, "slot": 3, "state": "closed", "window_uuid": "801c8aaa-e936-485d-9445-61c90482a114"}]}
+No managed windows (no retained managed reservations).
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: (completed)                                [ ✅ ]
+ ⚠ Unmanaged window may obscure desktop [3] slot [1]
+ ⚠ Unmanaged window may obscure desktop [3] slot [2]
+ ⚠ Unmanaged window may obscure desktop [3] slot [3]
+---[ joetoo-kwin-1.0.18 (configuration) ]---------------------------------------------------------
+ * PN .............: [ joetoo-kwin ]
+ * BUILD ..........: [ 1.0.18 ]
+ * config .........: [ /run/user/1000/joetoo-restore.R0zSKDWb.conf ]
+ * screen_width ...: [ 1920 ]
+ * screen_height ..: [ 1080 ]
+ ✨ LAUNCH PLAN: [3] windows; confirmation required
+ ✨ Execution desktop groups: [3]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1920x1080] (not autodetected); terminal width budget: [87%]
+ * Desktop  Slot  Program  Mode   Target  Layer  X    Y   Width  Height
+ * 3        1     konsole  local  btop    panel  19   54  1670   918
+ * 3        2     dolphin  local  -       over   96   32  1804   972
+ * 3        3     konsole  local  btop    over   116  64  1804   972
+ ✨ KWin desktops: current [18], required [3]; existing desktop capacity is adequate
+
+ ✨ Do you want to continue? [Y/n]: y
+ ✨ Affirmative response from user; continuing
+ ⚠ Unmanaged window may obscure desktop [3] slot [1]
+ ⚠ Unmanaged window may obscure desktop [3] slot [2]
+ ⚠ Unmanaged window may obscure desktop [3] slot [3]
+ ✨ [20261119-15:51:02] Launching desktop [3] slot [1]
+ ✨ Armed managed launch [8f73c70898e4495595eb40a2f2917e76], placement [05d95011302b4e8c8b375e4d6ee03d4e]
+ ✨ Launched Konsole operation; launch-process PID [1039249] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-007] UUID [db08cbb4-b3e1-48f2-adf7-ba4a17509128]
+ ✨ OK launch: joetoo-kwin : bash — Konsole (pid=1039249) before=[1] (58,31) 1804x972 after=[3] (19,54) 1670x918 tiled=false fullscreen=false
+ ⚠ Unmanaged window may obscure desktop [3] slot [2]
+ ⚠ Unmanaged window may obscure desktop [3] slot [3]
+ ✨ [20261119-15:51:03] Launching desktop [3] slot [2]
+ ✨ Armed managed launch [f65073133b054ca383451f6fc0ce13cb], placement [c1ef37ecd8714b82b87dd6c8843137b1]
+ ✨ Launched [dolphin] operation; launch-process PID [1039437]
+ ✨ Registered [win-008] UUID [3bbbc9d0-ad11-4b60-96ae-364f9c35abe0]
+ ✨ OK launch: Home — Dolphin (pid=1039437) before=[1] (58,31) 1804x972 after=[3] (96,32) 1804x972 tiled=false fullscreen=false
+ ⚠ Unmanaged window may obscure desktop [3] slot [3]
+ ✨ [20261119-15:51:05] Launching desktop [3] slot [3]
+ ✨ Armed managed launch [91e8f35779124e51902e7c74ef8cd70f], placement [8220ec39c3054db9ba8fa471a11bebdb]
+ ✨ Launched Konsole operation; launch-process PID [1039665] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-009] UUID [612d4bba-ac04-451d-9fc3-3179faf856a5]
+ ✨ OK launch: joetoo-kwin : bash — Konsole (pid=1039665) before=[1] (125,58) 1670x918 after=[3] (116,64) 1804x972 tiled=false fullscreen=false
+ ✨ Initializing desktop [3] stack/focus; geometry remains separately verified
+ ✨ Desktop [3] initial stacking/focus result: (completed)                                 [ ✅ ]
+ ✨ Entries: completed [3], failed [0], skipped [0]; incomplete desktop cohorts [0]
+ ✨ Configured layout: [3/3] windows completed ... (completed)                             [ ✅ ]
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-007     3        1     present   succeeded  db08cbb4-b3e1-48f2-adf7-ba4a17509128
+win-008     3        2     present   succeeded  3bbbc9d0-ad11-4b60-96ae-364f9c35abe0
+win-009     3        3     present   succeeded  612d4bba-ac04-451d-9fc3-3179faf856a5
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ XDG_STATE_HOME="$test_state" \
+    ./joetoo-kwin -f "$test_conf" -S
+
+echo "=== NEW LATEST LINK ==="
+ls -l "$test_snapshot"
+readlink "$test_snapshot"
+
+echo "=== FILE PERMISSIONS ==="
+stat -c '%a %U %n' "$snapshot_dir"
+stat -L -c '%a %U %n' "$test_snapshot"
+
+echo "=== HISTORY FILES ==="
+find "$snapshot_dir" -maxdepth 1 -type f \
+    -name 'snapshot-*.conf' -printf '%f\n' | sort
+
+echo "=== SNAPSHOT FORMAT ==="
+sed -n '2s/^# data: //p' "$test_snapshot" |
+    jq '{protocol, settings: (.settings | keys | length), entries: [.entries[] | {desktop, slot, program, mode, target, layer}]}'
+
+# End of commands
+ ✨ Last-good managed recipes saved privately [snapshot-20261119T205253.290349592Z-febcacbec269f51569435c64149dd6d0.conf]; manual geometry and remote authentication are not saved
+ ✨ Prior regular last-good migrated to history; retention depth [10] applies (depth 1 retains only the newest save)
+=== NEW LATEST LINK ===
+lrwxrwxrwx 1 joe joe 73 Nov 19 15:52 /home/joe/.local/joetoo-step17-native.wTRHPBiU/joetoo-kwin/last-session.conf -> snapshot-20261119T205253.290349592Z-febcacbec269f51569435c64149dd6d0.conf
+snapshot-20261119T205253.290349592Z-febcacbec269f51569435c64149dd6d0.conf
+=== FILE PERMISSIONS ===
+700 joe /home/joe/.local/joetoo-step17-native.wTRHPBiU/joetoo-kwin
+600 joe /home/joe/.local/joetoo-step17-native.wTRHPBiU/joetoo-kwin/last-session.conf
+=== HISTORY FILES ===
+snapshot-20261119T205253.282637211Z-bd47a7f9e7841dd1d083711bcb1ad6cc.conf
+snapshot-20261119T205253.290349592Z-febcacbec269f51569435c64149dd6d0.conf
+=== SNAPSHOT FORMAT ===
+{
+  "protocol": 2,
+  "settings": 47,
+  "entries": [
+    {
+      "desktop": 3,
+      "slot": 1,
+      "program": "konsole",
+      "mode": "local",
+      "target": "btop",
+      "layer": "panel"
+    },
+    {
+      "desktop": 3,
+      "slot": 2,
+      "program": "dolphin",
+      "mode": "local",
+      "target": "",
+      "layer": "over"
+    },
+    {
+      "desktop": 3,
+      "slot": 3,
+      "program": "konsole",
+      "mode": "local",
+      "target": "btop",
+      "layer": "over"
+    }
+  ]
+}
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ found=0
+
+for file in "$snapshot_dir"/snapshot-*.conf; do
+    if cmp -s -- "$file" "$legacy_backup"; then
+        echo "Migrated legacy snapshot found: ${file##*/}"
+        found=1
+    fi
+done
+
+test "$found" -eq 1 &&
+    echo "Legacy migration verified"
+
+# End of commands
+Migrated legacy snapshot found: snapshot-20261119T205253.282637211Z-bd47a7f9e7841dd1d083711bcb1ad6cc.conf
+Legacy migration verified
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ first=$(readlink "$test_snapshot")
+
+XDG_STATE_HOME="$test_state" \
+    ./joetoo-kwin -f "$test_conf" -S
+second=$(readlink "$test_snapshot")
+
+XDG_STATE_HOME="$test_state" \
+    ./joetoo-kwin -f "$test_conf" -S
+third=$(readlink "$test_snapshot")
+
+printf 'First:  %s\nSecond: %s\nThird:  %s\n' \
+    "$first" "$second" "$third"
+
+echo "=== DISTINCT SNAPSHOTS ==="
+[[ $first != "$second" && $second != "$third" ]] &&
+    echo "PASS: each save received a new filename"
+
+echo "=== HISTORY COUNT ==="
+find "$snapshot_dir" -maxdepth 1 -type f \
+    -name 'snapshot-*.conf' | wc -l
+
+# End of commands
+ ✨ Last-good managed recipes saved privately [snapshot-20261119T205414.216377765Z-7870d8898857fdef096cccdb8a14e422.conf]; manual geometry and remote authentication are not saved
+ ✨ Last-good managed recipes saved privately [snapshot-20261119T205415.174786663Z-0289fc3ec26d8d4ae82c499ff5856461.conf]; manual geometry and remote authentication are not saved
+First:  snapshot-20261119T205253.290349592Z-febcacbec269f51569435c64149dd6d0.conf
+Second: snapshot-20261119T205414.216377765Z-7870d8898857fdef096cccdb8a14e422.conf
+Third:  snapshot-20261119T205415.174786663Z-0289fc3ec26d8d4ae82c499ff5856461.conf
+=== DISTINCT SNAPSHOTS ===
+PASS: each save received a new filename
+=== HISTORY COUNT ===
+4
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ depth_conf="$test_state/history-depth-2.conf"
+
+cp -p -- "$test_conf" "$depth_conf"
+printf '\nsnapshot_history_depth=2\n' >> "$depth_conf"
+
+XDG_STATE_HOME="$test_state" \
+    ./joetoo-kwin -f "$depth_conf" -S
+
+echo "=== HISTORY AFTER RETENTION ==="
+find "$snapshot_dir" -maxdepth 1 -type f \
+    -name 'snapshot-*.conf' -printf '%f\n' | sort
+
+echo "=== VERIFY DEPTH ==="
+count=$(find "$snapshot_dir" -maxdepth 1 -type f \
+    -name 'snapshot-*.conf' | wc -l)
+
+target=$(readlink "$test_snapshot")
+
+printf 'Retained count: %s\nLatest target: %s\n' "$count" "$target"
+
+[[ $count -eq 2 && -f "$snapshot_dir/$target" ]] &&
+    echo "PASS: history depth and latest target are valid"
+
+# End of commands
+ ✨ Last-good managed recipes saved privately [snapshot-20261119T205455.804446100Z-becedd529561f695b73e651e886bff97.conf]; manual geometry and remote authentication are not saved
+=== HISTORY AFTER RETENTION ===
+snapshot-20261119T205415.174786663Z-0289fc3ec26d8d4ae82c499ff5856461.conf
+snapshot-20261119T205455.804446100Z-becedd529561f695b73e651e886bff97.conf
+=== VERIFY DEPTH ===
+Retained count: 2
+Latest target: snapshot-20261119T205455.804446100Z-becedd529561f695b73e651e886bff97.conf
+PASS: history depth and latest target are valid
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ XDG_STATE_HOME="$test_state" ./joetoo-kwin -r
+./joetoo-kwin -l
+
+# End of commands
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: (completed)                                [ ✅ ]
+ 💥 joetoo-kwin: managed desktop/slot conflict [win-007]
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-007     3        1     present   succeeded  db08cbb4-b3e1-48f2-adf7-ba4a17509128
+win-008     3        2     present   succeeded  3bbbc9d0-ad11-4b60-96ae-364f9c35abe0
+win-009     3        3     present   succeeded  612d4bba-ac04-451d-9fc3-3179faf856a5
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -l
+
+# Replace with the actual disposable managed ID.
+test_id='REPLACE_WITH_DISPOSABLE_ID'
+
+qdbus6 "$bus" "$path" "$bus.GetManaged" "$test_id" | jq .
+
+# End of commands
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-007     3        1     present   succeeded  db08cbb4-b3e1-48f2-adf7-ba4a17509128
+win-008     3        2     present   succeeded  3bbbc9d0-ad11-4b60-96ae-364f9c35abe0
+win-009     3        3     present   succeeded  612d4bba-ac04-451d-9fc3-3179faf856a5
+{
+  "state": "UNKNOWN"
+}
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -d "$test_id"
+
+qdbus6 "$bus" "$path" "$bus.GetManaged" "$test_id" |
+    tee "$test_state/missing-before-restart.json" | jq .
+
+# End of commands
+ 💥 joetoo-kwin: -d requires one MANAGED_ID such as win-001
+ ✨ Configured recipes include dolphin|sftp|sftp://[USER@]HOST[:PORT][/ABSOLUTE/PATH][|LAYER]; inspect authentication/listing in Dolphin
+ ✨ SDL RDP recipe: sdl-freerdp|rdp|rdp://USER@HOST[:PORT][|LAYER]; local placement is independent of remote login
+ ✨ TigerVNC recipe: vncviewer|ssh|ssh://[USER@]HOST[:SSH_PORT]/display/N (or /port/P); both forwarded endpoints use loopback
+ ✨ Usage: joetoo-kwin [-v|-q ...] -c [-f CONFIG]  (dry run; trusted Bash config)
+ ✨        CONFIG: XDG user configuration, then /etc/joetoo-kwin/joetoo-kwin.conf; set screen_width/screen_height explicitly
+ ✨        User file: ${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf (relative XDG values ignored)
+ ✨ Usage: joetoo-kwin [-f CONFIG] -m [DESKTOP] l|r
+ ✨        joetoo-kwin -m DESKTOP | DESKTOP X Y | [DESKTOP] X Y WIDTH HEIGHT
+ ✨        joetoo-kwin move DESKTOP X Y WIDTH HEIGHT  (compatibility)
+ ✨        joetoo-kwin test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]
+ ✨        joetoo-kwin test-multi-launch  (TEST ONLY: register 4 local Konsoles)
+ ✨        joetoo-kwin -h
+ ✨        joetoo-kwin -o [-f CONFIG] (confirm and initialize configured desktop groups)
+ ✨        joetoo-kwin [-f CONFIG] -L DESKTOP PROGRAM MODE TARGET [over] (one managed window; omitted layer is over)
+ ✨        -L panel/under are not implemented yet; existing windows are never rearranged
+ ✨        joetoo-kwin [-v|-q ...] -l (read-only managed inventory, including missing reservations)
+ ✨        joetoo-kwin [-f CONFIG] -d MANAGED_ID (confirmed graceful close; record/slot retained)
+ ✨        joetoo-kwin [-f CONFIG] -x (confirmed progressive clean sweep; verified registrations/slots retired)
+ ✨        joetoo-kwin [-f CONFIG] -S (save timestamped managed recipes/policy; not manual geometry)
+ ✨        joetoo-kwin -r (validate, confirm and launch new instances from last-good recipes)
+{
+  "state": "UNKNOWN"
+}
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ rc-service -U joetoo-kwind stop
+rc-service -U joetoo-kwind start
+
+qdbus6 "$bus" "$path" "$bus.RegistryStatus" |
+    jq '{recovery, managed_count, presence_counts}'
+
+qdbus6 "$bus" "$path" "$bus.GetManaged" "$test_id" |
+    tee "$test_state/missing-after-restart.json" | jq .
+
+# End of commands^C
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ test_id=win-007
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ qdbus6 "$bus" "$path" "$bus.GetManaged" "$test_id" | jq .
+{
+  "state": "FOUND",
+  "window": {
+    "connection": "not_attempted",
+    "intended": {
+      "desktop": 3,
+      "slot": 1
+    },
+    "managed_id": "win-007",
+    "observation": {
+      "caption": "joetoo-kwin : bash — Konsole",
+      "desktop_file": "org.kde.konsole",
+      "desktops": [
+        3
+      ],
+      "geometry": {
+        "height": 918,
+        "width": 1670,
+        "x": 19,
+        "y": 54
+      },
+      "on_all_desktops": false,
+      "pid": 1039249,
+      "resource_class": "org.kde.konsole"
+    },
+    "placement": "succeeded",
+    "presence": "present",
+    "request_id": "8f73c70898e4495595eb40a2f2917e76",
+    "run_id": null,
+    "window_uuid": "db08cbb4-b3e1-48f2-adf7-ba4a17509128"
+  }
+}
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -d "$test_id"
+
+qdbus6 "$bus" "$path" "$bus.GetManaged" "$test_id" |
+    tee "$test_state/missing-before-restart.json" | jq .
+
+# End of commands
+ ✨ Graceful close target set (registrations and reserved slots will remain):
+  win-007 desktop=3 slot=1 UUID=db08cbb4-b3e1-48f2-adf7-ba4a17509128
+ ✨ Retained close result: 7f1bac8708174e7abfb120197e58dc80
+
+ ✨ Do you want to continue? [Y/n]: y
+ ✨ Affirmative response from user; continuing
+ * {"excluded": [], "protocol": 1, "reason": "verified", "registration_retained": true, "request_id": "7f1bac8708174e7abfb120197e58dc80", "reservations_retained": true, "self_terminal": "excluded", "state": "succeeded", "targets": [{"backend": "wayland", "desktop": 3, "managed_id": "win-007", "request_id": "8f73c70898e4495595eb40a2f2917e76", "slot": 1, "state": "closed", "window_uuid": "db08cbb4-b3e1-48f2-adf7-ba4a17509128"}]}
+{
+  "state": "FOUND",
+  "window": {
+    "connection": "not_attempted",
+    "intended": {
+      "desktop": 3,
+      "slot": 1
+    },
+    "managed_id": "win-007",
+    "observation": {
+      "caption": "joetoo-kwin : bash — Konsole",
+      "desktop_file": "org.kde.konsole",
+      "desktops": [
+        3
+      ],
+      "geometry": {
+        "height": 918,
+        "width": 1670,
+        "x": 19,
+        "y": 54
+      },
+      "on_all_desktops": false,
+      "pid": 1039249,
+      "resource_class": "org.kde.konsole"
+    },
+    "placement": "succeeded",
+    "presence": "missing",
+    "request_id": "8f73c70898e4495595eb40a2f2917e76",
+    "run_id": null,
+    "window_uuid": "db08cbb4-b3e1-48f2-adf7-ba4a17509128"
+  }
+}
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ rc-service -U joetoo-kwind stop
+rc-service -U joetoo-kwind start
+
+qdbus6 "$bus" "$path" "$bus.RegistryStatus" |
+    jq '{recovery, managed_count, presence_counts}'
+
+qdbus6 "$bus" "$path" "$bus.GetManaged" "$test_id" |
+    tee "$test_state/missing-after-restart.json" | jq .
+
+# End of commands
+ * Stopping joetoo-kwind ...                                                                [ ok ]
+ * Starting joetoo-kwind ...                                                                [ ok ]
+Service 'org.joetoo.KWinBridge' does not exist.
+Cannot find 'org.joetoo.KWinBridge.GetManaged' in object /org/joetoo/KWinBridge at org.joetoo.KWinBridge
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo $test_id
+win-007
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo $bus
+org.joetoo.KWinBridge
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo $path
+/org/joetoo/KWinBridge
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ qdbus6 "$bus" "$path" "$bus.GetManaged" "$test_id"
+{"state": "FOUND", "window": {"connection": "unknown", "intended": {"desktop": 3, "slot": 1}, "managed_id": "win-007", "observation": {"caption": "joetoo-kwin : bash \u2014 Konsole", "desktop_file": "org.kde.konsole", "desktops": [3], "geometry": {"height": 918, "width": 1670, "x": 19, "y": 54}, "on_all_desktops": false, "pid": 1039249, "resource_class": "org.kde.konsole"}, "placement": "succeeded", "presence": "missing", "request_id": "8f73c70898e4495595eb40a2f2917e76", "run_id": null, "window_uuid": "db08cbb4-b3e1-48f2-adf7-ba4a17509128"}}
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ qdbus6 "$bus" "$path" "$bus.GetManaged" "$test_id" | jq .
+{
+  "state": "FOUND",
+  "window": {
+    "connection": "unknown",
+    "intended": {
+      "desktop": 3,
+      "slot": 1
+    },
+    "managed_id": "win-007",
+    "observation": {
+      "caption": "joetoo-kwin : bash — Konsole",
+      "desktop_file": "org.kde.konsole",
+      "desktops": [
+        3
+      ],
+      "geometry": {
+        "height": 918,
+        "width": 1670,
+        "x": 19,
+        "y": 54
+      },
+      "on_all_desktops": false,
+      "pid": 1039249,
+      "resource_class": "org.kde.konsole"
+    },
+    "placement": "succeeded",
+    "presence": "missing",
+    "request_id": "8f73c70898e4495595eb40a2f2917e76",
+    "run_id": null,
+    "window_uuid": "db08cbb4-b3e1-48f2-adf7-ba4a17509128"
+  }
+}
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ qdbus6 "$bus" "$path" "$bus.GetManaged" "$test_id" | tee "$test_state/missing-after-restart.json" | jq .
+{
+  "state": "FOUND",
+  "window": {
+    "connection": "unknown",
+    "intended": {
+      "desktop": 3,
+      "slot": 1
+    },
+    "managed_id": "win-007",
+    "observation": {
+      "caption": "joetoo-kwin : bash — Konsole",
+      "desktop_file": "org.kde.konsole",
+      "desktops": [
+        3
+      ],
+      "geometry": {
+        "height": 918,
+        "width": 1670,
+        "x": 19,
+        "y": 54
+      },
+      "on_all_desktops": false,
+      "pid": 1039249,
+      "resource_class": "org.kde.konsole"
+    },
+    "placement": "succeeded",
+    "presence": "missing",
+    "request_id": "8f73c70898e4495595eb40a2f2917e76",
+    "run_id": null,
+    "window_uuid": "db08cbb4-b3e1-48f2-adf7-ba4a17509128"
+  }
+}
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ diff -u \
+    <(jq -S '.window.observation' \
+        "$test_state/missing-before-restart.json") \
+    <(jq -S '.window.observation' \
+        "$test_state/missing-after-restart.json")
+
+# End of commands
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ diff -u \
+    <(jq -S '.window.observation' \
+        "$test_state/missing-before-restart.json") \
+    <(jq -S '.window.observation' \
+        "$test_state/missing-after-restart.json"); echo "result: $?"
+result: 0
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ echo "=== MEMORY ==="
+free -h
+
+echo "=== POSSIBLE OOM TERMINATION ==="
+dmesg -T 2>/dev/null |
+    grep -Ei 'out of memory|oom-kill|killed process' |
+    tail -20
+
+echo "=== SHELLCHECK VERSION ==="
+shellcheck --version
+
+# End of commands
+=== MEMORY ===
+               total        used        free      shared  buff/cache   available
+Mem:            11Gi       2.4Gi       8.3Gi       483Mi       1.7Gi       9.2Gi
+Swap:          6.0Gi       1.7Gi       4.3Gi
+=== POSSIBLE OOM TERMINATION ===
+=== SHELLCHECK VERSION ===
+ShellCheck - shell script analysis tool
+version: 0.11.0
+license: GNU General Public License, version 3
+website: https://www.shellcheck.net
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ for file in \
+    joetoo-kwin \
+    libexec/joetoo-kwin-plan-functions \
+    libexec/joetoo-kwin-launch-functions \
+    tools/joetoo-kwind-install-poc;
+do validate_scripts $file -l; done
+ ✨ looking for shellcheck ... (found)                                                     [ ✅ ]
+---[ q552u01 validate_scripts-1.0.18 ]------------------------------------------------------------
+ ✨ ingesting filename from target (ingested [1])                                          [ ✅ ]
+---[ validate_scripts-1.0.18 (target: joetoo-kwin) ]----------------------------------------------
+
+joetoo-kwin
+-----------
+ 🔎 checking joetoo-kwin ...
+
+ ⌚Real: 1m17.405s  User: 0m45.414s  Sys: 0m9.293s (70.00%)
+ ✨ done; result: (Ok ✅)                                                                  [ ✅ ]
+ ✨ validate_scripts complete. Total elapsed time (DD:HH:MM:SS:mmm): [00:00:01:17:529]
+ ✨ looking for shellcheck ... (found)                                                     [ ✅ ]
+---[ q552u01 validate_scripts-1.0.18 ]------------------------------------------------------------
+ ✨ ingesting filename from target (ingested [1])                                          [ ✅ ]
+---[ validate_scripts-1.0.18 (target: libexec/joetoo-kwin-plan-functions) ]-----------------------
+
+libexec/joetoo-kwin-plan-functions
+----------------------------------
+ 🔎 checking libexec/joetoo-kwin-plan-functions ...
+
+ ⌚Real: 0m0.740s  User: 0m0.623s  Sys: 0m0.080s (94.00%)
+ ✨ done; result: (Ok ✅)                                                                  [ ✅ ]
+ ✨ validate_scripts complete. Total elapsed time (DD:HH:MM:SS:mmm): [00:00:00:00:828]
+ ✨ looking for shellcheck ... (found)                                                     [ ✅ ]
+---[ q552u01 validate_scripts-1.0.18 ]------------------------------------------------------------
+ ✨ ingesting filename from target (ingested [1])                                          [ ✅ ]
+---[ validate_scripts-1.0.18 (target: libexec/joetoo-kwin-launch-functions) ]---------------------
+
+libexec/joetoo-kwin-launch-functions
+------------------------------------
+ 🔎 checking libexec/joetoo-kwin-launch-functions ...
+
+ ⌚Real: 0m0.802s  User: 0m0.758s  Sys: 0m0.040s (99.00%)
+ ✨ done; result: (Ok ✅)                                                                  [ ✅ ]
+ ✨ validate_scripts complete. Total elapsed time (DD:HH:MM:SS:mmm): [00:00:00:00:891]
+ ✨ looking for shellcheck ... (found)                                                     [ ✅ ]
+---[ q552u01 validate_scripts-1.0.18 ]------------------------------------------------------------
+ ✨ ingesting filename from target (ingested [1])                                          [ ✅ ]
+---[ validate_scripts-1.0.18 (target: tools/joetoo-kwind-install-poc) ]---------------------------
+
+tools/joetoo-kwind-install-poc
+------------------------------
+ 🔎 checking tools/joetoo-kwind-install-poc ...
+
+ ⌚Real: 0m0.220s  User: 0m0.206s  Sys: 0m0.014s (100.00%)
+ ✨ done; result: (Ok ✅)                                                                  [ ✅ ]
+ ✨ validate_scripts complete. Total elapsed time (DD:HH:MM:SS:mmm): [00:00:00:00:308]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $

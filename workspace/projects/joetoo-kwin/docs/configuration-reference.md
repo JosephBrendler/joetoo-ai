@@ -56,6 +56,31 @@ Profile selection is optional: a regular existing user plan remains valid,
 and explicit `-f` works independently of the selected profile. The selector
 never changes system defaults or daemon configuration.
 
+## Recovery and last-good snapshot controls
+
+See the [user manual](joetoo-kwin_user_manual.md) for complete CLI/D-Bus use.
+`-S` saves the complete authenticated managed arrangement, not recipes selected
+from the current file. It loads the existing optional defaults/default-plan layers
+(or `-f FILE`) for **current operational history retention**. Original per-launch
+recipe/settings remain authoritative for export; different effective launch
+policies are refused, not merged. `-r` validates latest last-good and calls the
+ordinary confirmed new-instance launch flow; it has no historical-selection flag.
+
+| Setting | Built-in default | Units/bounds | Meaning |
+| --- | --- | --- | --- |
+| `snapshot_history_depth` | `10` | integer count, 1..1000 | Current `-S` retention; info severity. Not per-window launch metadata or close authority. Failed saves never prune. |
+| `snapshot_validation_timeout_ms` | `30000` | milliseconds, 100..120000 | Offline generated-snapshot `-c` validation only; debug severity. Separate from viewer/human waits. |
+| `desktop_session_frames` | `()` | optional indexed array, same count as recipes | Original explicit frame policy, each `"X|Y|WIDTH|HEIGHT"` or `""`. Integers must fit the configured display, width/height positive. Normal calculations remain unchanged when empty. `-L` uses normal graphical policy. |
+
+Each successful `-S` creates a private UTC/nanosecond/random timestamped file
+under `${XDG_STATE_HOME:-$HOME/.local/state}/joetoo-kwin/` and atomically updates
+`last-session.conf` as a contained relative symlink. Old regular last-good files
+migrate safely into history; depth 1 explicitly retains only the newest save.
+Protocol-1 snapshots remain readable; new protocol 2 stores common settings once.
+Manual frame changes are never sampled into launch recipes. Only original explicit
+frame overrides can be saved. Runtime checkpoint observations are historical,
+private and separate from durable launch intent and current authenticated proof.
+
 ## Reading the tables
 
 Defaults below are the values assigned before sourcing the plan. Ranges are
