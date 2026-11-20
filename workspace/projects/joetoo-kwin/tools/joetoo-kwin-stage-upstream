@@ -1,0 +1,634 @@
+#!/bin/bash
+# Copyright 2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# joetoo-kwin-stage-upstream - curated, human-operated source integration.
+# Step 1.9 contract: task_1.9/step1.9-packaging-inventory-contract-REVISED-DRAFT.md
+#
+# Release model: approved joetoo-ai *source files* -> joetoo-upstream source tree.
+# The resulting joetoo-upstream source tree is reviewed by a human before tarup
+# constructs the source tarball, and only then can the joetoo ebuild be prepared.
+# This tool does NOT make a tarball or certify the source as production-ready.
+#
+# Source selection is an allowlisted per-file manifest: no recursive copy of
+# archive/, tasks, tests, scratch tools, or development POC installers.
+# No rsync --delete, git commit/push, tarup, ebuild, emerge or HOME config edits.
+# Mode --plan is the default; ONLY an explicit --apply writes upstream files.
+#
+# Assumes GNU userland on Gentoo (rsync, cmp, stat, find, git, install).
+# Shell dialect is Bash, not POSIX sh; script_header_joetoo itself is POSIX
+# oriented but this caller uses Bash arrays, local, [[ ]], shopt, and read -d.
+#
+# Design note: the run_step wrapper is a useful reusable Bash primitive, but
+# the current version also owns this application's counters and status globals.
+# Do not move it verbatim into script_header_joetoo_extended without separating
+# framework reporting from caller policy and testing failure/reentrancy cases.
+#
+# shellcheck source=/usr/sbin/script_header_joetoo.shellcheck_var_stub
+# shellcheck source=/usr/sbin/script_header_joetoo.shellcheck_func_stub
+# The base header supplies j_msg, handle_result, decode_right_status,
+# separator, checknotroot, die, severity globals, and other Joetoo primitives.
+# The extended header is NOT required by the current transfer tool.
+source /usr/sbin/script_header_joetoo
+
+# ${0##*/} strips the longest prefix ending in / without spawning basename.
+PN=${0##*/}
+# Use installed Joetoo toolkit's build label if available; an explicit
+# draft marker otherwise. No configuration file is created or modified.
+if [[ -f /etc/joetoolkit/BUILD ]]; then . /etc/joetoolkit/BUILD; else BUILD='0.1.0-draft'; fi
+
+# Respect the caller's existing verbosity; only default an unset/empty one.
+# ${var:-} avoids an unset-variable failure if the invoker uses set -u.
+[[ -z ${verbosity:-} ]] && verbosity="${notice}"
+
+#-----[ parameters and state ]-------------------------------------------------
+# A simple local CLI grammar is preferable to loading the base header's full
+# app_configure/process_cmdline workflow (which has unrelated side effects).
+mode=plan                      # plan, apply, verify, release-check
+# Counts are APPLICATION policy, not return codes of Joetoo header functions.
+# Number of instrumented operations (not the number of source files).
+operations=0
+# Accumulated action/reporting errors, checked before process exit.
+failures=0
+# Set only after canonical discovery and Git worktree validation in stage_paths.
+project_root=''
+upstream_root=''
+target_root=''
+# Per-invocation overwritten-file backups outside both repositories.
+backup_dir=''
+# Bash associative array: approved destination-relative paths as set-members.
+# Used to detect *unexpected extra* files before tarup would include them.
+declare -A approved_paths=()  # exact approved destination manifest, for tarup preflight
+# Numeric command-result and reporting bitmask. NOT Joetoo pseudo-booleans:
+# TRUE=0, FALSE='' are for conceptual flags, never arbitrary exit statuses.
+action_rc=0
+report_rc=0
+
+# This usage function is intentionally local: Joetoo's base usage() may call
+# leave(), so it is not a drop-in help printer for this standalone CLI.
+usage() {
+    cat <<'HELP'
+Usage: tools/joetoo-kwin-stage-upstream [MODE]
+
+  --plan            DEFAULT, read-only transfer plan
+  --apply           Curated rsync, preserving newer targets; backup + verify
+  --verify          Read-only byte-for-byte and mode verification
+  --release-check   --verify plus preliminary pre-tarup checks
+  -h, --help        Show help
+
+Source: project directory containing tools/joetoo-kwin-stage-upstream
+Target: $HOME/joetoo-upstream/dev-util/joetoo-kwin/
+
+Only explicit manifest paths transfer. The development README, ARCHITECTURE,
+archive/, task_1.9/, tools/, and tests/ are not copied indiscriminately.
+A reviewed source-only release/README.md, if present, becomes upstream README.md.
+
+This is a maintainer-operated source-curation tool, not a release publisher.
+It never deletes destination files or calls tarup, ebuild, emerge or git add.
+HELP
+}
+
+#-----[ announce / act / capture / report ]-----------------------------------
+# ShellCheck cannot statically follow all calls through "$@" below; some
+# task-specific functions are passed as command-name strings to run_step.
+#
+# run_step LABEL COMMAND [ARGS...]
+#   1. Announce a single operation, WITHOUT completing the screen line.
+#   2. Execute command/function in the *current shell* while capturing output.
+#   3. Preserve the ORIGINAL command exit status (action_rc) independently
+#      from handle_result's potentially composite reporting bitmask (report_rc).
+#   4. Display any captured command output after the right-margin status.
+#   5. Increment application counters, then return a simple caller-facing
+#      0/1. Callers choose whether to abort or continue accumulating failures.
+#
+# Why no $("$@") command substitution? A command substitution runs in a
+# subshell, so stage_paths' assignments to project_root/target_root would
+# vanish when the subshell ended. A direct command with stdout/stderr redirected
+# to a temporary regular file keeps side effects in this shell. The executed
+# command may be an external executable OR a shell function such as safe_file.
+#
+# Do not use 'if ! "$@"; then action_rc=$?': ! reverses the status and $? would
+# describe the successful negation instead of the failed command.
+#
+# Reuse suitability: a future generic Bash helper should NOT depend on
+# application-specific operations/failures globals, and should specify
+# cleanup/error policy, nested-call behavior, and how to return two statuses.
+run_step() {
+    local label=$1
+    local transcript
+    # Remove LABEL from "$@": remaining positional parameters are the exact
+    # command and arguments. Quoted "$@" preserves argument boundaries and
+    # does NOT invoke an eval or reparse a command string.
+    shift
+
+    # mktemp securely creates a unique output-capture file, instead of using
+    # a predictable /tmp name or losing status through a pipeline. ${TMPDIR:-/tmp}
+    # respects an ordinary caller's preferred temporary directory.
+    transcript=$(mktemp "${TMPDIR:-/tmp}/joetoo-kwin-stage.XXXXXXXX") || {
+        printf 'Unable to allocate result transcript\n' >&2
+        (( failures += 1 ))
+        return 1
+    }
+    # -p suppresses the standard UI prefix here (operator label supplies it);
+    # -n suppresses trailing newline so handle_result can close the SAME line.
+    j_msg "-${notice}" -p -n "$label"
+    # > redirects stdout to the transcript. 2>&1 then sends stderr to the
+    # already-redirected stdout. Both streams are displayed after the status.
+    # The conditional ensures anticipated action failure is captured safely
+    # even if a caller uses 'set -e'. It is not itself an error.
+    if "$@" >"$transcript" 2>&1; then
+        action_rc=0
+    else
+        action_rc=$?
+    fi
+    # handle_result(action, ok_text, error_text, severity) internally calls
+    # right_status. Its return is a reporting BITMASK, not necessarily equal
+    # to action_rc. The first bit means the action failed; higher bits may
+    # mean the UI/logging layer failed independently.
+    if handle_result "$action_rc" 'ok' 'failed' "$notice"; then
+        report_rc=0
+    else
+        report_rc=$?
+    fi
+    # -s means output file exists and is nonempty. IFS= prevents stripping
+    # leading/trailing whitespace. read -r preserves backslashes; the || arm
+    # retains a final non-newline-terminated line. Redirection (< file) avoids
+    # a pipeline subshell for this loop. Never run transcript text as shell.
+    if [[ -s $transcript ]]; then
+        while IFS= read -r line || [[ -n $line ]]; do
+            j_msg "-${info}" -m "$line"
+        done < "$transcript"
+    fi
+    # -f tolerates an already-absent file; -- prevents option interpretation
+    # if a path should unexpectedly begin with '-'. Cleanup should eventually
+    # be incorporated into a tested framework wrapper's failure policy.
+    rm -f -- "$transcript"
+
+    # '~1' masks out the documented action-failed bit (bit zero). Remaining
+    # bits indicate additional status-display/logging problems, worth decoding
+    # separately. We still consider ANY nonzero report_rc a failed operation.
+    if (( report_rc & ~1 )); then
+        j_msg "-${err}" -p "Result-reporting fault [$report_rc] for [$label]"
+        decode_right_status "$report_rc" || :
+    fi
+    # (( var += 1 )) is Bash arithmetic, used only for numeric counters; we
+    # do not confuse these values with the header's TRUE/FALSE strings.
+    (( operations += 1 ))
+    if (( action_rc != 0 || report_rc != 0 )); then
+        (( failures += 1 ))
+        return 1
+    fi
+    return 0
+}
+
+#-----[ path validation ]-----------------------------------------------------
+# Discover the source from the location of THIS script; do not trust the
+# user's current working directory, a caller-provided project_root, or HOME
+# as proof of the joetoo-ai checkout. Git root and expected relative path
+# provide an independent structural check. Destination is deliberately fixed.
+#
+# Bash ${BASH_SOURCE[0]} is the filename of this executing script, including
+# when invoked from another working directory. It is Bash-only (not POSIX $0).
+# dirname -- FILE returns the containing directory. GNU -- ends option parsing
+# so a relative filename beginning with '-' is never interpreted as an option.
+# 'cd -P -- DIR' changes to the PHYSICAL directory (resolves symlinked
+# directory components), with -- similarly protecting option parsing.
+# 'pwd -P' prints that resolved physical path (instead of shell logical PWD).
+# The (...) runs cd/pwd in a SUBSHELL, leaving the caller's current directory
+# unchanged. '&&' calls pwd only if cd succeeded; '|| return 1' propagates
+# failure from the command substitution, rather than accepting a bad path.
+#
+# Why not tools_dir="${project_root%/}/tools"? At discovery time project_root
+# has not been established/trusted. Guessing the tools directory from that
+# value would be circular; it would not prove where the executing script lives.
+# Even if a caller set project_root, it could name a different checkout.
+# Invoked indirectly via run_step; static analysis cannot see the caller.
+# shellcheck disable=SC2329
+stage_paths() {
+    local tools_dir ai_root identified_upstream
+    # Require absolute HOME: destination is nested beneath it, so empty or
+    # relative HOME must never imply an unexpected working-directory target.
+    [[ -n ${HOME:-} && $HOME == /* ]] || return 1
+    tools_dir=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+    # ".." resolves project root from tools/; cd/pwd again canonicalizes it.
+    project_root=$(cd -P -- "$tools_dir/.." && pwd -P) || return 1
+    # git -C DIR runs git as though in DIR but does not cd in this shell.
+    # rev-parse --show-toplevel returns the actual Git worktree root.
+    # 2>/dev/null hides git's expected non-repository diagnostics; nonzero
+    # still fails the assignment and propagates via || return 1.
+    ai_root=$(git -C "$project_root" rev-parse --show-toplevel 2>/dev/null) || return 1
+    # Validate BOTH the checkout basename and the project-relative position;
+    # merely running within some arbitrary Git repository is insufficient.
+    [[ $project_root == "$ai_root/workspace/projects/joetoo-kwin" &&
+       ${ai_root##*/} == joetoo-ai ]] || return 1
+
+    upstream_root="$HOME/joetoo-upstream"
+    [[ -d $upstream_root && ! -L $upstream_root ]] || return 1
+    # The upstream tree must be a separate, real Git checkout at its expected
+    # absolute location. This does NOT require or imply a clean Git worktree:
+    # preexisting unrelated changes must remain the maintainer's responsibility.
+    identified_upstream=$(git -C "$upstream_root" rev-parse --show-toplevel 2>/dev/null) || return 1
+    [[ $(cd -P -- "$upstream_root" && pwd -P) == "$identified_upstream" &&
+       ${identified_upstream##*/} == joetoo-upstream ]] || return 1
+    [[ -d $upstream_root/dev-util && ! -L $upstream_root/dev-util ]] || return 1
+
+    target_root="$upstream_root/dev-util/joetoo-kwin"
+    # Reject linked destination root; ordinary per-file paths are checked
+    # again by safe_file. The target directory may not yet exist in a dry run.
+    [[ ! -L $target_root ]] || return 1
+    # Only test dependencies actually invoked by the transfer. command -v
+    # locates an available tool/function without trying to execute it.
+    command -v rsync >/dev/null && command -v git >/dev/null &&
+        command -v cmp >/dev/null && command -v stat >/dev/null
+}
+
+# One manifest item is safe only if its source is an ordinary regular file,
+# the destination (when existing) is a regular file, and no destination path
+# component is a symlink. This avoids following a symlink out of the intended
+# source/destination trees. The manifest is hardcoded, NOT parsed from user input.
+# Invoked by name via run_step rather than a static direct call.
+# shellcheck disable=SC2329
+safe_file() {
+    local source_relative=$1 destination_relative=$2
+    local src="$project_root/$source_relative"
+    local dest="$target_root/$destination_relative"
+    local parent=${dest%/*}
+    # -f accepts regular files; -L detects symlinks even when they point to
+    # existing regular files. ! -e permits a not-yet-created destination.
+    [[ -f $src && ! -L $src && ! -L $dest ]] || return 1
+    [[ ! -e $dest || -f $dest ]] || return 1
+    # Walk parents UP to the independently checked dev-util directory.
+    # Do not follow any linked intermediate directory. Because the paths are
+    # all derived from a fixed manifest, this loop cannot be driven by a user
+    # supplied '..' traversal. The upstream root was checked in stage_paths.
+    while [[ $parent != "$upstream_root/dev-util" ]]; do
+        [[ ! -L $parent ]] || return 1
+        parent=${parent%/*}
+    done
+}
+
+# Positive verification MUST follow rsync, especially because rsync -u may
+# skip a destination newer than source yet still exit successfully.
+# cmp -s performs a byte-for-byte quiet comparison (status 0 = identical).
+# GNU stat -c %a returns numeric permission bits, so we also reject mode drift.
+# This does not compare owner/group (which --archive on the same ordinary UID
+# typically preserves only when permitted), ACLs, xattrs or hardlink topology.
+# Called indirectly through run_step (and directly by plan_file).
+# shellcheck disable=SC2329
+file_parity() {
+    local src=$1 dest=$2
+    [[ -f $src && -f $dest && ! -L $src && ! -L $dest ]] &&
+        cmp -s -- "$src" "$dest" &&
+        [[ $(stat -c '%a' -- "$src") == "$(stat -c '%a' -- "$dest")" ]]
+}
+
+# Read-only decision explanation, not a source write:
+# - missing upstream file: WOULD CREATE
+# - identical contents + permissions: UNCHANGED
+# - divergent and newer upstream file: CONFLICT (never silently clobber it)
+# - divergent and not newer: WOULD UPDATE
+# A conflict returns 1 so the total failure count prevents a false green run.
+# Invoked by name via run_step rather than a static direct call.
+# shellcheck disable=SC2329
+plan_file() {
+    local src=$1 dest=$2
+    if [[ ! -e $dest ]]; then
+        printf 'WOULD CREATE: %s\n' "$dest"
+    elif file_parity "$src" "$dest"; then
+        printf 'UNCHANGED: %s\n' "$dest"
+    elif [[ $dest -nt $src ]]; then
+        printf 'CONFLICT: upstream file is newer (will not overwrite): %s\n' "$dest"
+        return 1
+    else
+        printf 'WOULD UPDATE: %s\n' "$dest"
+    fi
+}
+
+# Transfer one explicitly approved manifest entry.
+# $1 = readable group label, $2 = path beneath project root,
+# $3 = optional RENAMED path beneath upstream source root (default $2).
+# This supports the release/README.md -> upstream README.md mapping without
+# copying the development README, which should not appear in the source tarball.
+# Every safety/transfer/verification step is individually announced and reported.
+sync_one() {
+    local group=$1 src_rel=$2 dest_rel=${3:-$2}
+    local src="$project_root/$src_rel"
+    local dest="$target_root/$dest_rel"
+    local parent=${dest%/*} backup_parent
+    # Keep a destination path allowlist for the final no-unlisted-files check.
+    # Associative keys are exact relative names, including nested directories.
+    approved_paths["$dest_rel"]=1
+    # Failure means do not try to transfer this file. The caller's manifest
+    # loop later continues, but run_step has already incremented failures.
+    if ! run_step "Check [$group:$src_rel]" safe_file "$src_rel" "$dest_rel"; then
+        j_msg "-${err}" -m "Source missing or unsafe path; transfer skipped."
+        return 1
+    fi
+    case $mode in
+        plan)
+            # No rsync required: the local checks give an immediately readable
+            # per-file classification without altering destination metadata.
+            run_step "Plan [$group:$dest_rel]" plan_file "$src" "$dest"
+            ;;
+        apply)
+            # GNU install -d creates parent directories as needed (not files),
+            # -m 0755 makes release-source directories readable/traversable.
+            # -- ends options before the literal destination directory.
+            run_step "Prepare [$group:$dest_rel]" install -d -m 0755 -- "$parent" || return 1
+            # Preserve original relative directory names in backup location:
+            # libexec/foo and native/foo must never collide on basename alone.
+            # Remove the final /basename from the relative destination path;
+            # if no slash existed, ${var%/*} returns the unchanged string, so
+            # use '.' for the backup root. This preserves subdirectory hierarchy
+            # and avoids collisions between two files with the same basename.
+            backup_parent=${dest_rel%/*}
+            [[ $backup_parent == "$dest_rel" ]] && backup_parent='.'
+            # Backups are owner-private (0700) and OUTSIDE both Git trees, so
+            # tarup can never mistake a backup for a source-release input.
+            run_step "Prepare backup [$group:$dest_rel]" \
+                install -d -m 0700 -- "$backup_dir/$backup_parent" || return 1
+            # rsync -a = archive: recursive metadata-preserving mode; for these
+            # selected *files* it retains modification times and permissions.
+            # -u = update, never overwrite a destination with a newer mtime.
+            # -c = checksum-based content comparison, not just size+mtime.
+            # --itemize-changes = show per-file changes in the captured output.
+            # --backup = preserve any replaced destination content.
+            # --backup-dir = place those predecessors in this private directory.
+            # -- = stop option parsing before the two filenames.
+            # There is deliberately NO --delete: upstream-only files remain;
+            # release-check will report unexpected files rather than delete.
+            run_step "Transfer [$group:$dest_rel]" \
+                rsync -auc --itemize-changes --backup \
+                --backup-dir="$backup_dir/$backup_parent" -- "$src" "$dest" || return 1
+            # A -u skip is not success: rsync can return 0 but leave a newer,
+            # DIFFERENT upstream file unchanged. Re-read bytes and mode after
+            # every sync; nonmatching content is a reported conflict.
+            run_step "Verify [$group:$dest_rel]" file_parity "$src" "$dest"
+            ;;
+        verify|release-check)
+            run_step "Verify [$group:$dest_rel]" file_parity "$src" "$dest"
+            ;;
+    esac
+}
+
+#-----[ preliminary release checks ]-------------------------------------------
+# These checks identify known pending work; tarup's full copyright/licensing
+# and source-archive validation remains authoritative. They inspect the STAGED
+# upstream source tree but must never edit it or auto-fix missing headers.
+# Each helper is dispatched by name via run_step, hence scoped SC2329.
+# shellcheck disable=SC2329
+check_license_metadata() {
+    # -s: nonempty file; -f: regular file. grep -E enables the bounded
+    # extended regex (with [.] literal dot), -q suppresses normal output.
+    # grep -F treats the JSON-exception path as fixed text, -x requires a
+    # whole-line match. This is only a minimum sanity check, NOT an SPDX audit.
+    [[ -s $target_root/LICENSES.package &&
+       -f $target_root/COPYRIGHT.exceptions ]] || return 1
+    grep -Eq '^GPL-3[.]0-or-later[[:space:]]*$' "$target_root/LICENSES.package" &&
+    grep -Fxq './native/managed-close/metadata.json' \
+        "$target_root/COPYRIGHT.exceptions"
+}
+
+# Contract calls for concise READMEs describing each configuration layer.
+# These are release deliverables, not automatic edits to installed user plans.
+# shellcheck disable=SC2329
+check_config_docs() {
+    local name
+    local -a required=(
+        README_global_joetoo_kwind_conf.md
+        README_system_user_joetoo_kwind_conf.md
+        README_account_joetoo_kwind_conf.md
+        README_system_defaults_conf.md
+        README_user_defaults_conf.md
+        README_joetoo_kwin_launch_conf.md
+        README_eselect_profiles_conf.md
+        README_joetoo_kwin_templates_conf.md
+    )
+    # Search only expected reviewed source locations. A single missing role
+    # README is an actionable pre-tarup blocker; return rather than invent it.
+    for name in "${required[@]}"; do
+        [[ -f $target_root/docs/$name || -f $target_root/$name ]] || {
+            printf 'Missing config companion: %s\n' "$name"
+            return 1
+        }
+    done
+}
+
+# tarup checks copyright provenance. Its source-header audit is not a
+# substitute for manual licensing review. This quick check simply detects
+# an expected copyright year in the first 12 lines of CMakeLists.txt.
+# head -n 12 limits input; grep -E uses the range/year expression; grep -q
+# returns only success/failure. NOTE: this pipeline does not set pipefail;
+# a failed 'head' can still be masked if grep reports success, so the actual
+# tarup validation must remain authoritative.
+# shellcheck disable=SC2329
+check_cmake_header() {
+    head -n 12 -- "$target_root/native/managed-close/CMakeLists.txt" |
+        grep -Eq 'Copyright[[:space:]]+20[0-9][0-9]'
+}
+
+# Negative grep checks for *known obsolete* source-layout strings.
+# IMPORTANT: These are literal snippets of another Bash program, and the
+# $_cp_script_dir / $_mc_dir tokens must NOT expand in this checker.
+# SC2016 is therefore a false positive; retain single quotes and suppress
+# the lint warning locally rather than altering the test's meaning.
+# grep -F searches fixed strings, -q is quiet; '!' inverts success so a
+# PRESENT old string fails the overall && chain. This is a small marker test,
+# not proof that every installed helper path has been fixed.
+# shellcheck disable=SC2329,SC2016
+check_packaged_paths() {
+    # These exact 6.7.6-development strings currently remain in main.
+    ! grep -Fq '/usr/libexec/joetoo-kwind' "$target_root/conf.d/joetoo-kwind" &&
+    ! grep -Fq '/usr/libexec/joetoo-kwind' "$target_root/user-init.d/joetoo-kwind" &&
+    ! grep -Fq 'source "${_cp_script_dir}/libexec/' "$target_root/joetoo-kwin" &&
+    ! grep -Fq '$_mc_dir/libexec' "$target_root/joetoo-kwin"
+}
+
+# Enumerate all regular files and symlinks under the intended tarup source
+# directory; refuse to call the tree release-ready if ANY are unlisted.
+# A source-only README is mapped to README.md in the allowlist; development
+# project README and .git files should not be introduced by this script.
+# find -print0 + read -d '' use NUL separators to handle spaces/newlines in
+# filenames safely; Bash read -d '' is NOT POSIX sh. The process substitution
+# (< <(...)) keeps the while loop in the current shell, so found=1 survives.
+# Limitation: process-substitution find errors are not reliably reflected in
+# the loop's return status; tarup's human file listing/audit remains required.
+# shellcheck disable=SC2329
+check_no_unlisted_files() {
+    local file relative found=0
+    [[ -d $target_root ]] || return 1
+    while IFS= read -r -d '' file; do
+        relative=${file#"$target_root"/}
+        # ${assoc[key]+exists} expands to 'exists' ONLY when key is present;
+        # the ! test flags unexpected paths, including stale release inputs.
+        if [[ ! ${approved_paths[$relative]+exists} ]]; then
+            printf 'UNLISTED release input: %s\n' "$relative"
+            found=1
+        fi
+    done < <(find "$target_root" \( -type f -o -type l \) -print0)
+    return "$found"
+}
+
+# Gather known release blockers instead of stopping at the first one.
+# run_step increments failures and prints a detailed status. '|| :' means
+# continue checking OTHER requirements after a failure, not treat it as
+# success; final failure count makes the script exit nonzero.
+release_checks() {
+    j_msg "-${notice}" -p "Pre-tarup checks (read-only, non-exhaustive):"
+    run_step 'License manifests present and minimally consistent' check_license_metadata || :
+    run_step 'Configuration-role README companions present' check_config_docs || :
+    run_step 'Native CMake source copyright heading' check_cmake_header || :
+    run_step 'Packaged CLI/service lookup paths updated' check_packaged_paths || :
+    run_step 'Curated upstream README available' test -f "$target_root/README.md" || :
+    run_step 'No unlisted files in tarup source tree' check_no_unlisted_files || :
+    j_msg "-${warn}" -p \
+        'Also review headers of ALL curated source files, SPDX provenance,' \
+        'relative documentation links, optional selected tests, and tarup output.'
+}
+
+#-----[ main ]-----------------------------------------------------------------
+# Human integrations to joetoo-upstream must be ordinary-user operations;
+# checknotroot is an existing Joetoo gatekeeper and exits if invoked as root.
+checknotroot
+# Exactly one mode is ordinarily passed; if multiple modes are given, the
+# last wins. This small parser is deliberate: no app_configure HOME side effects.
+while (( $# )); do
+    case $1 in
+        --plan|--dry-run) mode=plan ;;
+        --apply) mode=apply ;;
+        --verify) mode=verify ;;
+        --release-check) mode=release-check ;;
+        -h|--help) usage; exit 0 ;;
+        *) printf 'Unknown option: %s\n' "$1" >&2; usage; exit 2 ;;
+    esac
+    shift
+done
+
+# separator is the header's standardized host/tool banner, not an action.
+separator "$(hostname)" "${PN}-${BUILD}"
+# Initialization must succeed before any per-file operation; die terminates
+# with a nonzero status. The source and destination remain unmodified here.
+run_step 'Validate source/destination Git repositories' stage_paths ||
+    die 'Unexpected repositories, symlinks or missing rsync/cmp/stat' 1
+j_msg "-${notice}" -p "Mode [$mode]"
+j_msg "-${notice}" -p "Source [$project_root]"
+j_msg "-${notice}" -p "Target [$target_root]"
+
+if [[ $mode == apply ]]; then
+    # A human must explicitly invoke --apply; --plan, --verify, and
+    # --release-check are read-only. Save overwritten predecessors outside the
+    # upstream Git tree and away from tarup input; otherwise they could be
+    # accidentally distributed or make the release input unreviewable.
+    # A user umask of 077 protects any newly-created backup files.
+    local_backup_root="$HOME/.local/state/joetoo-kwin-source-transfer/backups"
+    umask 077
+    run_step 'Prepare off-repository backup parent' \
+        install -d -m 0700 -- "$local_backup_root" || die 'Cannot protect prior sources' 1
+    # mktemp -d creates a collision-resistant per-run backup DIRECTORY;
+    # date supplies a readable timestamp, random Xs provide uniqueness.
+    # The if-not form is only a success/failure gate; there is no need to
+    # preserve the actual mktemp status code because die returns 1 by policy.
+    if ! backup_dir=$(mktemp -d "$local_backup_root/$(date +%Y%m%d-%H%M%S)-XXXXXXXX"); then
+        die 'Cannot create unique transfer backup directory' 1
+    fi
+    j_msg "-${notice}" -p "Previous file versions retained under [$backup_dir]"
+fi
+
+# Approved release manifest, not a filesystem glob and NOT the Git index.
+# A field separator '|' splits group label from relative source path.
+# read -r preserves literal backslashes; IFS='|' prevents whitespace splitting.
+# The quoted heredoc delimiter (<<'MANIFEST') leaves contents literal;
+# embedded $ or backslashes are NOT expanded when Bash reads the list.
+# The loop intentionally continues after each failure ('|| :') so the human
+# gets a complete report. run_step's failures counter still makes final exit
+# nonzero, so no failed step is reclassified as success.
+# Add new release files only after source/metadata approval; no auto-detection
+# of arbitrary workspace content.
+while IFS='|' read -r group rel; do
+    [[ -n $rel && $group != \#* ]] || continue
+    sync_one "$group" "$rel" || :
+done <<'MANIFEST'
+license|COPYRIGHT.exceptions
+license|LICENSES.package
+cli|joetoo-kwin
+resident|joetoo-kwin-resident.js
+libexec|libexec/joetoo-kwin-plan-functions
+libexec|libexec/joetoo-kwin-launch-functions
+libexec|libexec/joetoo-kwin-session.bashrc
+libexec|libexec/joetoo-kwin-exposure.py
+libexec|libexec/joetoo-kwind
+libexec|libexec/joetoo_kwin_launch_resources.py
+libexec|libexec/joetoo_kwin_registry.py
+libexec|libexec/joetoo_kwin_managed_close.py
+libexec|libexec/joetoo_kwin_recovery.py
+libexec|libexec/joetoo_kwin_persistence.py
+libexec|libexec/joetoo_kwin_rdp_launch.py
+libexec|libexec/joetoo_kwin_rdp_target.py
+libexec|libexec/joetoo_kwin_vnc_launch.py
+libexec|libexec/joetoo_kwin_vnc_target.py
+libexec|libexec/joetoo_kwin_vnc_identity.py
+libexec|libexec/joetoo_kwin_sftp_target.py
+libexec|libexec/joetoo_kwin_sftp_advisory.py
+libexec|libexec/joetoo_kwin_sftp_capability.py
+config|conf.d/joetoo-kwind
+config-example|user-conf.d/joetoo-kwind
+openrc|user-init.d/joetoo-kwind
+config-template|joetoo-kwin-per-run-template.conf
+config-template|joetoo-kwin-template.conf
+selector|eselect/joetoo-kwin.eselect
+docs|docs/configuration-reference.md
+docs|docs/joetoo-kwin_user_manual.md
+native|native/managed-close/CMakeLists.txt
+native|native/managed-close/README.md
+native|native/managed-close/adapter.cpp
+native|native/managed-close/x11.cpp
+native|native/managed-close/channel.h
+native|native/managed-close/metadata.json
+MANIFEST
+
+# Per-role config README companions are the one controlled exception to the
+# fixed list: only README_*_conf.md from these TWO reviewed directories.
+# Bash shopt -s nullglob makes a nonmatching pattern expand to ZERO operands,
+# rather than passing a literal '*' to sync_one. This is not a recursive scan;
+# tests and archived files remain excluded. Shell dialect: Bash only.
+shopt -s nullglob
+for companion in "$project_root"/docs/README_*_conf.md \
+                 "$project_root"/README_*_conf.md; do
+    relative=${companion#"$project_root"/}
+    sync_one config-readme "$relative" || :
+done
+shopt -u nullglob
+
+# Optional curated release README, distinct from development project README.
+# It documents which source-tree materials were intentionally excluded and
+# becomes ROOT README.md in the upstream archive. sync_one's third path arg
+# performs that rename without copying the whole release/ directory.
+if [[ -f $project_root/release/README.md ]]; then
+    sync_one docs release/README.md README.md || :
+elif [[ $mode == release-check ]]; then
+    run_step 'Curated release/README.md authored in source checkout' \
+        test -f "$project_root/release/README.md" || :
+fi
+
+if [[ $mode == release-check ]]; then
+    release_checks
+fi
+
+# Final contract: all manifest entries can be attempted, but ANY reported
+# action failure, byte/mode mismatch or reporting fault makes exit nonzero.
+# The two successful --apply runs in the maintainer's transcript establish
+# parity of selected files, NOT passing licensing/packaging preflight.
+j_msg "-${notice}" -p "Operations [$operations]; failed [$failures]"
+if (( failures > 0 )); then
+    j_msg "-${err}" -p 'Incomplete or conflicting transfer: do NOT run tarup.'
+    exit 1
+fi
+case $mode in
+    plan) j_msg "-${notice}" -p 'Plan only. Nothing was transferred; use --apply.' ;;
+    apply) j_msg "-${notice}" -p 'Bytes and modes match; NOT a tarup-ready declaration.' ;;
+    verify) j_msg "-${notice}" -p 'All selected files match.' ;;
+    release-check) j_msg "-${notice}" -p 'Preliminary checks passed; tarup audit remains.' ;;
+esac
+exit 0
+
+# End of commands
