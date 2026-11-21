@@ -8,10 +8,13 @@
 # directory as a provenance record; tarup archives it as ordinary text.
 #
 # File format: GROUP|PROJECT_RELATIVE_SOURCE[|UPSTREAM_RELATIVE_TARGET]
-#   GROUP: descriptive label for the announce/act/report log.
+#   GROUP: display-only announce/act/report label; does NOT select a folder.
 #   SOURCE: one regular file beneath the joetoo-ai project root.
 #   TARGET: optional basename/path relative to the curated upstream root.
 #   Omitted TARGET means identical source and target path.
+# Entries may be reordered for human readability; transfers follow file order.
+# Put a companion README immediately after the configuration it documents.
+# No directory is inferred from GROUP; SOURCE and optional TARGET control paths.
 # Blank lines and whole-line comments beginning with # are ignored.
 # No wildcard expansion, symlink dereferencing, traversal, or deletion.
 # Each target path may appear only once. Add new inputs deliberately.
@@ -20,10 +23,12 @@
 # considering --release-check to have passed; --apply can still stage
 # existing files incrementally, with a nonzero final status for omissions.
 #
-# Required configuration companion READMEs and release README are part
-# of the SAME allowlist, not a separate glob or hidden inventory.
+# Configuration companion READMEs reside beside their relevant source
+# config/example/module. The release README is a separately mapped root file.
+# All are ordinary required entries in this one manifest (no glob).
 
 metadata|MANIFEST
+architecture|ARCHITECTURE.md
 license|COPYRIGHT.exceptions
 license|LICENSES.package
 cli|joetoo-kwin
@@ -46,12 +51,29 @@ libexec|libexec/joetoo_kwin_vnc_identity.py
 libexec|libexec/joetoo_kwin_sftp_target.py
 libexec|libexec/joetoo_kwin_sftp_advisory.py
 libexec|libexec/joetoo_kwin_sftp_capability.py
+# OpenRC user-service layers: keep each companion adjacent to its source.
 config|conf.d/joetoo-kwind
+config-readme|conf.d/README_global_joetoo_kwind_conf.md
 config-example|user-conf.d/joetoo-kwind
+config-readme|user-conf.d/README_system_user_joetoo_kwind_conf.md
+config-example|account-conf.d/joetoo-kwind
+config-readme|account-conf.d/README_account_joetoo_kwind_conf.md
 openrc|user-init.d/joetoo-kwind
+
+# CLI launch defaults: these are OPTIONAL samples, not active installed files.
+config-example|config-examples/system/defaults.conf
+config-readme|config-examples/system/README_system_defaults_conf.md
+config-example|config-examples/user/defaults.conf
+config-readme|config-examples/user/README_user_defaults_conf.md
+
+# A selected plan and the short/long templates have source-root companions.
 config-template|joetoo-kwin-per-run-template.conf
 config-template|joetoo-kwin-template.conf
+config-readme|README_joetoo_kwin_launch_conf.md
+config-readme|README_joetoo_kwin_templates_conf.md
 selector|eselect/joetoo-kwin.eselect
+config-readme|eselect/README_eselect_profiles_conf.md
+
 docs|docs/configuration-reference.md
 docs|docs/joetoo-kwin_user_manual.md
 native|native/managed-close/CMakeLists.txt
@@ -60,12 +82,4 @@ native|native/managed-close/adapter.cpp
 native|native/managed-close/x11.cpp
 native|native/managed-close/channel.h
 native|native/managed-close/metadata.json
-config-readme|docs/README_global_joetoo_kwind_conf.md
-config-readme|docs/README_system_user_joetoo_kwind_conf.md
-config-readme|docs/README_account_joetoo_kwind_conf.md
-config-readme|docs/README_system_defaults_conf.md
-config-readme|docs/README_user_defaults_conf.md
-config-readme|docs/README_joetoo_kwin_launch_conf.md
-config-readme|docs/README_eselect_profiles_conf.md
-config-readme|docs/README_joetoo_kwin_templates_conf.md
 documentation|release/README.md|README.md

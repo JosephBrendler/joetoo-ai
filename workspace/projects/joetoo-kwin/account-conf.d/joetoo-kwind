@@ -1,0 +1,13 @@
+# Copyright 2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# OPTIONAL sample for one account's OpenRC user-service override.
+# Human user may copy to:
+#   ${XDG_CONFIG_HOME:-$HOME/.config}/rc/conf.d/joetoo-kwind
+# Use an ABSOLUTE XDG_CONFIG_HOME if set; service loader does not use a
+# relative XDG_CONFIG_HOME. Never install in HOME automatically from ebuild.
+# Shell code is sourced by the service; inspect before enabling.
+# This harmless explicit value matches the standard packaged script name.
+JOETOO_KWIND_SCRIPT_NAME="joetoo-bridge"
+# To override an executable for a controlled development test only:
+# JOETOO_KWIND_EXEC="/absolute/path/to/verified/joetoo-kwind"
