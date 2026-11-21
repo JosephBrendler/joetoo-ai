@@ -481,13 +481,13 @@ A fresh KWin session must never inherit destructive authority over old UUIDs.
 Step 1.9 packaging is the next distinct version 1 workstream; these accepted
 Step 1.7 decisions are not Version 2 deferrals.
 
-## 9. CLI contract (target; not all flags implemented)
+## 9. CLI contract (accepted behavior and proposed Step 1.8 completion)
 
 | Invocation | Intended action |
 | --- | --- |
 | `-c [-f CONFIG]` | Validate config and display a colorized dry-run plan without launching |
 | `-o [-f CONFIG]` | Confirm then launch and positively register/position managed windows |
-| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | Confirm then launch one managed window above existing windows; `over` is the only implemented layer (also the default), no live-desktop reflow |
+| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | **Currently accepted:** `over` only (also the default), with verified one-shot raise and no existing-window reflow. **New Step 1.8:** add one-shot `under`; keep `panel` deferred to Version 2. |
 | `-m l\|r` | Two-panel active-window geometry on current desktop |
 | `-m DESKTOP` | Change active window's desktop, preserve geometry |
 | `-m DESKTOP l\|r` | Two-panel placement on specified desktop |
@@ -497,7 +497,8 @@ Step 1.7 decisions are not Version 2 deferrals.
 | `-x` | **Accepted 1.6:** confirmed fixed-set progressive retirement of authenticated absences and verified graceful closes; retain failed/unresolved entries |
 | `-d MANAGED_ID` | **Accepted 1.6:** confirmed graceful close of one authenticated managed window; record/slot retained |
 | `-l` | List broker-managed windows read-only, one record per fixed-width table row, including stable managed ID, desktop/slot, presence, placement and UUID (Step 1.5d) |
-| `-i MANAGED_ID`, `-s` | Additional detail/application-status interfaces, not implemented in Step 1.5d |
+| `-i MANAGED_ID` | **Planned new Step 1.8:** read-only, strictly validated detail for one broker-managed ID using existing `GetManaged`; report UNKNOWN and broker unavailability distinctly. |
+| `-s` | **Planned new Step 1.8:** read-only broker/registry status using existing `RegistryStatus`; no claims of remote-session health. |
 | `-S` | **Accepted Step 1.7:** export a complete verified managed arrangement as private last-good launch intent with timestamped history; refuse incomplete saves |
 | `-r` | **Accepted Step 1.7:** preflight and confirm restore of saved recipes as **new** managed instances, never adopting old UUIDs or PIDs |
 | `-f FILE` | Explicit configuration precedence, no implicit symlink edits |
@@ -510,8 +511,9 @@ positional arguments**, not a single pipe-delimited argument:
 an omitted LAYER defaults to `over`; explicit `over` is supported; explicit
 `panel` or `under` must be rejected before launch with a helpful diagnostic
 such as `-L: layer 'panel' is not implemented yet; use 'over' or omit LAYER`.
-Do not promise a release/version for unsupported layers. Crucially, `-o`
-retains its accepted `under`/`panel`/`over` layers and implicit `panel` default.
+This paragraph records **the accepted Step 1.5d scope**, not the proposed
+new Step 1.8 work. Crucially, `-o` retains its accepted `under`/`panel`/`over`
+layers and implicit `panel` default.
 
 `-L` launches **one** new window, using the existing program/mode/target
 validators, graphical-region geometry, confirmation, broker reservation,
@@ -530,9 +532,36 @@ requirements. If a one-shot raise cannot be positively targeted and verified
 on both KWin backends, report the constraint instead of adopting a different
 window or weakening ownership.
 
-Live reflow beyond accepted `-L` behavior is deferred; see
-[Version 2 Considerations](#12-version-2-considerations) and the archived
-Step 1.5 task evidence for the earlier investigation.
+Live reflow beyond accepted `-L` behavior remains deferred; see
+[Version 2 Considerations](#12-version-2-considerations) and archived Step 1.5
+evidence. The proposed new Step 1.8 adds only the narrowly bounded `under`
+behavior below, not a general layout-reset capability.
+
+**New Step 1.8 — CLI completion, pending implementation and acceptance.**
+The two read-only operations must expose existing broker interfaces without
+inventing new state: `-s` consumes `RegistryStatus()`, differentiating service
+unavailable, malformed/inconsistent response, and reported Busy/uncertainty;
+`-i MANAGED_ID` consumes `GetManaged(identifier)` but admits only a syntactically
+valid managed ID at the public CLI, does not adopt a raw UUID, and labels any
+historical observation as last-known rather than necessarily live. Both must
+be bounded, safe for a disconnected broker, and free of launch/close/selection
+side effects. Follow established `j_msg` and announce–act–report conventions.
+
+For `-L ... under`, continue using the existing confirmation, validated recipe,
+positive registration, geometry, identity, slot allocation and launch machinery.
+Add one **verified, one-shot lower** of only the newly registered UUID below
+eligible existing normal windows on its destination desktop, subject to native
+KWin X11/Wayland API and backend-capability proof. Do not move, resize, adopt,
+activate or restack peers deliberately; no permanent `keepBelow`, policy
+reflow, or repeated policing of a user's future stacking changes. A focus or
+client activation that defeats the intended final order must not be reported
+as success. If the compositor cannot safely provide and verify the requested
+operation, return an explicit failure without substituting a title/class match
+or silently switching to `over`. `-L` omitted layer must still mean `over`.
+`-L ... panel` remains explicitly unsupported in Version 1 because adding a
+participant to an already occupied panel allocation may require new geometry,
+peer movement and retained-slot policy. This revised Step 1.8 is **not yet
+accepted or implemented**; existing Step 1.5d acceptance remains unchanged.
 
 The `-l` command displays the broker's **managed** inventory read-only as
 aligned, fixed-width columns, **one row per managed record**. At minimum
@@ -597,7 +626,8 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5d** | Implement `-L` one-recipe single-window launch (`over` only; no reflow), retain read-only `-l` inventory; run integrated native X11/Wayland regression | **ACCEPTED, CLOSED AND MERGED (2026-11-12, PR #30)**: `-l` implemented; `-L` implemented under simplified scope, preserving field-specific validation, safe logical-slot reservation, exact-UUID placement, one-shot raise, existing-window geometry and accepted `-o` semantics |
 | **1.6** | Managed `-d`, `-x` | **ACCEPTED AND MERGED** (2026-11-18, [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32), `a6999e2`); [archived evidence](archive/task_step1.6/README.md) on Wayland/XWayland and native X11 |
 | **1.7 (includes former 1.8)** | Private same-session checkpoint/reconciliation **plus** durable `.conf` last-good snapshot, `-S`, `-r` | **ACCEPTED AND MERGED** (2026-11-19, [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33), `df118da`); [archived Wayland/X11 evidence](archive/task_step1.7/README.md) |
-| **1.9** | Packaging of the accepted optional `eselect` selector, installation/ebuild and complete integration | **NEXT (kickoff/planning):** maintainer-led joetoo/joetoo-upstream packaging, templates and version 1 lifecycle; [active HANDOFF](task_1.9/HANDOFF.md) |
+| **1.8 (new CLI completion)** | Read-only `-s` broker status, `-i MANAGED_ID` detail, and verified `-L ... under` (no peer reflow); `-L ... panel` explicitly deferred | **PROPOSED / NOT IMPLEMENTED:** bounded development and native X11/Wayland acceptance after maintainer creates task branch; new use of the step number, distinct from the *former* Step 1.8 folded into accepted 1.7 |
+| **1.9** | Source stabilization, complete human maintainability-comment review, curated transfer/`tarup`, Gentoo ebuild and install/upgrade QA | **IN PROGRESS, NOW PAUSED** until new Step 1.8 is accepted. Source MANIFEST, staging script, paired configuration docs and release README are drafted/committed in `joetoo-ai` at `24cd67f`; path integration, final audit, tarup and package QA remain. See [Step 1.9 HANDOFF](task_1.9/HANDOFF.md). |
 
 ### Accepted remote-resource contract (Step 1.5; historical detail archived)
 
@@ -674,12 +704,13 @@ version 1 work, **not** deferred to Version 2.
    each client's distinct role-identity and SSH/TLS/transport policies and
    avoid a speculative generic plugin framework. Keep version 1's accepted
    serial behavior unless a measured need warrants change.
-3. **Managed live-layout reflow:** `-L` intentionally supports only `over`;
-   panel/under live placement and rebalancing/reordering existing managed
-   *and unmanaged* windows are deferred. Do not equate an initial configured
-   `-o` layer with authority to rearrange windows later. A future explicit
-   reset-to-intended-layout action requires separate user intent and rules for
-   changed geometry/slots.
+3. **Managed live-layout reflow and `-L panel`:** The new Version 1 Step 1.8
+   proposes `-L under` as **only a one-shot lower of its new verified window**;
+   that narrow operation is not authority to rearrange other managed or
+   unmanaged windows. `-L panel`, panel-participant insertion, peer reflow,
+   and any live reset-to-intended-layout capability remain Version 2 work.
+   Do not equate an initial configured `-o` layer with permission to change
+   existing users' window geometries or reservations.
 4. **Broader managed applications:** assess additional GUI/terminal clients
    individually, not from installed status alone. Reported on `gmki91` in
    November 2026: QTerminal 2.4.0; Krusader 2.9.0; FileZilla 3.70.6;
