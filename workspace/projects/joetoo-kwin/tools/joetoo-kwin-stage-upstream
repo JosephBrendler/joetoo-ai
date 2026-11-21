@@ -252,7 +252,7 @@ safe_file() {
     local source_relative=$1 destination_relative=$2
     local src="$project_root/$source_relative"
     local dest="$target_root/$destination_relative"
-    local parent=${dest%/*}
+    local parent=${dest%/*}   # strip shortest match fo '/*' (basename) from the right leaving dirname
     # -f accepts regular files; -L detects symlinks even when they point to
     # existing regular files. ! -e permits a not-yet-created destination.
     [[ -f $src && ! -L $src && ! -L $dest ]] || return 1
@@ -263,7 +263,7 @@ safe_file() {
     # supplied '..' traversal. The upstream root was checked in stage_paths.
     while [[ $parent != "$upstream_root/dev-util" ]]; do
         [[ ! -L $parent ]] || return 1
-        parent=${parent%/*}
+        parent=${parent%/*}   # strip shortest match fo '/*' (basename) from the right leaving dirname
     done
 }
 
@@ -315,6 +315,7 @@ sync_one() {
     local src="$project_root/$src_rel"
     local dest="$target_root/$dest_rel"
     local parent=${dest%/*} backup_parent
+    local -a rsync_args=()
     # Keep a destination path allowlist for the final no-unlisted-files check.
     # Associative keys are exact relative names, including nested directories.
     approved_paths["$dest_rel"]=1
@@ -347,22 +348,20 @@ sync_one() {
             # tarup can never mistake a backup for a source-release input.
             run_step "Prepare backup [$group:$dest_rel]" \
                 install -d -m 0700 -- "$backup_dir/$backup_parent" || return 1
-            # rsync -a = archive: recursive metadata-preserving mode; for these
-            # selected *files* it retains modification times and permissions.
-            # -u = update, never overwrite a destination with a newer mtime.
-            # -c = checksum-based content comparison, not just size+mtime.
-            # --itemize-changes = show per-file changes in the captured output.
-            # --backup = preserve any replaced destination content.
-            # --backup-dir = place those predecessors in this private directory.
-            # -- = stop option parsing before the two filenames.
+            # set up rsync args in an array so we can explain each and not need \ to split lines
+            rsync_args=( -a )   #...............# archive: recursive metadata-preserving mode
+                                                # (retains *file* modification times and permissions)
+            rsync_args+=( -u )   #..............# update, never overwrite a destination with a newer mtime
+            rsync_args+=( -c )   #..............# checksum-based content comparison, not just size+mtime
+            rsync_args+=( --itemize-changes )   # show per-file changes in the captured output
+            rsync_args+=( --backup )   #........# preserve any replaced destination content
+            rsync_args+=( --backup-dir="$backup_dir/$backup_parent" )   # place predecessors here (private)
+            rsync_args+=( -- "$src" "$dest" )   # stop option parsing before the two filenames
             # There is deliberately NO --delete: upstream-only files remain;
-            # release-check will report unexpected files rather than delete.
-            run_step "Transfer [$group:$dest_rel]" \
-                rsync -auc --itemize-changes --backup \
-                --backup-dir="$backup_dir/$backup_parent" -- "$src" "$dest" || return 1
-            # A -u skip is not success: rsync can return 0 but leave a newer,
-            # DIFFERENT upstream file unchanged. Re-read bytes and mode after
-            # every sync; nonmatching content is a reported conflict.
+            # release-check will report unexpected files rather than delete
+            run_step "Transfer [$group:$dest_rel]" rsync "${rsync_args[@]}" || return 1
+            # rsync -u skip is not success: can return 0 but leave newer, DIFFERENT upstream file unchanged
+            # So - re-read bytes and mode after every sync; nonmatching content is a reported conflict
             run_step "Verify [$group:$dest_rel]" file_parity "$src" "$dest"
             ;;
         verify|release-check)
