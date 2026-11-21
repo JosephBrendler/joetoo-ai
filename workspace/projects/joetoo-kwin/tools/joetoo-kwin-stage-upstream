@@ -10,8 +10,10 @@
 # constructs the source tarball, and only then can the joetoo ebuild be prepared.
 # This tool does NOT make a tarball or certify the source as production-ready.
 #
-# Source selection is an allowlisted per-file manifest: no recursive copy of
-# archive/, tasks, tests, scratch tools, or development POC installers.
+# Source selection comes from the explicit, reviewed project-root MANIFEST;
+# no recursive copy of archive/, tasks, tests, scratch tools, or POC installers.
+# Both the script and MANIFEST are versioned in joetoo-ai and the manifest
+# itself is transferred into the upstream source archive as a release record.
 # No rsync --delete, git commit/push, tarup, ebuild, emerge or HOME config edits.
 # Mode --plan is the default; ONLY an explicit --apply writes upstream files.
 #
@@ -56,9 +58,12 @@ upstream_root=''
 target_root=''
 # Per-invocation overwritten-file backups outside both repositories.
 backup_dir=''
-# Bash associative array: approved destination-relative paths as set-members.
-# Used to detect *unexpected extra* files before tarup would include them.
-declare -A approved_paths=()  # exact approved destination manifest, for tarup preflight
+# A single authoritative project-root MANIFEST drives every mode. The parser
+# fills these three arrays in order and the set of allowed destination paths.
+# The latter is consulted by pre-tarup checks for unlisted upstream files.
+manifest_file=''
+declare -a manifest_groups=() manifest_sources=() manifest_targets=()
+declare -A approved_paths=()
 # Numeric command-result and reporting bitmask. NOT Joetoo pseudo-booleans:
 # TRUE=0, FALSE='' are for conceptual flags, never arbitrary exit statuses.
 action_rc=0
@@ -79,9 +84,12 @@ Usage: tools/joetoo-kwin-stage-upstream [MODE]
 Source: project directory containing tools/joetoo-kwin-stage-upstream
 Target: $HOME/joetoo-upstream/dev-util/joetoo-kwin/
 
-Only explicit manifest paths transfer. The development README, ARCHITECTURE,
-archive/, task_1.9/, tools/, and tests/ are not copied indiscriminately.
-A reviewed source-only release/README.md, if present, becomes upstream README.md.
+Only explicitly named project-root MANIFEST entries transfer; no globs.
+Format: GROUP|SOURCE[|TARGET]. Duplicate/unsafe paths are rejected before
+any copy. Missing listed source files are reported individually as failures.
+The release/README.md entry is renamed to upstream README.md by its TARGET.
+Development README, ARCHITECTURE, archive/, task_1.9/, tools/ and tests/
+are not copied indiscriminately.
 
 This is a maintainer-operated source-curation tool, not a release publisher.
 It never deletes destination files or calls tarup, ebuild, emerge or git add.
@@ -242,10 +250,86 @@ stage_paths() {
         command -v cmp >/dev/null && command -v stat >/dev/null
 }
 
+#-----[ external curated MANIFEST ]--------------------------------------------
+# This parser deliberately does NOT source/eval MANIFEST, use shell globs, or
+# accept command-line paths. Every line is ordinary text; only a restricted
+# relative-path alphabet is accepted, with explicit traversal/symlink guards.
+# A third field allows one reviewed rename, e.g. release/README.md -> README.md.
+# All lines are checked before --apply creates its backup directory or writes
+# any upstream file. Missing listed source files are a per-item failure later,
+# so the tool still supports incremental source integration while documentation
+# is being authored; --release-check cannot pass until every entry exists.
+# shellcheck disable=SC2329
+manifest_path_valid() {
+    local path=$1
+    # Only intentionally simple portable filenames are admitted. A source
+    # filename with whitespace or other special characters must be reviewed
+    # and the grammar extended explicitly rather than interpreted implicitly.
+    [[ $path =~ ^[A-Za-z0-9_][A-Za-z0-9_./-]*$ ]] || return 1
+    # Reject every segment that would escape or alias a source-tree location.
+    # GNU coreutils -- does NOT make a string containing '..' safe by itself.
+    [[ $path != *'//'* && $path != */ && $path != '.' &&
+       $path != '..' && $path != './'* && $path != '../'* &&
+       $path != */./* && $path != */../* &&
+       $path != */. && $path != */.. ]] || return 1
+    return 0
+}
+
+# shellcheck disable=SC2329
+load_manifest() {
+    local row line_no=0 group rest src_rel dest_rel
+    manifest_file="$project_root/MANIFEST"
+    [[ -f $manifest_file && ! -L $manifest_file ]] || {
+        printf 'Missing or linked project-root MANIFEST: %s\n' "$manifest_file"
+        return 1
+    }
+    # Source the file using a redirected read loop (not a pipeline) so arrays
+    # and approved_paths persist in the caller's shell; preserve final line
+    # even if it lacks a trailing newline. Blank and # comment lines are inert.
+    while IFS= read -r row || [[ -n $row ]]; do
+        (( line_no += 1 ))
+        [[ -z $row || $row == \#* ]] && continue
+        if [[ $row != *'|'* ]]; then
+            printf 'MANIFEST:%d: missing GROUP|SOURCE delimiter\n' "$line_no"
+            return 1
+        fi
+        group=${row%%|*}
+        rest=${row#*|}
+        if [[ $rest == *'|'* ]]; then
+            src_rel=${rest%%|*}
+            dest_rel=${rest#*|}
+        else
+            src_rel=$rest
+            dest_rel=$src_rel
+        fi
+        # A second '|' would be an unexpected fourth field, never a filename.
+        if [[ $dest_rel == *'|'* || ! $group =~ ^[a-z][a-z0-9-]*$ ]] ||
+                ! manifest_path_valid "$src_rel" ||
+                ! manifest_path_valid "$dest_rel"; then
+            printf 'MANIFEST:%d: invalid fields: %s\n' "$line_no" "$row"
+            return 1
+        fi
+        if [[ ${approved_paths[$dest_rel]+exists} ]]; then
+            printf 'MANIFEST:%d: duplicate target: %s\n' "$line_no" "$dest_rel"
+            return 1
+        fi
+        approved_paths["$dest_rel"]=1
+        manifest_groups+=( "$group" )
+        manifest_sources+=( "$src_rel" )
+        manifest_targets+=( "$dest_rel" )
+    done < "$manifest_file"
+    (( ${#manifest_groups[@]} > 0 )) || {
+        printf 'MANIFEST is empty\n'
+        return 1
+    }
+    printf 'Validated %d manifest entries from %s\n' \
+        "${#manifest_groups[@]}" "$manifest_file"
+}
+
 # One manifest item is safe only if its source is an ordinary regular file,
 # the destination (when existing) is a regular file, and no destination path
-# component is a symlink. This avoids following a symlink out of the intended
-# source/destination trees. The manifest is hardcoded, NOT parsed from user input.
+# component is a symlink. The separately parsed project-root MANIFEST is
+# treated as untrusted PATH DATA, never shell code or an rsync argument vector.
 # Invoked by name via run_step rather than a static direct call.
 # shellcheck disable=SC2329
 safe_file() {
@@ -316,9 +400,8 @@ sync_one() {
     local dest="$target_root/$dest_rel"
     local parent=${dest%/*} backup_parent
     local -a rsync_args=()
-    # Keep a destination path allowlist for the final no-unlisted-files check.
-    # Associative keys are exact relative names, including nested directories.
-    approved_paths["$dest_rel"]=1
+    # load_manifest already validated this destination and placed it in the
+    # allowlist BEFORE any transfer began. Do not maintain a second copy here.
     # Failure means do not try to transfer this file. The caller's manifest
     # loop later continues, but run_step has already incremented failures.
     if ! run_step "Check [$group:$src_rel]" safe_file "$src_rel" "$dest_rel"; then
@@ -388,30 +471,9 @@ check_license_metadata() {
         "$target_root/COPYRIGHT.exceptions"
 }
 
-# Contract calls for concise READMEs describing each configuration layer.
-# These are release deliverables, not automatic edits to installed user plans.
-# shellcheck disable=SC2329
-check_config_docs() {
-    local name
-    local -a required=(
-        README_global_joetoo_kwind_conf.md
-        README_system_user_joetoo_kwind_conf.md
-        README_account_joetoo_kwind_conf.md
-        README_system_defaults_conf.md
-        README_user_defaults_conf.md
-        README_joetoo_kwin_launch_conf.md
-        README_eselect_profiles_conf.md
-        README_joetoo_kwin_templates_conf.md
-    )
-    # Search only expected reviewed source locations. A single missing role
-    # README is an actionable pre-tarup blocker; return rather than invent it.
-    for name in "${required[@]}"; do
-        [[ -f $target_root/docs/$name || -f $target_root/$name ]] || {
-            printf 'Missing config companion: %s\n' "$name"
-            return 1
-        }
-    done
-}
+# The eight required README_*_conf.md files and source-release README are
+# explicit MANIFEST entries. Missing ones therefore fail the ordinary source
+# validation/sync path; no second list or filename glob is maintained here.
 
 # tarup checks copyright provenance. Its source-header audit is not a
 # substitute for manual licensing review. This quick check simply detects
@@ -475,10 +537,8 @@ check_no_unlisted_files() {
 release_checks() {
     j_msg "-${notice}" -p "Pre-tarup checks (read-only, non-exhaustive):"
     run_step 'License manifests present and minimally consistent' check_license_metadata || :
-    run_step 'Configuration-role README companions present' check_config_docs || :
     run_step 'Native CMake source copyright heading' check_cmake_header || :
     run_step 'Packaged CLI/service lookup paths updated' check_packaged_paths || :
-    run_step 'Curated upstream README available' test -f "$target_root/README.md" || :
     run_step 'No unlisted files in tarup source tree' check_no_unlisted_files || :
     j_msg "-${warn}" -p \
         'Also review headers of ALL curated source files, SPDX provenance,' \
@@ -509,6 +569,12 @@ separator "$(hostname)" "${PN}-${BUILD}"
 # with a nonzero status. The source and destination remain unmodified here.
 run_step 'Validate source/destination Git repositories' stage_paths ||
     die 'Unexpected repositories, symlinks or missing rsync/cmp/stat' 1
+# Reject malformed, duplicate, absolute or traversal-shaped manifest paths
+# and a symlinked MANIFEST before --apply creates backups or starts copying.
+# Each source/destination symlink is checked later by safe_file per entry.
+# This is a separate announce/act/report operation with its own status.
+run_step 'Validate project-root curated MANIFEST' load_manifest ||
+    die 'Unsafe, duplicate or missing curated MANIFEST' 1
 j_msg "-${notice}" -p "Mode [$mode]"
 j_msg "-${notice}" -p "Source [$project_root]"
 j_msg "-${notice}" -p "Target [$target_root]"
@@ -533,81 +599,17 @@ if [[ $mode == apply ]]; then
     j_msg "-${notice}" -p "Previous file versions retained under [$backup_dir]"
 fi
 
-# Approved release manifest, not a filesystem glob and NOT the Git index.
-# A field separator '|' splits group label from relative source path.
-# read -r preserves literal backslashes; IFS='|' prevents whitespace splitting.
-# The quoted heredoc delimiter (<<'MANIFEST') leaves contents literal;
-# embedded $ or backslashes are NOT expanded when Bash reads the list.
-# The loop intentionally continues after each failure ('|| :') so the human
-# gets a complete report. run_step's failures counter still makes final exit
-# nonzero, so no failed step is reclassified as success.
-# Add new release files only after source/metadata approval; no auto-detection
-# of arbitrary workspace content.
-while IFS='|' read -r group rel; do
-    [[ -n $rel && $group != \#* ]] || continue
-    sync_one "$group" "$rel" || :
-done <<'MANIFEST'
-license|COPYRIGHT.exceptions
-license|LICENSES.package
-cli|joetoo-kwin
-resident|joetoo-kwin-resident.js
-libexec|libexec/joetoo-kwin-plan-functions
-libexec|libexec/joetoo-kwin-launch-functions
-libexec|libexec/joetoo-kwin-session.bashrc
-libexec|libexec/joetoo-kwin-exposure.py
-libexec|libexec/joetoo-kwind
-libexec|libexec/joetoo_kwin_launch_resources.py
-libexec|libexec/joetoo_kwin_registry.py
-libexec|libexec/joetoo_kwin_managed_close.py
-libexec|libexec/joetoo_kwin_recovery.py
-libexec|libexec/joetoo_kwin_persistence.py
-libexec|libexec/joetoo_kwin_rdp_launch.py
-libexec|libexec/joetoo_kwin_rdp_target.py
-libexec|libexec/joetoo_kwin_vnc_launch.py
-libexec|libexec/joetoo_kwin_vnc_target.py
-libexec|libexec/joetoo_kwin_vnc_identity.py
-libexec|libexec/joetoo_kwin_sftp_target.py
-libexec|libexec/joetoo_kwin_sftp_advisory.py
-libexec|libexec/joetoo_kwin_sftp_capability.py
-config|conf.d/joetoo-kwind
-config-example|user-conf.d/joetoo-kwind
-openrc|user-init.d/joetoo-kwind
-config-template|joetoo-kwin-per-run-template.conf
-config-template|joetoo-kwin-template.conf
-selector|eselect/joetoo-kwin.eselect
-docs|docs/configuration-reference.md
-docs|docs/joetoo-kwin_user_manual.md
-native|native/managed-close/CMakeLists.txt
-native|native/managed-close/README.md
-native|native/managed-close/adapter.cpp
-native|native/managed-close/x11.cpp
-native|native/managed-close/channel.h
-native|native/managed-close/metadata.json
-MANIFEST
-
-# Per-role config README companions are the one controlled exception to the
-# fixed list: only README_*_conf.md from these TWO reviewed directories.
-# Bash shopt -s nullglob makes a nonmatching pattern expand to ZERO operands,
-# rather than passing a literal '*' to sync_one. This is not a recursive scan;
-# tests and archived files remain excluded. Shell dialect: Bash only.
-shopt -s nullglob
-for companion in "$project_root"/docs/README_*_conf.md \
-                 "$project_root"/README_*_conf.md; do
-    relative=${companion#"$project_root"/}
-    sync_one config-readme "$relative" || :
+# A single project-root MANIFEST contains EVERY curated transfer, including
+# the eight configuration companions and renamed release README. Unlike the
+# former inline heredoc and README glob, there is only one inventory to edit.
+# All entries were validated before --apply was permitted to write anything.
+# A missing source fails safe_file for that item and increments the failure
+# counter, while the loop still reports all the other entries ('|| :').
+for manifest_index in "${!manifest_groups[@]}"; do
+    sync_one "${manifest_groups[manifest_index]}" \
+             "${manifest_sources[manifest_index]}" \
+             "${manifest_targets[manifest_index]}" || :
 done
-shopt -u nullglob
-
-# Optional curated release README, distinct from development project README.
-# It documents which source-tree materials were intentionally excluded and
-# becomes ROOT README.md in the upstream archive. sync_one's third path arg
-# performs that rename without copying the whole release/ directory.
-if [[ -f $project_root/release/README.md ]]; then
-    sync_one docs release/README.md README.md || :
-elif [[ $mode == release-check ]]; then
-    run_step 'Curated release/README.md authored in source checkout' \
-        test -f "$project_root/release/README.md" || :
-fi
 
 if [[ $mode == release-check ]]; then
     release_checks

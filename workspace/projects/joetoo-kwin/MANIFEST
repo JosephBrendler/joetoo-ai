@@ -1,0 +1,71 @@
+# Copyright 2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# joetoo-kwin — curated source-transfer MANIFEST (Step 1.9)
+#
+# Used by tools/joetoo-kwin-stage-upstream, located in the joetoo-ai
+# project root.  Reviewed and transferred into the joetoo-upstream source
+# directory as a provenance record; tarup archives it as ordinary text.
+#
+# File format: GROUP|PROJECT_RELATIVE_SOURCE[|UPSTREAM_RELATIVE_TARGET]
+#   GROUP: descriptive label for the announce/act/report log.
+#   SOURCE: one regular file beneath the joetoo-ai project root.
+#   TARGET: optional basename/path relative to the curated upstream root.
+#   Omitted TARGET means identical source and target path.
+# Blank lines and whole-line comments beginning with # are ignored.
+# No wildcard expansion, symlink dereferencing, traversal, or deletion.
+# Each target path may appear only once. Add new inputs deliberately.
+#
+# Missing entries fail individually: author future documentation BEFORE
+# considering --release-check to have passed; --apply can still stage
+# existing files incrementally, with a nonzero final status for omissions.
+#
+# Required configuration companion READMEs and release README are part
+# of the SAME allowlist, not a separate glob or hidden inventory.
+
+metadata|MANIFEST
+license|COPYRIGHT.exceptions
+license|LICENSES.package
+cli|joetoo-kwin
+resident|joetoo-kwin-resident.js
+libexec|libexec/joetoo-kwin-plan-functions
+libexec|libexec/joetoo-kwin-launch-functions
+libexec|libexec/joetoo-kwin-session.bashrc
+libexec|libexec/joetoo-kwin-exposure.py
+libexec|libexec/joetoo-kwind
+libexec|libexec/joetoo_kwin_launch_resources.py
+libexec|libexec/joetoo_kwin_registry.py
+libexec|libexec/joetoo_kwin_managed_close.py
+libexec|libexec/joetoo_kwin_recovery.py
+libexec|libexec/joetoo_kwin_persistence.py
+libexec|libexec/joetoo_kwin_rdp_launch.py
+libexec|libexec/joetoo_kwin_rdp_target.py
+libexec|libexec/joetoo_kwin_vnc_launch.py
+libexec|libexec/joetoo_kwin_vnc_target.py
+libexec|libexec/joetoo_kwin_vnc_identity.py
+libexec|libexec/joetoo_kwin_sftp_target.py
+libexec|libexec/joetoo_kwin_sftp_advisory.py
+libexec|libexec/joetoo_kwin_sftp_capability.py
+config|conf.d/joetoo-kwind
+config-example|user-conf.d/joetoo-kwind
+openrc|user-init.d/joetoo-kwind
+config-template|joetoo-kwin-per-run-template.conf
+config-template|joetoo-kwin-template.conf
+selector|eselect/joetoo-kwin.eselect
+docs|docs/configuration-reference.md
+docs|docs/joetoo-kwin_user_manual.md
+native|native/managed-close/CMakeLists.txt
+native|native/managed-close/README.md
+native|native/managed-close/adapter.cpp
+native|native/managed-close/x11.cpp
+native|native/managed-close/channel.h
+native|native/managed-close/metadata.json
+config-readme|docs/README_global_joetoo_kwind_conf.md
+config-readme|docs/README_system_user_joetoo_kwind_conf.md
+config-readme|docs/README_account_joetoo_kwind_conf.md
+config-readme|docs/README_system_defaults_conf.md
+config-readme|docs/README_user_defaults_conf.md
+config-readme|docs/README_joetoo_kwin_launch_conf.md
+config-readme|docs/README_eselect_profiles_conf.md
+config-readme|docs/README_joetoo_kwin_templates_conf.md
+documentation|release/README.md|README.md

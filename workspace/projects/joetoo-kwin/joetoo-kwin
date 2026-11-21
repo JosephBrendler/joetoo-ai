@@ -95,18 +95,22 @@ parse_cmdline() {
     return 0
 }
 
-# Structural checks protect the shared pipe-recipe representation. Semantic
-# recipe/target validation remains in validate_plan and launch_preflight.
+# Structural checks protect the shared pipe-recipe representation
+# Semantic recipe/target validation is in validate_plan and launch_preflight
 validate_single_operands() {
     local _so_name _so_value _so_i=0
     local -a _so_names=(DESKTOP PROGRAM MODE TARGET LAYER)
+    # DESKTOP PROGRAM MODE TARGET are not optional
     (( $# == 4 || $# == 5 )) || { bad_args '-L requires DESKTOP PROGRAM MODE TARGET [over] as separate arguments'; return 2; }
+    # iterate args and validate each
     for _so_value in "$@"; do
         _so_name=${_so_names[$_so_i]}; _so_i=$((_so_i + 1))
         if [[ $_so_value == *'|'* || $_so_value == *[$'\001'-$'\037'$'\177']* ]]; then
+            # 001 = 0x01 SOH Start of Heading; # 037 = 0x1F US  Separator; # 177 = 0x7F DEL Delete
             bad_args "-L: $_so_name is redacted; expected one recipe field without pipe/control characters"; return 2
         fi
     done
+    # LAYER is optional (default to over)
     case ${5-over} in
         over) ;;
         panel|under) bad_args "-L: layer '${5}' is not implemented yet; use 'over' or omit LAYER"; return 2 ;;
