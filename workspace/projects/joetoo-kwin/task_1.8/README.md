@@ -2,11 +2,14 @@
 
 <!-- Copyright 2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
-**Status (2026-11-21): SCOPE IDENTIFIED; NOT YET IMPLEMENTED OR ACCEPTED.**
-The maintainer created `task/joetoo-kwin-step1.8-cli-completion` after
-publishing the revised architecture and Step 1.9 scope on `main` at
-**`7fdd2cf`**. The earlier Step 1.8 was folded into Step 1.7; this is a
-**new, distinct Step 1.8** to finish three remaining Version 1 CLI behaviors.
+**Status (2026-11-22): ACTIVE.** Read-only `-s` and `-i` are **implemented**
+and have maintainer-operated native smoke evidence on Wayland and X11;
+final acceptance is **pending**. One-shot `-L ... under` is **not implemented**.
+The branch `task/joetoo-kwin-step1.8-cli-completion` was verified at pushed
+HEAD **`cadf992`** with clean tracking checkouts on `q552u01` and `slim2`.
+The accepted `main` reference is `7fdd2cf`; task branch ancestry is not a
+fast-forward of that commit (merge-base `24cd67f`), to reconcile at PR review.
+The former Step 1.8 was folded into Step 1.7; this remains a separate task.
 
 **Accepted foundation:** All Steps **1.1–1.7 are accepted and closed**.
 Step 1.5d's `-L over`/`-l` behavior is accepted
@@ -27,11 +30,11 @@ Deliver these three remaining Version 1 CLI capabilities **without
 introducing a new registry, window selector, geometry engine, or general
 stacking framework**:
 
-| CLI invocation | Current `7fdd2cf` source | New Step 1.8 result |
+| CLI invocation | Earlier `7fdd2cf` source | Step 1.8 target and present result |
 | --- | --- | --- |
-| `joetoo-kwin -s` | Parsed, then reports not yet integrated | Read-only, validated broker/registry status |
-| `joetoo-kwin -i MANAGED_ID` | Parsed, then reports not yet integrated | Read-only detail for exactly one managed record |
-| `joetoo-kwin -L DESKTOP PROGRAM MODE TARGET under` | Rejected before launching | Verified one-shot lower of the **newly** registered window |
+| `joetoo-kwin -s` | Parsed, then reports not yet integrated | Implemented; terminal-`OK` classification fixed; native Wayland/X11 smoke PASS |
+| `joetoo-kwin -i MANAGED_ID` | Parsed, then reports not yet integrated | Implemented; present/missing records demonstrated on Wayland and present record on X11 |
+| `joetoo-kwin -L DESKTOP PROGRAM MODE TARGET under` | Rejected before launching | **Pending:** verified one-shot lower of the **newly** registered window |
 | `joetoo-kwin -L ... [over]` | **Accepted** default/explicit `over` | Preserve behavior and native regression evidence |
 | `joetoo-kwin -L ... panel` | Unsupported | **Remain unsupported; Version 2**, with explicit refusal before side effects |
 
@@ -39,6 +42,43 @@ The user has approved **one-shot `under`** as a narrow revised Version 1
 target. This is a deliberate change to Step 1.5d's earlier Version 2
 classification of `under`, not proof it is currently implemented. Do not
 rewrite the Step 1.5d acceptance record to pretend it already supported it.
+
+## Read-only implementation, native evidence and known limitations (2026-11-22)
+
+- **Implementation:** `1670bea` introduced the `-s`/`-i` CLI paths,
+  `libexec/joetoo_kwin_readonly.py` and focused tests. `f3fef58` fixed a
+  false **Busy/uncertain** report: the prior helper treated a retained,
+  completed placement `OK` as *active*. `PENDING`/`RUNNING`/`VERIFYING` remain
+  active, while `OK` and `ERROR` are terminal and unknown states fail closed.
+- **Wayland evidence:** [q552u01 native read-only evidence](step1.8-q552u01-readonly-wayland-evidence-2026-11-22.md)
+  contains selected `-l`, `-i` (present **and missing**) and pre-/post-fix
+  `-s` output; **9/9 Step 1.8 focused tests PASS**. The long-running broker
+  was not restarted for the `-s` repair.
+- **X11 evidence:** [slim2 native read-only evidence](step1.8-slim2-readonly-x11-evidence-2026-11-22.md)
+  records KWin **6.7.6**, successful user OpenRC broker restart, two recovered
+  present records, and successful `-s`, `-l`, and `-i`. Source-tree extended
+  ShellCheck passed; JavaScript **163/163 PASS**.
+- **Obsolete fixture test:** the slim2 full Python run executed **1,089**
+  tests with **one failure** from a stale Step 1.4d assertion that the now-
+  accepted `-o` still contained `not yet integrated`. Test-only commit
+  **`cadf992`** repaired that historical fixture. The maintainer reports
+  the focused test passed on slim2; q552u01 subsequently showed **3/3 PASS**.
+  A *full* Python rerun following the repair is **not yet evidenced**.
+- **ShellCheck side effort:** joetoolkit **1.0.19** added
+  `shellcheck_stub_filter`, which scanned **29** shell-shebang consumers and
+  retained **69/1,329** generated header-variable definitions while keeping
+  the full function stub. The generated consumer-scoped
+  `script_header_joetoo.shellcheck_filtered_stub` was committed with
+  `1670bea`; `validate_scripts ./joetoo-kwin -l` passed in **9.000s** on
+  q552u01 (previously about **28s**, ~7 GB reported). Peak memory after
+  filtering was **not measured**. This tool is a separate joetoolkit workflow
+  improvement, not part of the Step 1.8 CLI contract.
+- **Scope/remaining gaps:** the successful CLI invocations were from the
+  **project source tree**. The POC installer did not yet deploy the new
+  read-only Python helper; installed-CLI behavior is not established and
+  packaging/lookup must be addressed before release (Step 1.9 owns packaging).
+  Neither host has yet tested `-L ... under` because it is unimplemented;
+  Step 1.8 as a whole has **not** been accepted or merged.
 
 ## A. `-s` — read-only broker status
 
@@ -128,12 +168,13 @@ acceptance tests without a demonstrated need.
 1. **Establish exact baseline:** verify branch, HEAD and working tree; read
    `ARCHITECTURE.md`, this task's HANDOFF and the existing CLI/broker/resident
    code. Keep the archived Step 1.5–1.7 acceptance records intact.
-2. **Finish the read-only commands:** wire `-s` and `-i` into the existing
-   parser and broker methods; add headless tests and update `-h`/user manual.
-3. **Implement the bounded `under` extension:** confirm native API
-   feasibility, then extend the existing single-launch payload/broker/resident
-   path with necessary validation/readback. Do not introduce new selection or
-   transport frameworks.
+2. **Read-only increment (implemented, acceptance pending):** keep the
+   recorded Wayland/X11 evidence and focused test coverage; close remaining
+   validation/installed-helper integration gaps in the appropriate scope.
+3. **Next: bounded `under` extension:** establish KWin 6.7.6 native lower
+   capability and full-stack readback feasibility; then extend the existing
+   one-window launch/broker/resident transaction with exact-UUID one-shot
+   lowering and explicit fail-closed behavior. No peer reflow or new selector.
 4. **Run focused regressions:** `bash -n`, applicable ShellCheck/Joetoo
    `validate_scripts`, Python tests, JavaScript syntax/tests, D-Bus mock
    checks, and tests of old `over` plus `-o` initial layers.
