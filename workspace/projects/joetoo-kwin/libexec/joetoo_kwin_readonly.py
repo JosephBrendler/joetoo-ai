@@ -66,12 +66,16 @@ def validate_status(data):
         raise ValueError('request total')
     transaction = obj(data['placement_transaction'])
     state = token(transaction['state'], r'[A-Z_]{1,32}')
+    # The broker retains the latest completed placement, including OK/ERROR.
+    # Only PENDING/RUNNING/VERIFYING are in-flight transactions.
+    if state not in ('IDLE', 'PENDING', 'RUNNING', 'VERIFYING', 'OK', 'ERROR'):
+        raise ValueError('unknown placement transaction state')
     request_id = transaction['id']
     if state == 'IDLE':
         if request_id is not None:
             raise ValueError('idle transaction id')
     elif not isinstance(request_id, str) or not 1 <= len(request_id) <= 128:
-        raise ValueError('active transaction id')
+        raise ValueError('non-idle transaction id')
     observation = obj(data['observation'])
     synchronized = boolean(observation['synchronized'])
     source = observation['source']
@@ -93,8 +97,10 @@ def validate_status(data):
         concerns.append('observer unsynchronized')
     if presence['uncertain']:
         concerns.append('uncertain managed windows')
-    if state != 'IDLE':
+    if state in ('PENDING', 'RUNNING', 'VERIFYING'):
         concerns.append('placement transaction active')
+    elif state == 'ERROR':
+        concerns.append('last placement transaction failed')
     if close_active:
         concerns.append('managed close active')
     if layout_active:

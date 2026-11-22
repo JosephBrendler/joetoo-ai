@@ -77,6 +77,40 @@ sys.exit(int(os.environ['READONLY_EXIT']))
         self.assertIn('No reported Busy/uncertain flags', output)
         self.assertIn('not remote connection health', output)
 
+    def test_status_placement_transaction_terminal_and_active_states(self):
+        # The broker retains its last completed placement: OK is not in-flight.
+        for state in ('IDLE', 'OK'):
+            with self.subTest(state=state):
+                status = copy.deepcopy(self.status)
+                status['placement_transaction'] = dict(
+                    state=state, id=None if state == 'IDLE' else 'attempt-123')
+                output = self.query(['-s'], status, method='RegistryStatus')
+                self.assertIn('No reported Busy/uncertain flags', output)
+                self.assertNotIn('placement transaction active', output)
+
+        for state in ('PENDING', 'RUNNING', 'VERIFYING'):
+            with self.subTest(state=state):
+                status = copy.deepcopy(self.status)
+                status['placement_transaction'] = dict(state=state, id='attempt-123')
+                output = self.query(['-s'], status, method='RegistryStatus')
+                self.assertIn('Busy/uncertain', output)
+                self.assertIn('placement transaction active', output)
+
+        status = copy.deepcopy(self.status)
+        status['placement_transaction'] = dict(state='ERROR', id='attempt-123')
+        output = self.query(['-s'], status, method='RegistryStatus')
+        self.assertIn('last placement transaction failed', output)
+        self.assertNotIn('placement transaction active', output)
+
+        for state, identifier in (('UNKNOWN', 'attempt-123'),
+                                  ('OK', None), ('IDLE', 'attempt-123')):
+            with self.subTest(state=state, identifier=identifier):
+                status = copy.deepcopy(self.status)
+                status['placement_transaction'] = dict(state=state, id=identifier)
+                output = self.query(['-s'], status, expected=2, method='RegistryStatus')
+                self.assertIn('Malformed or inconsistent', output)
+                self.assertNotIn('Managed windows:', output)
+
     def test_status_busy_and_uncertainty_is_not_misreported_ready(self):
         status = copy.deepcopy(self.status)
         status['placement_transaction'] = dict(id='attempt-123', state='RUNNING')
