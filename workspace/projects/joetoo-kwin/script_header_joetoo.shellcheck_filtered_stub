@@ -1,0 +1,360 @@
+#!/bin/bash
+# Copyright 2014-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# script_header_joetoo.stub - ShellCheck look-ahead definition layer
+# *** Generated automatically by make_shellcheck_stubs.sh (Do not edit) ***
+# SC2034: Variable appears to be unused
+#   (disable when exporting, using externally, or dynamically referencing via namerefs (declare -n) or eval,
+#    which ShellCheck cannot always track.)
+# SC2120: Function references arguments, but the caller does not pass any
+#   (disable when arguments are optional, or if the function relies on default fallback values)
+# SC2329: This function is never invoked
+#   (disable when context is not checked)
+# shellcheck disable=SC2034,SC2120,SC2329
+
+# ---{ functions designed to terminate ]------------------------------------
+# do not use dummys for these, so shellcheck understands control structure
+usage() { printf '[stub usage]\n' >&2; leave; }
+die() { printf '[stub fatal] %s\n' "$*" >&2; exit 1; }
+leave() { printf '[stub exit] %s\n' "$*" >&2; exit 0; }
+
+# ---[ header: script_header_joetoo ]---------------------------------------------
+B_RGB_FG() { :; }
+CLR() { :; }
+CPR() { :; }
+CUB() { :; }
+CUD() { :; }
+CUF() { :; }
+CUP() { :; }
+CUU() { :; }
+DECRST() { :; }
+DECSET() { :; }
+EL() { :; }
+HCU() { :; }
+HVP() { :; }
+QCC() { :; }
+QCR() { :; }
+RCP() { :; }
+RGB_BG() { :; }
+RGB_FG() { :; }
+SCP() { :; }
+SCU() { :; }
+TrueFalse() { :; }
+alpha_words() { :; }
+alphasort_usefile() { :; }
+app_configure() { :; }
+ask_pass() { :; }
+b2d() { :; }
+b2h() { :; }
+b2o() { :; }
+box_esca() { :; }
+box_msg() { :; }
+box_shift() { :; }
+bremoji() { :; }
+bremojis() { :; }
+bremojis2() { :; }
+checkboot() { :; }
+checknotroot() { :; }
+checkroot() { :; }
+checkshell() { :; }
+color() { :; }
+confirm_continue_or_exit() { :; }
+d2b() { :; }
+d2h() { :; }
+d2o() { :; }
+d_do() { :; }
+debug_marker() { :; }
+decode_right_status() { :; }
+display_vars() { :; }
+emit() { :; }
+emit_utf8_from_hex() { :; }
+emoji_safe() { :; }
+fe() { :; }
+fix_logfile() { :; }
+format_warning() { :; }
+full_repeat() { :; }
+get_longest() { :; }
+get_msg_len() { :; }
+get_severity() { :; }
+h2b() { :; }
+h2d() { :; }
+h2o() { :; }
+handle_result() { :; }
+idx_of_emoji() { :; }
+initialize_vars() { :; }
+is_utf8_terminal() { :; }
+is_valid_timestamp() { :; }
+isfloat_posix() { :; }
+ishexint() { :; }
+isint() { :; }
+isipv4() { :; }
+isipv6() { :; }
+isnumeric() { :; }
+isroot() { :; }
+j_msg() { :; }
+left_most() { :; }
+linear_search() { :; }
+loggit() { :; }
+maybe_format_warning() { :; }
+milli_countdown() { :; }
+milli_sleep() { :; }
+millis2time() { :; }
+my_date() { :; }
+my_short_date() { :; }
+name_of_emoji() { :; }
+o2b() { :; }
+o2d() { :; }
+o2h() { :; }
+pad() { :; }
+print_center() { :; }
+process_argument() { :; }
+process_cmdline() { :; }
+process_compound_arg() { :; }
+progress_inline() { :; }
+pur() { :; }
+register_cleanup_hook() { :; }
+repeat() { :; }
+right_most() { :; }
+right_status() { :; }
+rotate_logfile() { :; }
+run_sequence() { :; }
+safe_fs_op() { :; }
+safe_sudo_fs_op() { :; }
+secs2time() { :; }
+separator() { :; }
+sh_countdown() { :; }
+show_config() { :; }
+show_result() { :; }
+smart_wrap_n() { :; }
+ssh_wrapper() { :; }
+status_color() { :; }
+strip_ansi() { :; }
+summarize_header() { :; }
+swr() { :; }
+termheight() { :; }
+terminal_mouse_off() { :; }
+termwidth() { :; }
+test_colors() { :; }
+test_terminal() { :; }
+timestamp() { :; }
+toc() { :; }
+u_box_msg() { :; }
+u_echo() { :; }
+unlock_luks_devices() { :; }
+utf8_string_width() { :; }
+validate_dir() { :; }
+validate_file() { :; }
+validate_logfile() { :; }
+validate_root_file() { :; }
+vercomp() { :; }
+vt_init() { :; }
+wipe_device() { :; }
+yn_prompt() { :; }
+yns_prompt() { :; }
+# ---[ header: script_header_joetoo_uiassets ]------------------------------------
+# ---[ header: script_header_joetoo_unicode ]-------------------------------------
+# ---[ header: script_header_joetoo_registries ]----------------------------------
+# ---[ header: script_header_joetoo_ssh ]-----------------------------------------
+load_key() { :; }
+start_ssh_agent() { :; }
+stop_ssh_agent() { :; }
+toc() { :; }
+unload_key() { :; }
+# ---[ header: script_header_joetoo_compat ]--------------------------------------
+E_message() { :; }
+E_message_n() { :; }
+W_message() { :; }
+alert_msg() { :; }
+crit_msg() { :; }
+dE_message() { :; }
+dE_message_n() { :; }
+d_echo() { :; }
+d_echo_n() { :; }
+d_handle_result() { :; }
+d_log_E_message() { :; }
+d_log_E_message_n() { :; }
+d_log_echo() { :; }
+d_log_echo_e() { :; }
+d_log_echo_e_n() { :; }
+d_log_echo_n() { :; }
+d_log_handle_result() { :; }
+d_log_message() { :; }
+d_log_message_n() { :; }
+d_log_right_status() { :; }
+d_log_separator() { :; }
+d_message() { :; }
+d_message_n() { :; }
+d_right_status() { :; }
+de_echo() { :; }
+de_echo_n() { :; }
+debug_do() { :; }
+debug_echo_e_msg_n() { :; }
+debug_echo_msg() { :; }
+debug_echo_msg_n() { :; }
+debug_handle_result() { :; }
+debug_msg() { :; }
+debug_msg_n() { :; }
+debug_right_status() { :; }
+echo_e_msg() { :; }
+echo_e_msg_n() { :; }
+echo_msg() { :; }
+echo_msg_n() { :; }
+echo_n_long() { :; }
+emerg_msg() { :; }
+error_msg() { :; }
+info_echo_e_msg_n() { :; }
+info_echo_msg() { :; }
+info_echo_msg_n() { :; }
+info_handle_result() { :; }
+info_msg() { :; }
+info_msg_n() { :; }
+info_right_status() { :; }
+isnumber() { :; }
+legacy_wrapper_dispatch() { :; }
+log_E_message() { :; }
+log_E_message_n() { :; }
+log_echo() { :; }
+log_echo_e() { :; }
+log_echo_e_n() { :; }
+log_echo_n() { :; }
+log_handle_result() { :; }
+log_message() { :; }
+log_message_n() { :; }
+log_right_status() { :; }
+log_separator() { :; }
+log_show_config() { :; }
+message() { :; }
+message_n() { :; }
+new_prompt() { :; }
+non_stty_right_status() { :; }
+notice_echo_msg() { :; }
+notice_msg() { :; }
+notice_msg_n() { :; }
+prompt() { :; }
+warn_msg() { :; }
+# ---[ header: script_header_joetoo_extended ]------------------------------------
+RGB_BG() { :; }
+RGB_FG() { :; }
+bs() { :; }
+bs_2() { :; }
+extract_distccd_settings() { :; }
+isfloat() { :; }
+isfloat_regex() { :; }
+isnumeric() { :; }
+list_unused_disks() { :; }
+map() { :; }
+progress() { :; }
+run_array() { :; }
+validate_ipv4_subnet() { :; }
+validate_ipv6_subnet() { :; }
+validate_subnet() { :; }
+
+# Consumer-filtered variable definitions (generated; do not edit)
+#!/bin/bash
+# Copyright 2014-2026 Joseph Brendler
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# script_header_joetoo.stub - ShellCheck look-ahead definition layer
+# *** Generated automatically by make_shellcheck_stubs.sh (Do not edit) ***
+# SC2034: Variable appears to be unused
+#   (disable when exporting, using externally, or dynamically referencing via namerefs (declare -n) or eval,
+#    which ShellCheck cannot always track.)
+# SC2120: Function references arguments, but the caller does not pass any
+#   (disable when arguments are optional, or if the function relies on default fallback values)
+# SC2329: This function is never invoked
+#   (disable when context is not checked)
+# shellcheck disable=SC2034,SC2120,SC2329
+
+# Define a function in which to make all the assignments, so that when
+# ShellCheck parses the stub header, they get only global scope registration as
+# recognized tokens that exist in an inactive function.
+# ShellCheck's parser still skims the function body and notes:
+# "The token bin_warning exists as a global symbol in this include tree."
+# This fulfills the requirement for Global Scope Registration and completely silences SC2154.
+# However, because the code path is wrapped inside a function that is never invoked,
+# ShellCheck's Extended Data-Flow Analysis engine flags the block as an inactive branch.
+# It completely skips building the deep, recursive timeline tracking trees for those variables.
+# Otherwise variables declared at script root shell level DO get tracked for recursion
+
+shellcheck_protection_function() {
+    # ---[ Pseudo-Booleans & Global Gating ]------------------------------------
+    TRUE=0
+    FALSE=""
+    logFile=""
+    verbosity=5
+    DEBUG=""
+    INTERACTIVE=""
+    PN=""
+    BUILD=""
+    user=""
+    varlist=""
+    answer=""
+    response=""
+
+    # ---[ header: script_header_joetoo ]---------------------------------------------
+    BBon=""
+    BCon=""
+    BGon=""
+    BMon=""
+    BRon=""
+    BUILD=""
+    BWon=""
+    BYon=""
+    Boff=""
+    Con=""
+    DEBUG=""
+    FALSE=""
+    IFS=""
+    N=""
+    NUL=""
+    PN=""
+    TERM=""
+    TRUE=""
+    VERBOSE=""
+    answer=""
+    bin=""
+    config_dir=""
+    debug=""
+    dev=""
+    err=""
+    info=""
+    logFile=""
+    msg=""
+    name=""
+    notice=""
+    oct=""
+    out=""
+    pid=""
+    prefix=""
+    user=""
+    varlist=""
+    verbosity=""
+    warn=""
+    # ---[ header: script_header_joetoo_uiassets ]------------------------------------
+    DEL=""
+    US=""
+    # ---[ header: script_header_joetoo_unicode ]-------------------------------------
+    cat=""
+    chain=""
+    collision=""
+    digits=""
+    information=""
+    key=""
+    lock=""
+    mask=""
+    network=""
+    package=""
+    repeat=""
+    warning=""
+    # ---[ header: script_header_joetoo_registries ]----------------------------------
+    # ---[ header: script_header_joetoo_ssh ]-----------------------------------------
+    # ---[ header: script_header_joetoo_compat ]--------------------------------------
+    # ---[ header: script_header_joetoo_extended ]------------------------------------
+    IFS=""
+    next=""
+    result=""
+    target=""
+    token=""
+
+}

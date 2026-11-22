@@ -87,6 +87,8 @@ compatibility help form; use `-h` with ordinary short-option parsing.
 | `-o [-f FILE]` | Preflight the whole configured plan, confirm, then serially launch, register, place and finalize each desktop cohort. |
 | `-L DESKTOP PROGRAM MODE TARGET [over]` | One new managed window; omitted layer is `over`; explicit `over` works. `panel` and `under` are rejected. TARGET must still be supplied, including `""` for Dolphin home. There is no SLOT or geometry operand. |
 | `-l` | Read-only fixed-column managed inventory, including retained missing/uncertain records and full UUIDs. No executable plan is sourced. |
+| `-s` | Read-only `RegistryStatus` snapshot: counts, synchronization, Busy/uncertainty and capabilities. No remote-session health claim or plan sourcing. |
+| `-i MANAGED_ID` | Read-only `GetManaged` detail for exactly one canonical managed ID. Last-known observation is not current authenticated-window proof. UNKNOWN is distinct from broker unavailability. |
 | `-d MANAGED_ID` | Confirm graceful close of one positively verified window; retain its record, placement history and original reservation. Takes a managed ID, not raw UUID. |
 | `-x` | Confirm a fixed registered-set progressive sweep: retire positively absent records and verified graceful closes; retain failed/unresolved entries. This closes applications and releases verified reservations. |
 | `-S [-f FILE]` | Save the complete eligible managed arrangement as a new private timestamped snapshot. Current config controls history depth; FILE does not select windows. No partial selection. |
@@ -99,8 +101,9 @@ compatibility help form; use `-h` with ordinary short-option parsing.
 | `test-launch CLASS D X Y W H -- PROGRAM [ARG ...]` | Development-only launch/placement probe. Not the production recipe interface; it does not establish an ordinary managed registration. It starts a process. |
 | `test-multi-launch` | Development-only four-local-Konsole managed test. It opens windows; do not treat it as an innocuous status command. No operands. |
 
-`-s` and `-i` are recognized but **not integrated** and return failure. `-a`,
-`-D` and other unimplemented options are not supported. There is no automatic
+`-s` and `-i` use the existing read-only broker APIs; neither starts a
+broker, sources a launch plan, selects a window or changes managed state.
+`-a`, `-D` and other unimplemented options are not supported. There is no automatic
 save before closing, durable arbitrary geometry recovery, continuous layout
 repair or concurrent remote launch queue.
 

@@ -5,9 +5,7 @@
 # joetoo-kwin - early KWin bridge client (Step 1.2b manual-resident stage)
 # Active-window movement and one-window launch placement only.
 
-# shellcheck source=/usr/sbin/script_header_joetoo.shellcheck_var_stub
-# shellcheck source=/usr/sbin/script_header_joetoo.shellcheck_func_stub
-# shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/joetoo-kwin_shellcheck_stub
+# shellcheck source=./script_header_joetoo.shellcheck_filtered_stub
 source /usr/sbin/script_header_joetoo
 
 PN=${0##*/}
@@ -48,6 +46,8 @@ usage() {
     j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -L DESKTOP PROGRAM MODE TARGET [over] (one managed window; omitted layer is over)"
     j_msg "-${notice}" -p "       -L panel/under are not implemented yet; existing windows are never rearranged"
     j_msg "-${notice}" -p "       ${PN} [-v|-q ...] -l (read-only managed inventory, including missing reservations)"
+    j_msg "-${notice}" -p "       ${PN} [-v|-q ...] -s (read-only broker registry status)"
+    j_msg "-${notice}" -p "       ${PN} [-v|-q ...] -i MANAGED_ID (read-only details of one managed record)"
     j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -d MANAGED_ID (confirmed graceful close; record/slot retained)"
     j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -x (confirmed progressive clean sweep; verified registrations/slots retired)"
     j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -S (save timestamped managed recipes/policy; not manual geometry)"
@@ -89,6 +89,9 @@ parse_cmdline() {
         validate_single_operands "$@" || return $?
     elif [[ $cli_operation == -d ]]; then
         [[ $# == 1 && $1 =~ ^win-[0-9]{3,}$ ]] || { bad_args '-d requires one MANAGED_ID such as win-001'; return 2; }
+    elif [[ $cli_operation == -i ]]; then
+        [[ $# == 1 && $1 =~ ^win-[0-9]{3,}$ && ${#1} -le 128 && $1 == *[1-9]* ]] || {
+            bad_args '-i requires one canonical MANAGED_ID such as win-001'; return 2; }
     elif [[ $cli_operation != -m && $# != 0 ]]; then
         bad_args 'unexpected operands'; return 2
     fi
@@ -713,6 +716,39 @@ else:
 PY_LIST_MANAGED
 }
 
+# The management queries are snapshots, never ownership or remote-health proof.
+# Validate the complete allowlisted broker reply before emitting any output.
+# Bash owns D-Bus; a separate libexec Python module parses fd 3 and prints safe fields.
+readonly_managed_query() {
+    local _rq_kind=$1 _rq_id=${2:-} _rq_method _rq_payload _rq_dir _rq_helper
+    case $_rq_kind in
+        status) _rq_method=RegistryStatus ;;
+        info) _rq_method=GetManaged ;;
+        *) return 2 ;;
+    esac
+    if ! command -v qdbus6 >/dev/null || ! command -v python3 >/dev/null; then
+        j_msg "-${err}" -p 'Read-only management queries require qdbus6 and python3'; return 2
+    fi
+    _rq_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 2
+    _rq_helper=$_rq_dir/libexec/joetoo_kwin_readonly.py
+    # Step 1.9 will consolidate packaged helper lookup for other CLI commands.
+    [[ -f $_rq_helper ]] || _rq_helper=/usr/libexec/joetoo-kwin/joetoo_kwin_readonly.py
+    if [[ ! -f $_rq_helper ]]; then
+        j_msg "-${err}" -p 'Read-only query helper unavailable: joetoo_kwin_readonly.py'; return 2
+    fi
+    if [[ $_rq_kind == info ]]; then
+        _rq_payload=$(qdbus6 "$bus" "$path" "$iface.$_rq_method" "$_rq_id" 2>/dev/null) || {
+            j_msg "-${err}" -p 'Managed window information unavailable: broker GetManaged failed'; return 2; }
+    else
+        _rq_payload=$(qdbus6 "$bus" "$path" "$iface.$_rq_method" 2>/dev/null) || {
+            j_msg "-${err}" -p 'Broker status unavailable: RegistryStatus failed'; return 2; }
+    fi
+    if (( ${#_rq_payload} > 65536 )); then
+        j_msg "-${err}" -p 'Read-only broker response exceeds size limit'; return 2
+    fi
+    python3 "$_rq_helper" "$_rq_kind" "$_rq_id" 3<<< "$_rq_payload"
+}
+
 #-----[ main script ]----------------------------------------------------------------------------------
 
 # The frontend owns one D-Bus connection through preview/confirmation. It never
@@ -807,10 +843,13 @@ save_managed_snapshot() {
     _ss_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
     # Retention is current operator configuration, independent of launch intent
     # and of which authenticated managed windows belong to the complete save.
+    # Candidate helper is colocated under libexec; no installed-file changes.
+    # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-plan-functions
     source "$_ss_dir/libexec/joetoo-kwin-plan-functions" || return 1
     plan_defaults
     prepare_config_sources optional || return $?
     for _ss_layer in "${config_sources[@]}"; do
+        # shellcheck source=/dev/null
         source "$_ss_layer" || return 2
     done
     apply_cli_verbosity || return $?
@@ -841,6 +880,8 @@ restore_managed_snapshot() {
     config=$_rs_file; CONFIG_SELECTED=$TRUE
     # Same configured launcher: lock, complete preflight, confirmation, new
     # children/identities and one shared initial-layout cohort per desktop.
+    # Candidate helper is colocated under libexec; no installed-file changes.
+    # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-launch-functions
     source "$_rs_dir/libexec/joetoo-kwin-launch-functions" || { rm -f -- "$_rs_file"; trap - EXIT INT TERM HUP; return 1; }
     if open_plan; then _rs_rc=0; else _rs_rc=$?; fi
     rm -f -- "$_rs_file"
@@ -885,16 +926,14 @@ case ${1:-} in
         close_managed_windows "${1}" "${2:-}" ;;
     -c) action="check";   # validate configuration
         check_plan ;;
-    -s) action="status";   # status of broker
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
+    -s) action="status";   # read-only broker snapshot
+        readonly_managed_query status ;;
     -S) action="save";   # save current managed window configuration
         save_managed_snapshot ;;
     -r) restore_managed_snapshot ;;
     -l) action="list";   # list managed windows
         list_managed_windows ;;
-    -i) action="info";   # info on one window
-        j_msg "-${err}" -p "${PN}: ${1} (${action}) not yet integrated";
-        exit 2 ;;
+    -i) action="info";   # read-only managed record, no selection/adoption
+        readonly_managed_query "$action" "${2}" ;;
     *) bad_args 'unrecognized operation'; exit 2 ;;
 esac

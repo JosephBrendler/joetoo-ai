@@ -29,8 +29,8 @@ The **new** Step 1.8 is not a reopening or re-acceptance of either step.
   [§11](../ARCHITECTURE.md#11-numbered-implementation-and-review-gates),
   and [§12](../ARCHITECTURE.md#12-version-2-considerations).
 - **Task scope and tests:** [Step 1.8 README](README.md); the
-  [maintainer-placed outline](joetoo-kwin-new-step18-branch-and-acceptance-outline.md)
-  provides the initial work order. Check its actual basename locally.
+  [maintainer-placed outline](step18-branch-outline.md)
+  provides the initial work order.
 - **Accepted predecessor evidence:** [Step 1.5 archive](../archive/task_step1.5/README.md),
   [Step 1.6 closure](../archive/task_step1.6/README.md), and
   [Step 1.7 closure](../archive/task_step1.7/README.md) are completed history,

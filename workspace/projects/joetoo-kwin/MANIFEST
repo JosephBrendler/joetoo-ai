@@ -40,6 +40,7 @@ libexec|libexec/joetoo-kwin-exposure.py
 libexec|libexec/joetoo-kwind
 libexec|libexec/joetoo_kwin_launch_resources.py
 libexec|libexec/joetoo_kwin_registry.py
+libexec|libexec/joetoo_kwin_readonly.py
 libexec|libexec/joetoo_kwin_managed_close.py
 libexec|libexec/joetoo_kwin_recovery.py
 libexec|libexec/joetoo_kwin_persistence.py

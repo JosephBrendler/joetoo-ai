@@ -18,8 +18,8 @@ Step 1.7 checkpoint/recovery and `-S`/`-r` is accepted
 This task must preserve all of those decisions and their evidence.
 The [active HANDOFF](HANDOFF.md) owns task dispatch and authorization;
 [ARCHITECTURE §9/§11/§12](../ARCHITECTURE.md) owns product requirements.
-The [initial planning outline](joetoo-kwin-new-step18-branch-and-acceptance-outline.md)
-is supplemental; confirm its basename if locally renamed.
+The [initial planning outline](step18-branch-outline.md)
+is supplemental to this task scope.
 
 ## Objective and smallest useful change
 
