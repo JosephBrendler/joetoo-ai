@@ -1,0 +1,182 @@
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -l
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-013     1        1     present   succeeded  3822d298-98bb-4376-b4c5-a6a848b7db10
+win-015     1        2     present   succeeded  3845b99e-4bd0-487a-b75b-f56be437b3f5
+win-010     2        1     present   succeeded  1e9aeb2f-ea2b-4685-8d1b-2fe995dc4876
+win-007     3        1     missing   succeeded  db08cbb4-b3e1-48f2-adf7-ba4a17509128
+win-008     3        2     present   succeeded  3bbbc9d0-ad11-4b60-96ae-364f9c35abe0
+win-009     3        3     present   succeeded  612d4bba-ac04-451d-9fc3-3179faf856a5
+win-012     3        4     present   succeeded  e727c860-d65b-4dd3-a686-7d7cedf959cf
+win-014     3        5     present   succeeded  267c576b-1782-4a29-be76-0b518c4e06af
+win-016     3        6     present   succeeded  947fe577-4f75-4291-8871-7e0e8dfbb55b
+win-011     5        1     present   succeeded  f4298b6c-731e-45fe-a98a-be45a29a97ce
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -i win-016
+Managed window information (broker record; not remote connection health)
+MANAGED_ID: win-016
+WINDOW_UUID: 947fe577-4f75-4291-8871-7e0e8dfbb55b
+DESKTOP: 3
+SLOT: 6
+PRESENCE: present
+PLACEMENT: succeeded
+OBSERVATION: last-known (not independently verified live)
+PID: 3702089
+RESOURCE_CLASS: org.kde.konsole
+LAST_KNOWN_FRAME: 96 32 1804 972
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 3 sdl-freerdp rdp joe@opi6plus01 over
+ ✨ Validating configured launch intent ...
+Invalid RDP target/settings (redacted)
+ 💥 joetoo-kwin: -L: invalid TARGET (redacted); expected rdp://USER@HOST[:PORT], no password or switches
+ ✨ Validating configured launch intent result: (failed)                                       [ ❌ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 3 sdl-freerdp rdp rdp://joe@opi6plus01 over
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: (completed)                                    [ ✅ ]
+ ⚠ Unmanaged window may obscure desktop [3] slot [7]
+---[ joetoo-kwin-1.0.19 (configuration) ]-------------------------------------------------------------
+ * PN .............: [ joetoo-kwin ]
+ * BUILD ..........: [ 1.0.19 ]
+ * config .........: [ /etc/joetoo-kwin/joetoo-kwin.conf ]
+ * screen_width ...: [ 1920 ]
+ * screen_height ..: [ 1080 ]
+ ✨ LAUNCH PLAN: [1] windows; confirmation required
+ ✨ Execution desktop groups: [3]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1920x1080] (not autodetected); terminal width budget: [87%]
+ * Desktop  Slot  Program      Mode  Target                Layer  X   Y   Width  Height
+ * 3        7     sdl-freerdp  rdp   rdp://joe@opi6plus01  over   96  32  1804   972
+ ✨ KWin desktops: current [18], required [3]; existing desktop capacity is adequate
+
+ ✨ Do you want to continue? [Y/n]: y
+ ✨ Affirmative response from user; continuing
+ ⚠ Unmanaged window may obscure desktop [3] slot [7]
+ ✨ [20261122-11:51:05] Launching desktop [3] slot [7]
+ ✨ [20261122-11:51:05] Starting owned SDL RDP viewer; remote authentication remains unverified
+ 💥 Window failed; layout is incomplete
+ 💥 Remote launch unresolved or registered viewer retained: completed [0], failed [1], skipped [0]; current cohort incomplete
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 sdl-freerdp rdp rdp://joe@opi6plus01 over
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: (completed)                                    [ ✅ ]
+ ⚠ Unmanaged window may obscure desktop [5] slot [2]
+---[ joetoo-kwin-1.0.19 (configuration) ]-------------------------------------------------------------
+ * PN .............: [ joetoo-kwin ]
+ * BUILD ..........: [ 1.0.19 ]
+ * config .........: [ /etc/joetoo-kwin/joetoo-kwin.conf ]
+ * screen_width ...: [ 1920 ]
+ * screen_height ..: [ 1080 ]
+ ✨ LAUNCH PLAN: [1] windows; confirmation required
+ ✨ Execution desktop groups: [5]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1920x1080] (not autodetected); terminal width budget: [87%]
+ * Desktop  Slot  Program      Mode  Target                Layer  X   Y   Width  Height
+ * 5        2     sdl-freerdp  rdp   rdp://joe@opi6plus01  over   96  32  1804   972
+ ✨ KWin desktops: current [18], required [5]; existing desktop capacity is adequate
+
+ ✨ Do you want to continue? [Y/n]: y
+ ✨ Affirmative response from user; continuing
+ ⚠ Unmanaged window may obscure desktop [5] slot [2]
+ ✨ [20261122-11:51:42] Launching desktop [5] slot [2]
+ ✨ [20261122-11:51:42] Starting owned SDL RDP viewer; remote authentication remains unverified
+ ✨ Initializing desktop [5] stack/focus; geometry remains separately verified
+ ✨ Desktop [5] initial stacking/focus result: (completed)                                     [ ✅ ]
+ ✨ Entries: completed [1], failed [0], skipped [0]; incomplete desktop cohorts [0]
+ ✨ Configured layout: [1/1] windows completed ... (completed)                                 [ ✅ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 sdl-freerdp vnc joe@x401.brendler under
+ ✨ Validating configured launch intent ...
+ 💥 joetoo-kwin: sdl-freerdp requires rdp mode
+ ✨ Validating configured launch intent result: (failed)                                       [ ❌ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 tigervnc vnc joe@x401.brendler under
+ ✨ Validating configured launch intent ...
+ 💥 joetoo-kwin: unsupported mode (MODE redacted); expected local, ssh, swr, via-ssh, direct, sftp or rdp for the supported program
+ ✨ Validating configured launch intent result: (failed)                                       [ ❌ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin --help
+ ✨ Configured recipes include dolphin|sftp|sftp://[USER@]HOST[:PORT][/ABSOLUTE/PATH][|LAYER]; inspect authentication/listing in Dolphin
+ ✨ SDL RDP recipe: sdl-freerdp|rdp|rdp://USER@HOST[:PORT][|LAYER]; local placement is independent of remote login
+ ✨ TigerVNC recipe: vncviewer|ssh|ssh://[USER@]HOST[:SSH_PORT]/display/N (or /port/P); both forwarded endpoints use loopback
+ ✨ Usage: joetoo-kwin [-v|-q ...] -c [-f CONFIG]  (dry run; trusted Bash config)
+ ✨        CONFIG: XDG user configuration, then /etc/joetoo-kwin/joetoo-kwin.conf; set screen_width/screen_height explicitly
+ ✨        User file: ${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf (relative XDG values ignored)
+ ✨ Usage: joetoo-kwin [-f CONFIG] -m [DESKTOP] l|r
+ ✨        joetoo-kwin -m DESKTOP | DESKTOP X Y | [DESKTOP] X Y WIDTH HEIGHT
+ ✨        joetoo-kwin move DESKTOP X Y WIDTH HEIGHT  (compatibility)
+ ✨        joetoo-kwin test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]
+ ✨        joetoo-kwin test-multi-launch  (TEST ONLY: register 4 local Konsoles)
+ ✨        joetoo-kwin -h
+ ✨        joetoo-kwin -o [-f CONFIG] (confirm and initialize configured desktop groups)
+ ✨        joetoo-kwin [-f CONFIG] -L DESKTOP PROGRAM MODE TARGET [over|under] (one managed window; omitted layer is over)
+ ✨        -L panel is not implemented; under is one-shot, not persistent keep-below
+ ✨        joetoo-kwin [-v|-q ...] -l (read-only managed inventory, including missing reservations)
+ ✨        joetoo-kwin [-v|-q ...] -s (read-only broker registry status)
+ ✨        joetoo-kwin [-v|-q ...] -i MANAGED_ID (read-only details of one managed record)
+ ✨        joetoo-kwin [-f CONFIG] -d MANAGED_ID (confirmed graceful close; record/slot retained)
+ ✨        joetoo-kwin [-f CONFIG] -x (confirmed progressive clean sweep; verified registrations/slots retired)
+ ✨        joetoo-kwin [-f CONFIG] -S (save timestamped managed recipes/policy; not manual geometry)
+ ✨        joetoo-kwin -r (validate, confirm and launch new instances from last-good recipes)
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 vncviewer vnc joe@x401.brendler under
+ ✨ Validating configured launch intent ...
+ 💥 joetoo-kwin: unsupported mode (MODE redacted); expected local, ssh, swr, via-ssh, direct, sftp or rdp for the supported program
+ ✨ Validating configured launch intent result: (failed)                                       [ ❌ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 vncviewer ssh joe@x401.brendler under
+ ✨ Validating configured launch intent ...
+Invalid VNC target/settings (entry redacted)
+ 💥 joetoo-kwin: -L: invalid TARGET (redacted); expected ssh://[USER@]HOST[:PORT]/display/N or /port/P
+ ✨ Validating configured launch intent result: (failed)                                       [ ❌ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 vncviewer ssh joe@x401.brendler/display/2 under
+ ✨ Validating configured launch intent ...
+Invalid VNC target/settings (entry redacted)
+ 💥 joetoo-kwin: -L: invalid TARGET (redacted); expected ssh://[USER@]HOST[:PORT]/display/N or /port/P
+ ✨ Validating configured launch intent result: (failed)                                       [ ❌ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 vncviewer ssh ssj://joe@x401.brendler/display/2 under
+ ✨ Validating configured launch intent ...
+Invalid VNC target/settings (entry redacted)
+ 💥 joetoo-kwin: -L: invalid TARGET (redacted); expected ssh://[USER@]HOST[:PORT]/display/N or /port/P
+ ✨ Validating configured launch intent result: (failed)                                       [ ❌ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ nano /etc/joetoo-kwin/joetoo-kwin.conf
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 vncviewer via-ssh x401 under
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: (completed)                                    [ ✅ ]
+ 💥 joetoo-kwin: invalid MODE for vncviewer; expected ssh
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 vncviewer ssh x401 under ✨ Validating configured launch intent ...
+Invalid VNC target/settings (entry redacted)
+ 💥 joetoo-kwin: -L: invalid TARGET (redacted); expected ssh://[USER@]HOST[:PORT]/display/N or /port/P
+ ✨ Validating configured launch intent result: (failed)                                       [ ❌ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 vncviewer ssh ssh://x401 under
+ ✨ Validating configured launch intent ...
+Invalid VNC target/settings (entry redacted)
+ 💥 joetoo-kwin: -L: invalid TARGET (redacted); expected ssh://[USER@]HOST[:PORT]/display/N or /port/P
+ ✨ Validating configured launch intent result: (failed)                                       [ ❌ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 vncviewer ssh ssh://joe@x401 under
+ ✨ Validating configured launch intent ...
+Invalid VNC target/settings (entry redacted)
+ 💥 joetoo-kwin: -L: invalid TARGET (redacted); expected ssh://[USER@]HOST[:PORT]/display/N or /port/P
+ ✨ Validating configured launch intent result: (failed)                                       [ ❌ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./joetoo-kwin -L 5 vncviewer ssh ssh://joe@x401/display/2 under
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: (completed)                                    [ ✅ ]
+ ⚠ Unmanaged window may obscure desktop [5] slot [3]
+---[ joetoo-kwin-1.0.19 (configuration) ]-------------------------------------------------------------
+ * PN .............: [ joetoo-kwin ]
+ * BUILD ..........: [ 1.0.19 ]
+ * config .........: [ /etc/joetoo-kwin/joetoo-kwin.conf ]
+ * screen_width ...: [ 1920 ]
+ * screen_height ..: [ 1080 ]
+ ✨ LAUNCH PLAN: [1] windows; confirmation required
+ ✨ Execution desktop groups: [5]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1920x1080] (not autodetected); terminal width budget: [87%]
+ * Desktop  Slot  Program    Mode  Target                    Layer  X   Y   Width  Height
+ * 5        3     vncviewer  ssh   ssh://joe@x401/display/2  under  96  32  1804   972
+ ✨ KWin desktops: current [18], required [5]; existing desktop capacity is adequate
+
+ ✨ Do you want to continue? [Y/n]: y
+ ✨ Affirmative response from user; continuing
+ ⚠ Unmanaged window may obscure desktop [5] slot [3]
+ ✨ [20261122-11:59:28] Launching desktop [5] slot [3]
+ ✨ [20261122-11:59:28] Starting TigerVNC over dedicated SSH; desktop readiness may wait for VNC authentication
+ ✨ TigerVNC managed desktop launch result: (completed)                                        [ ✅ ]
+ ✨ Initializing desktop [5] stack/focus; geometry remains separately verified
+ ✨ Desktop [5] initial stacking/focus result: (completed)                                     [ ✅ ]
+ ✨ Entries: completed [1], failed [0], skipped [0]; incomplete desktop cohorts [0]
+ ✨ Configured layout: [1/1] windows completed ... (completed)                                 [ ✅ ]
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $

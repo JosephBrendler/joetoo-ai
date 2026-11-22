@@ -1,0 +1,194 @@
+joe@q552u01 ~/joetoo-ai $ python3 ~/Downloads/step18_under_regression_repair_20261122.py \
+    --repo . \
+    --output ~/Downloads/step18_under_regression_repair_20261122.patch
+Regression repair patch: /home/joe/Downloads/step18_under_regression_repair_20261122.patch (4777 bytes; checkout unchanged)
+joe@q552u01 ~/joetoo-ai $ git apply --check \
+    ~/Downloads/step18_under_regression_repair_20261122.patch
+joe@q552u01 ~/joetoo-ai $ git apply \
+    ~/Downloads/step18_under_regression_repair_20261122.patch
+joe@q552u01 ~/joetoo-ai $ git diff --check
+joe@q552u01 ~/joetoo-ai $ cd ~/joetoo-ai/workspace/projects/joetoo-kwin
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ python3 -m unittest discover \
+    -s tests -p 'test_config_presentation.py' -v
+test_boolean_values_and_formatting_prefixes (test_config_presentation.ConfigPresentationTests.test_boolean_values_and_formatting_prefixes) ... ok
+test_disabled_groups_do_not_invoke_show_config (test_config_presentation.ConfigPresentationTests.test_disabled_groups_do_not_invoke_show_config) ... ok
+test_each_severity_adds_exactly_its_variables_once_in_order (test_config_presentation.ConfigPresentationTests.test_each_severity_adds_exactly_its_variables_once_in_order) ... ok
+test_render_failure_is_fatal_at_every_enabled_severity (test_config_presentation.ConfigPresentationTests.test_render_failure_is_fatal_at_every_enabled_severity) ... ok
+test_actual_header_false_pseudo_booleans (test_config_presentation.InstalledConfigPresentationTests.test_actual_header_false_pseudo_booleans) ... ok
+test_actual_header_severity_path_and_boolean_rendering (test_config_presentation.InstalledConfigPresentationTests.test_actual_header_severity_path_and_boolean_rendering) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 4.859s
+
+OK
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ python3 -m unittest discover \
+    -s tests -p 'test_initial_layout_broker.py' -v
+test_disappearance_after_completion_guard_is_failed_evidence (test_initial_layout_broker.InitialLayoutBrokerTests.test_disappearance_after_completion_guard_is_failed_evidence) ... ok
+test_disappearance_before_completion_is_bounded (test_initial_layout_broker.InitialLayoutBrokerTests.test_disappearance_before_completion_is_bounded) ... ok
+test_disappearing_target_and_unverified_registration_reject (test_initial_layout_broker.InitialLayoutBrokerTests.test_disappearing_target_and_unverified_registration_reject) ... ok
+test_focus_bounds_are_validated_and_conveyed_without_changing_lease (test_initial_layout_broker.InitialLayoutBrokerTests.test_focus_bounds_are_validated_and_conveyed_without_changing_lease) ... ok
+test_focus_timeout_preserves_verified_stack_and_placement (test_initial_layout_broker.InitialLayoutBrokerTests.test_focus_timeout_preserves_verified_stack_and_placement) ... ok
+test_malformed_completion_cannot_finish_a_request (test_initial_layout_broker.InitialLayoutBrokerTests.test_malformed_completion_cannot_finish_a_request) ... ok
+test_mismatch_without_resident_error_has_actionable_focus_detail (test_initial_layout_broker.InitialLayoutBrokerTests.test_mismatch_without_resident_error_has_actionable_focus_detail) ... ok
+test_no_arbitrary_or_duplicate_identity (test_initial_layout_broker.InitialLayoutBrokerTests.test_no_arbitrary_or_duplicate_identity) ... ok
+test_owned_cohort_and_focus_preference (test_initial_layout_broker.InitialLayoutBrokerTests.test_owned_cohort_and_focus_preference) ... ok
+test_shared_busy_and_expiration (test_initial_layout_broker.InitialLayoutBrokerTests.test_shared_busy_and_expiration) ... ok
+test_single_lower_inactive_desktop_requires_no_activation (test_initial_layout_broker.InitialLayoutBrokerTests.test_single_lower_inactive_desktop_requires_no_activation) ... ok
+test_single_lower_rejects_false_stack_or_foreign_peer (test_initial_layout_broker.InitialLayoutBrokerTests.test_single_lower_rejects_false_stack_or_foreign_peer) ... ok
+test_single_lower_requires_capability_and_one_under_identity (test_initial_layout_broker.InitialLayoutBrokerTests.test_single_lower_requires_capability_and_one_under_identity) ... ok
+test_single_lower_verifies_excluded_protected_surface_and_partition (test_initial_layout_broker.InitialLayoutBrokerTests.test_single_lower_verifies_excluded_protected_surface_and_partition) ... ok
+test_single_raise_cannot_hide_existing_peer_geometry_changes (test_initial_layout_broker.InitialLayoutBrokerTests.test_single_raise_cannot_hide_existing_peer_geometry_changes) ... ok
+test_single_raise_requires_capability_and_one_owned_over_window (test_initial_layout_broker.InitialLayoutBrokerTests.test_single_raise_requires_capability_and_one_owned_over_window) ... ok
+test_singleton_cohort_order_alone_is_not_proof_of_raising (test_initial_layout_broker.InitialLayoutBrokerTests.test_singleton_cohort_order_alone_is_not_proof_of_raising) ... ok
+test_source_disappearance_and_stale_completion (test_initial_layout_broker.InitialLayoutBrokerTests.test_source_disappearance_and_stale_completion) ... ok
+test_stack_focus_geometry_independent_and_post_focus_mismatch_fails (test_initial_layout_broker.InitialLayoutBrokerTests.test_stack_focus_geometry_independent_and_post_focus_mismatch_fails) ... ok
+test_under_only_and_inactive_focus_are_not_claimed_as_activation (test_initial_layout_broker.InitialLayoutBrokerTests.test_under_only_and_inactive_focus_are_not_claimed_as_activation) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.258s
+
+OK
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ node --test tests/test_initial_layout.js
+✔ initial stack respects layers, last over, and targets only cohort UUIDs (6.314472ms)
+✔ last panel beats a final under; under-only and inactive groups do not activate (4.293682ms)
+✔ focus changes during claim and deleted cohort fail before stack mutation (1.962897ms)
+✔ ordinary floating windows remain compatible on displayed and inactive desktops (2.217068ms)
+✔ canonical broker UUIDs resolve braced uppercase Qt internalIds without adopting another window (1.643907ms)
+✔ exact UUID/property diagnostic without mutation: deleted (1.19188ms)
+✔ exact UUID/property diagnostic without mutation: fullscreen (1.018965ms)
+✔ exact UUID/property diagnostic without mutation: keep-above (1.241875ms)
+✔ exact UUID/property diagnostic without mutation: keep-below (1.1042ms)
+✔ exact UUID/property diagnostic without mutation: tile pointer (1.236922ms)
+✔ exact UUID/property diagnostic without mutation: vertical maximize (1.434264ms)
+✔ exact UUID/property diagnostic without mutation: horizontal maximize (0.970889ms)
+✔ exact UUID/property diagnostic without mutation: full maximize (0.960855ms)
+✔ exact UUID/property diagnostic without mutation: missing maximize property (0.924561ms)
+✔ exact UUID/property diagnostic without mutation: string zero is not a numeric enum (0.846573ms)
+✔ exact UUID/property diagnostic without mutation: null is not restore (0.844451ms)
+✔ missing stack UUID is never adopted from windowList (1.770176ms)
+✔ post-activation ordering is observed rather than inferred from raise return (1.042881ms)
+✔ expired, moved and preexisting special-mode targets fail before mutation (2.962654ms)
+✔ immediate success records one request and no temporary observers (1.254321ms)
+✔ delayed activation succeeds after one request, rechecks stack, and releases observers (1.944051ms)
+✔ nonconvergence times out, retains stack/geometry evidence, and does not reclaim focus (1.884803ms)
+✔ unchanged preexisting active UUID is allowed; newly competing activation interrupts (1.488067ms)
+✔ bounded observation interruption: desktop (1.306332ms)
+✔ bounded observation interruption: deleted (2.211157ms)
+✔ bounded observation interruption: removed (1.139052ms)
+✔ bounded observation interruption: special (1.069362ms)
+✔ bounded observation interruption: geometry (1.034801ms)
+✔ bounded observation interruption: source (1.01004ms)
+✔ bounded observation interruption: broker source (1.056375ms)
+✔ expiry and queued callbacks cannot renew lease or reactivate (1.087032ms)
+✔ focus success returns actual post-convergence order without repairing a mismatch (1.545405ms)
+✔ timer polling fallback works without activation signals (1.358703ms)
+✔ a new activation event for the preexisting window is distinct from unchanged polling (1.242079ms)
+✔ unavailable timer reports unsupported delay without repeatedly activating (0.985359ms)
+✔ effective observation timing and the remaining transaction lease both bound the wait (2.403486ms)
+✔ single under active window is identity-bound and restores peer order (2.853575ms)
+✔ single under inactive desktop uses peer raises, without activation (1.405721ms)
+✔ single lower ignores protected BelowLayer and preserves full stack evidence (1.380393ms)
+✔ inactive single lower never raises protected, minimized or hidden peers (3.155753ms)
+✔ a skipTaskbar visible normal peer still participates (1.751749ms)
+✔ single lower fails closed on unavailable layer evidence (1.107784ms)
+✔ single over raises only the owned UUID above earlier normal windows without moving peers (1.165578ms)
+✔ single raise reports failure when a prior normal window remains above it (1.06525ms)
+ℹ tests 44
+ℹ suites 0
+ℹ pass 44
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 180.646447
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $ ./tools/restart_joetoo-kwind notest
+---[ q552u01 restart_joetoo-kwind-20261122 ]----------------------------------------------------------
+---[ restart_joetoo-kwind-20261122 (configuration) ]--------------------------------------------------
+ * PN ...............: [ restart_joetoo-kwind ]
+ * BUILD ............: [ 20261122 ]
+ * user .............: [ joe ]
+ * project_dir ......: [ /home/joe/joetoo-ai/workspace/projects/joetoo-kwin ]
+ * bus ..............: [ org.joetoo.KWinBridge ]
+ * path .............: [ /org/joetoo/KWinBridge ]
+
+ ✨ PWD: [/home/joe/joetoo-ai/workspace/projects/joetoo-kwin]
+ ✨ Moving to [/home/joe/joetoo-ai/workspace/projects/joetoo-kwin]                             [ ✅ ]
+ ✨ Stopping joetoo-kwind service                                                              [ ✅ ]
+ ✨ Running ./tools/joetoo-kwind-install-poc --update
+    OpenRC user service: /home/joe/.config/rc/init.d/joetoo-kwind
+    Daemon executable:  /home/joe/.local/libexec/joetoo-kwind
+    Registry module:     /home/joe/.local/libexec/joetoo_kwin_registry.py
+    VNC identity module: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+    VNC target module:   /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+    VNC launch module:   /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+    SDL RDP module:      /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+    RDP target module:   /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+    Managed close:       /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+    Persistence module:  /home/joe/.local/libexec/joetoo_kwin_persistence.py
+    Recovery module:     /home/joe/.local/libexec/joetoo_kwin_recovery.py
+    Resident JavaScript: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+    Bash CLI:           /home/joe/.local/bin/joetoo-kwin
+    OpenRC user override: /home/joe/.config/rc/conf.d/joetoo-kwind
+    OpenRC user config:  /home/joe/.config/rc/rc.conf
+    Backup: /home/joe/.local/state/joetoo-kwin/archive/daemon/5c459b3b6667627a46a08cca643f6171e55311dea27f9b2d8d7491241eebadc5/joetoo-kwind
+    OpenRC allowlist already correct: /home/joe/.config/rc/rc.conf
+    Installed fourteen user-owned joetoo-kwind files. No service was started.
+    From a local Plasma Konsole, run:
+      rc-service -U joetoo-kwind start
+      rc-service -U joetoo-kwind status
+ ✨ Update done; result: (success!)                                                            [ ✅ ]
+ ✨ Unloading joetoo-bridge KWin script (true)                                                 [ ✅ ]
+ ✨ Starting joetoo-kwind service                                                              [ ✅ ]
+ ✨ Running ./tools/joetoo-kwind-install-poc --check
+    OpenRC user service: /home/joe/.config/rc/init.d/joetoo-kwind
+    Daemon executable:  /home/joe/.local/libexec/joetoo-kwind
+    Registry module:     /home/joe/.local/libexec/joetoo_kwin_registry.py
+    VNC identity module: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+    VNC target module:   /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+    VNC launch module:   /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+    SDL RDP module:      /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+    RDP target module:   /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+    Managed close:       /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+    Persistence module:  /home/joe/.local/libexec/joetoo_kwin_persistence.py
+    Recovery module:     /home/joe/.local/libexec/joetoo_kwin_recovery.py
+    Resident JavaScript: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+    Bash CLI:           /home/joe/.local/bin/joetoo-kwin
+    OpenRC user override: /home/joe/.config/rc/conf.d/joetoo-kwind
+    OpenRC user config:  /home/joe/.config/rc/rc.conf
+    Current: /home/joe/.config/rc/init.d/joetoo-kwind
+    Current: /home/joe/.local/libexec/joetoo-kwind
+    Current: /home/joe/.local/libexec/joetoo_kwin_registry.py
+    Current: /home/joe/.config/rc/conf.d/joetoo-kwind
+    Current: /home/joe/.local/share/joetoo-kwin/joetoo-kwin-resident.js
+    Current: /home/joe/.local/bin/joetoo-kwin
+    Current: /home/joe/.local/libexec/joetoo_kwin_vnc_identity.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_vnc_target.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_vnc_launch.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_rdp_launch.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_rdp_target.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_managed_close.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_persistence.py
+    Current: /home/joe/.local/libexec/joetoo_kwin_recovery.py
+    OpenRC allowlist correct: /home/joe/.config/rc/rc.conf
+ ✨ Checks done; result: (success!)                                                            [ ✅ ]
+---[ restart_joetoo-kwind-20261122 (available methods) ]----------------------------------------------
+ ✨ Running "dbus introspection" with: qdbus6 $bus $path
+Service 'org.joetoo.KWinBridge' does not exist.
+ ✨ dbus introspection done; result: (error!)                                                  [ ❌ ]
+ ✨ Returning to [/home/joe/joetoo-ai/workspace/projects/joetoo-kwin]                          [ ✅ ]
+
+ ✨ Make these abbreviation assignments to facilitate use of these methods
+bus="org.joetoo.KWinBridge";  path="/org/joetoo/KWinBridge"
+kbus="org.kde.KWin";  kpath="/org/kde/KWin"
+
+ ✨ Use these to list all interface/methods for each service
+qdbus6 $bus $path
+qdbus6 $kbus $kpath
+
+ ✨ Use these for more focused queries in the joetoo KWinBridge service
+qdbus6 $bus $path $bus.ListManaged
+qdbus6 $bus $path $bus.RegistryStatus
+
+qdbus6 $bus $path $bus.ListManaged | jq .
+qdbus6 $bus $path $bus.RegistryStatus | jq .
+joe@q552u01 ~/joetoo-ai/workspace/projects/joetoo-kwin $

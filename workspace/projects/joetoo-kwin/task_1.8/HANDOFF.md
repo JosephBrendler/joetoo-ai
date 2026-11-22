@@ -2,11 +2,15 @@
 
 <!-- Copyright 2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
-**Status (2026-11-22): ACTIVE; read-only `-s` and `-i` native-smoke-tested;
-first `-L under` candidate installed and smoke-tested on q552u01 Wayland:
-desktop 3 PASS, desktop 1 protected-layer verification false negative.
-Property-based participation follow-on is proposed, untested natively and
-not yet accepted.** `-L panel` remains excluded. Step 1.8 is not merged.
+**Status (2026-11-22): ACTIVE; implementation pushed at `73afa19`.**
+Read-only `-s`/`-i` have native Wayland and X11 smoke evidence. Corrected
+one-shot `-L under` now has successful q552u01 Wayland integration on the
+displayed target desktop (including the protected `xwaylandvideobridge` case)
+and on an inactive target desktop with **no desktop switch**. The maintainer
+also reports a successful VNC `under` and RDP `over` local launch. Focused
+post-repair suites passed; the post-repair *full* suite and slim2 native X11
+`-L under` compatibility remain pending. No Step 1.8 acceptance, PR merge,
+or `-L panel` support is claimed.
 
 **Historical boundary:** **All Steps 1.1–1.7 are accepted and closed.**
 Step 1.6 (`-d`/`-x`) was accepted and merged via
@@ -23,9 +27,11 @@ The **new** Step 1.8 is not a reopening or re-acceptance of either step.
   scope/documentation update). The task branch's actual merge-base is
   `24cd67f`; reconcile ancestry when preparing the Step 1.8 PR, not by an
   unreviewed rebase during native testing.
-- **Active branch:** `task/joetoo-kwin-step1.8-cli-completion`, pushed HEAD
-  **`f84a8ec`** (maintainer-pushed 2026-11-22 documentation/evidence
-  update). The `-L under` candidate is not committed or published.
+- **Active branch:** `task/joetoo-kwin-step1.8-cli-completion`, maintainer-
+  pushed HEAD **`73afa19`** (`joetoo-kwin -L ... under implementation`),
+  confirmed tracked to `origin/task/joetoo-kwin-step1.8-cli-completion`
+  on q552u01. This HANDOFF evidence update is a subsequent *proposed*
+  uncommitted documentation change until the maintainer applies/pushes it.
 - **Authoritative design:** [ARCHITECTURE §9](../ARCHITECTURE.md#9-cli-contract-accepted-behavior-and-proposed-step-18-completion),
   [§11](../ARCHITECTURE.md#11-numbered-implementation-and-review-gates),
   and [§12](../ARCHITECTURE.md#12-version-2-considerations).
@@ -33,8 +39,10 @@ The **new** Step 1.8 is not a reopening or re-acceptance of either step.
   [maintainer-placed outline](step18-branch-outline.md)
   provides the initial work order.
 - **Current native evidence:** [q552u01 read-only Wayland](step1.8-q552u01-readonly-wayland-evidence-2026-11-22.md),
-  [slim2 read-only X11](step1.8-slim2-readonly-x11-evidence-2026-11-22.md), and
-  [q552u01 V2/V3 lower feasibility, screenshots](step1.8-q552u01-one-shot-lower-feasibility-2026-11-22.md).
+  [slim2 read-only X11](step1.8-slim2-readonly-x11-evidence-2026-11-22.md),
+  [q552u01 V2/V3 lower feasibility and screenshots](step1.8-q552u01-one-shot-lower-feasibility-2026-11-22.md),
+  [first integrated native lower / protected-bridge failure](step1.8-q552u01-under-integrated-participation-2026-11-22.md),
+  and **[corrected Wayland native validation and test logs](step1.8-q552u01-under-wayland-native-validation-2026-11-22.md)**.
 - **Accepted predecessor evidence:** [Step 1.5 archive](../archive/task_step1.5/README.md),
   [Step 1.6 closure](../archive/task_step1.6/README.md), and
   [Step 1.7 closure](../archive/task_step1.7/README.md) are completed history,
@@ -68,26 +76,63 @@ works; direct `lowerWindow(window)` is not exposed. The V3 probe guards the
 current desktop and does not lower desktop-3 target from desktop 1, per the
 maintainer's report. Full results and screenshots are in linked evidence.
 
-**Latest native integration:** On q552u01 KWin 6.7.6 Wayland the maintainer
-applied the first candidate, passed focused headless suites (14 Python CLI,
-19 Python broker, 40 JavaScript resident), and installed/reloaded it using
-`tools/restart_joetoo-kwind notest`. `-L 3 konsole ssh nuthuvia under`
-registered `win-014` and completed. `-L 1 ... under` registered and placed
-`win-013` but reported incomplete stacking: KWin correctly left a 64x36
-`xwaylandvideobridge` protected surface below the newly lowered Konsole.
-[Integrated native results and follow-on policy](step1.8-q552u01-under-integrated-participation-2026-11-22.md).
+**Latest native integration / corrected participation policy:** The first
+q552u01 Wayland candidate passed `-L under` on desktop 3 but the desktop-1
+absolute-bottom check rejected a correctly lower-stacked Konsole above a
+64x36, invisible `xwaylandvideobridge` protected surface. The property-based
+NormalLayer participation follow-on, subsequent fixture/config/broker
+regression repairs, and tests were applied. Corrected `-L 1 konsole ssh
+yorsqui under` registered `win-015`, completed initial stacking/focus, and
+passed the overall launch. The bridge need not be restacked or made visible.
 
-**Next actor: maintainer**, to review and apply the follow-on participation
-patch, run focused and full regressions, then repeat `-L under` on desktops
-1 (protected lower-layer bridge) and 3 (ordinary peers), including an inactive
-third-desktop trial before Step 1.8 acceptance. The
-candidate's on-desktop path uses verified active-window lowering; its proposed
-inactive-desktop fallback raises eligible existing peers in their prior order,
-without desktop/focus switching, then verifies target bottommost and peer
-frames/order unchanged. That fallback is a *narrow proposed relaxation* of the
-earlier no-peer-restacking rule; it is not yet native-proven/accepted. A smaller
-slim2 X11 compatibility run can follow. No service restart is authorized by
-this HANDOFF alone.
+**Inactive-desktop native proof:** `-L 3 konsole ssh yorsqui under` registered
+`win-016` (UUID `947fe577-4f75-4291-8871-7e0e8dfbb55b`, desktop 3/slot 6),
+placed it and completed the initial stacking/focus transaction. **The
+maintainer explicitly confirmed the operation was initiated on desktop 1 and
+Plasma remained on desktop 1 throughout.** This supports the one-shot
+inactive-desktop peer-raising approach without a desktop switch. An
+independent active-window UUID trace was not supplied. The missing desktop
+3/slot 1 `win-007` reservation was not reused.
+
+**Viewer regression/native results:** With desktop 1 displayed throughout,
+`-L 5 sdl-freerdp rdp rdp://joe@opi6plus01 over` completed locally; an
+earlier RDP launch to desktop 3 failed before completing and is *unresolved*,
+not proven a stacking regression. `-L 5 vncviewer ssh
+ssh://joe@x401/display/2 under` completed its managed viewer launch and
+stacking transaction; `-i win-018` confirms the Vncviewer UUID and placement.
+Neither local success is proof of current remote authentication/health.
+[Full native evidence and raw console logs](step1.8-q552u01-under-wayland-native-validation-2026-11-22.md).
+
+**Regression evidence and outstanding gap:** The participation follow-on
+initially produced 3/1,094 Python and 29/169 JavaScript failures (stale
+configuration expectations, a test-harness recipe/KWin `layer` collision,
+and a broker protected-layer guard). After the repair, the maintainer reported
+`test_config_presentation.py` **6/6 PASS**,
+`test_initial_layout_broker.py` **20/20 PASS**, and
+`test_initial_layout.js` **44/44 PASS**; previously the single-recipe suite
+passed **14/14**. The **full** Python/JS suite has **not** been rerun after
+repair. A restart-time D-Bus introspection briefly reported no broker, but
+subsequent `rc-service` and `RegistryStatus` confirmed `recovery=ready`,
+observer synchronized, `single_lower_protocol=1`, and no Busy/uncertain
+flags. Raw `-s` output still omits the `single_lower` capability from its
+human summary (presentation-only gap).
+
+**Next actor and priority: maintainer — slim2 native X11 compatibility.**
+Synchronize `task/joetoo-kwin-step1.8-cli-completion` at `73afa19` on slim2;
+check current native-X11 KWin version/session, source/install coherence,
+ready broker and `single_lower_protocol=1`. With disposable new windows,
+validate an `-L under` launch on the displayed desktop and, if safe, one
+inactive-desktop `under` with no involuntary desktop/focus switch, correct
+UUID/slot/geometry and protected-peer behavior. Include a small `-L over`
+non-regression check; avoid a wholesale RDP/VNC repeat. Maintainer operates
+install, restart and native tests. Stop for an unsupported capability or
+failed verifier rather than weakening the policy.
+
+**After slim2:** run full post-repair Python and JavaScript suites, reconcile
+all evidence (including the isolated desktop-3 RDP failure), address the
+small `-s` capability-display omission, review `-o`/close/recovery risk as
+appropriate, and prepare the Step 1.8 PR/ancestry reconciliation. Do not
+claim acceptance or resume Step 1.9 until maintainer review/merge.
 
 ## Implementation envelope and stop conditions
 

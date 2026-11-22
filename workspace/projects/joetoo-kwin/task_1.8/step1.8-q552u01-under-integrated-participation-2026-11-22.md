@@ -101,3 +101,17 @@ Screenshot links (new assets are supplied separately):
 - [Desktop 1, newly managed Konsole](screenshots/20261122-q552u01-under-desktop1-new-konsole.png)
 - [Desktop 3, completed lower result](screenshots/20261122-q552u01-under-desktop3-success.png)
 - [KWin More Actions / Keep Below menu](screenshots/20261122-q552u01-kwin-keep-below-menu.jpg)
+
+## Follow-up: corrected Wayland native acceptance (maintainer operated, 2026-11-22)
+
+The protected-layer participation fix, subsequent broker guard repair and
+focused regression repairs were applied. New desktop-1 `under` launch
+**`win-015` PASS**, inactive-desktop-3 `under` launch **`win-016` PASS**;
+the maintainer confirmed both were initiated from desktop 1 with **no
+Plasma desktop switch**. Inactive-desktop-5 VNC `under` **`win-018` PASS**
+and SDL RDP `over` local launch **PASS**; an earlier desktop-3 RDP launch
+remained unresolved. Focused post-repair tests: config **6/6**, broker
+**20/20**, JavaScript initial-layout **44/44 PASS**. Native slim2 X11 and
+full post-repair regression checks remain pending. This historical document
+retains the earlier failure; the authoritative follow-up record is
+[corrected Wayland evidence with raw console logs](step1.8-q552u01-under-wayland-native-validation-2026-11-22.md).

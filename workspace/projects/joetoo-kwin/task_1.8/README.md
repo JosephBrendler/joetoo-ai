@@ -2,16 +2,17 @@
 
 <!-- Copyright 2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
-**Status (2026-11-22): ACTIVE.** Read-only `-s` and `-i` are **implemented**
-and have maintainer-operated native smoke evidence on Wayland and X11;
-final acceptance is **pending**. The first one-shot `-L ... under` candidate
-was installed and smoke-tested on q552u01 Wayland (desktop 3 PASS, desktop 1
-protected-layer verification false negative). The property-based follow-on
-is not yet native-tested or accepted. The maintainer last pushed evidence
-baseline **`f84a8ec`** on `task/joetoo-kwin-step1.8-cli-completion`.
-The accepted `main` reference is `7fdd2cf`; task branch ancestry is not a
-fast-forward of that commit (merge-base `24cd67f`), to reconcile at PR review.
-The former Step 1.8 was folded into Step 1.7; this remains a separate task.
+**Status (2026-11-22): ACTIVE; `-L under` implementation pushed at `73afa19`.**
+Read-only `-s` and `-i` have native Wayland/X11 smoke evidence. The corrected
+`-L under` now has **positive q552u01 Wayland native results** for displayed
+desktop 1 (including the protected XWayland Video Bridge) and inactive
+desktop 3 without switching away from desktop 1. A TigerVNC `under` and an
+SDL RDP `over` launch also completed locally. Post-repair focused tests pass;
+**slim2 native X11 `-L under`, full post-repair regression suites, and final
+maintainer acceptance remain pending.** `-L panel` is excluded. The accepted
+`main` reference is `7fdd2cf`; task branch merge-base was `24cd67f`, so
+ancestry must be reconciled at PR review, not during native testing. The
+former Step 1.8 was folded into Step 1.7; this is a separate active task.
 
 **Accepted foundation:** All Steps **1.1–1.7 are accepted and closed**.
 Step 1.5d's `-L over`/`-l` behavior is accepted
@@ -36,14 +37,14 @@ stacking framework**:
 | --- | --- | --- |
 | `joetoo-kwin -s` | Parsed, then reports not yet integrated | Implemented; terminal-`OK` classification fixed; native Wayland/X11 smoke PASS |
 | `joetoo-kwin -i MANAGED_ID` | Parsed, then reports not yet integrated | Implemented; present/missing records demonstrated on Wayland and present record on X11 |
-| `joetoo-kwin -L DESKTOP PROGRAM MODE TARGET under` | Rejected on pushed baseline | **First candidate native:** desktop 3 PASS; desktop 1 false negative due protected bridge; follow-on verification candidate pending |
+| `joetoo-kwin -L DESKTOP PROGRAM MODE TARGET under` | Not accepted on earlier baseline | **Implemented on `73afa19`; q552u01 Wayland PASS:** displayed desktop 1, inactive target desktop 3, and VNC viewer. Native X11 pending. |
 | `joetoo-kwin -L ... [over]` | **Accepted** default/explicit `over` | Preserve behavior and native regression evidence |
 | `joetoo-kwin -L ... panel` | Unsupported | **Remain unsupported; Version 2**, with explicit refusal before side effects |
 
-The user has approved **one-shot `under`** as a narrow revised Version 1
-target. This is a deliberate change to Step 1.5d's earlier Version 2
-classification of `under`, not proof it is currently implemented. Do not
-rewrite the Step 1.5d acceptance record to pretend it already supported it.
+The maintainer approved **one-shot `under`** as a narrow revised Version 1
+target, implemented on the Step 1.8 branch at `73afa19`. This deliberately
+revises Step 1.5d's earlier Version 2 classification, but does not retroactively
+change Step 1.5d acceptance or constitute Step 1.8 final acceptance.
 
 ## Read-only implementation, native evidence and known limitations (2026-11-22)
 
@@ -75,63 +76,72 @@ rewrite the Step 1.5d acceptance record to pretend it already supported it.
   q552u01 (previously about **28s**, ~7 GB reported). Peak memory after
   filtering was **not measured**. This tool is a separate joetoolkit workflow
   improvement, not part of the Step 1.8 CLI contract.
-- **Scope/remaining gaps:** the successful CLI invocations were from the
-  **project source tree**. The POC installer did not yet deploy the new
-  read-only Python helper; installed-CLI behavior is not established and
-  packaging/lookup must be addressed before release (Step 1.9 owns packaging).
-  Neither host has yet tested `-L ... under` because it is unimplemented;
-  Step 1.8 as a whole has **not** been accepted or merged.
+- **Scope/remaining gaps:** the successful CLI invocations used the
+  **project source tree** and the maintainer's POC broker/resident installer.
+  Installed-CLI packaging/lookup for the newer read-only helper is not proven;
+  Step 1.9 owns packaging. Step 1.8 is **not accepted/merged**. Current
+  testing/evidence status and a baseline for the next slim2 gate are in the
+  [Wayland integration record](step1.8-q552u01-under-wayland-native-validation-2026-11-22.md).
 
-## One-shot lower native feasibility and current candidate (2026-11-22)
+## One-shot lower: feasibility, implementation, native evidence (2026-11-22)
 
-- [q552u01 V2/V3 feasibility evidence with screenshots](step1.8-q552u01-one-shot-lower-feasibility-2026-11-22.md):
-  both manual and automatic guarded lower returned `PASS` on KWin 6.7.6
-  Wayland. The exact managed UUID moved to the bottom; eligible peer order,
-  geometry, membership and keep flags remained unchanged after settling.
-- `workspace.lowerWindow(window)` is absent from the 6.7.6 scripting API;
-  `workspace.slotWindowLower()` lowers the active window and
-  `workspace.stackingOrder` supports bottom-to-top verification. V3 is
-  intentionally desktop-local, and the maintainer reports desktop-1 invocation
-  does not lower a desktop-3 target (no transcript for that extra run).
-- **Proposed inactive-desktop candidate exception:** raise eligible peer windows
-  in their existing bottom-to-top order, without switching the displayed
-  desktop or focus; verify target bottommost and unchanged peer order/geometry.
-  This changes the peer windows' stack positions as a group, a narrow
-  relaxation of the earlier prohibition. It is not supported by the V2/V3
-  native evidence yet and requires maintainer/native review; special windows,
-  all-desktop windows and competing activation must fail closed on mismatch.
-- Candidate retains broker-authoritative registration, placement, logical
-  reservations, Busy/lease guards and configured `-o` semantics. It introduces
-  `single_lower_protocol` (separate from accepted `single_raise_protocol`) and
-  configurable `single_lower_settle_ms` (default 300, allowed 100..1000).
-  Older resident/broker components should reject `under` before confirmation.
+The [V2/V3 Wayland probes](step1.8-q552u01-one-shot-lower-feasibility-2026-11-22.md)
+established exact-UUID guarded `workspace.activeWindow` activation and
+`workspace.slotWindowLower()` with settled stack verification. No
+`workspace.lowerWindow(target)` is exposed in KWin 6.7.6 scripts. The V3 probe
+rightly refused cross-desktop targeting; the integrated inactive-desktop path
+uses a separate bounded peer-raising approach instead.
 
-## Native integrated -L under: protected user-facing stack (2026-11-22)
+The first [integrated trials](step1.8-q552u01-under-integrated-participation-2026-11-22.md)
+showed a **PASS on desktop 3** (`win-014`) and a **strict absolute-bottom
+false negative on desktop 1** (`win-013`), where KWin preserved an invisible
+64x36 `xwaylandvideobridge` / KeepBelow surface below the target. That remains
+historical negative evidence; it is not the status of the corrected version.
 
-[Maintainer q552u01 evidence](step1.8-q552u01-under-integrated-participation-2026-11-22.md)
-records `win-013` on desktop 1 and `win-014` on desktop 3. Launch,
-positive UUID registration, and placement succeeded in both cases. Desktop 3
-stack/focus completed; desktop 1 returned a stacking-verification failure
-because a 64x36, invisible `xwaylandvideobridge` remained below `win-013`.
-Its KWin window is in the below-normal stacking layer, and current KDE
-source uses transparent input, opacity zero and a KeepBelow state for it.
-The exact live `keepBelow`/layer properties on this host were not separately
-recorded, so the native re-test remains necessary.
+**Corrected participation policy:** the target must be an ordinary visible
+NormalLayer window. Other visible normal-layer peers participate; protected
+BelowLayer/KeepBelow and other non-normal-layer surfaces, minimized/hidden
+or opacity-zero windows remain in raw full-stack evidence but do not dictate
+user-facing `under`. `skipTaskbar` alone does not exclude an otherwise
+participating window. Broker and resident verify membership, participation,
+relative peer order, geometry and source/lease/identity; unsupported or
+ambiguous properties fail closed. On an inactive target desktop, only
+participating peers are raised in their previous relative order; there is no
+involuntary desktop switch or geometry reflow. It is one-shot, not persistent
+KeepBelow. `single_lower_protocol` negotiates this separately from the
+accepted `single_raise_protocol`; `single_lower_settle_ms` defaults to 300
+ms (allowed 100..1000).
 
-**Follow-on candidate:** A positive `-L under` result means *below every
-participating visible normal-layer peer* on the target desktop, preserving
-peer relative order, geometry and ownership. `minimized`, `hidden`, opacity-
-zero and protected non-NormalLayer windows remain in the complete raw stack
-for diagnostics and invariant checks, but do not require lowering beneath
-them; the inactive-desktop peer-raise fallback never raises those windows.
-`skipTaskbar` alone does not remove a visible window from participation.
-KWin resident reports the full raw order, participating order and protected
-UUID/reason partition; broker verifies full raw membership and consistency.
-All exclusion properties must be available and type-correct or the operation
-fails closed. The behavior is one-shot, not persistent KeepBelow.
+**[Corrected q552u01 Wayland native validation and logs](step1.8-q552u01-under-wayland-native-validation-2026-11-22.md)**
+records these maintainer-operated results:
 
-The follow-on candidate still requires focused/full tests and native
-on-desktop/inactive-desktop verification before maintainer acceptance.
+- **Desktop 1 displayed, `under`:** `-L 1 konsole ssh yorsqui under`,
+  `win-015`, succeeded; protected bridge no longer causes false failure.
+- **Desktop 3 inactive, `under`:** `-L 3 konsole ssh yorsqui under`,
+  `win-016`, succeeded; maintainer confirms **desktop 1 remained displayed
+  throughout**. The existing missing desktop 3/slot 1 reservation was kept.
+- **Desktop 5 inactive, VNC `under`:** `-L 5 vncviewer ssh
+  ssh://joe@x401/display/2 under`, `win-018`, succeeded; `-i` verified
+  a positively managed Vncviewer UUID, placement and frame.
+- **Desktop 5 inactive, SDL RDP `over`:** local launch/stack succeeded;
+  a prior desktop-3 RDP launch failed unresolved. Local viewer success
+  does not establish remote authentication or session health.
+- **Regression correction:** after 3 Python / 29 JS failures in a *pre-repair*
+  full run, the post-repair focused suites returned **6/6** config,
+  **20/20** broker and **44/44** initial-layout JS PASS; the single-recipe
+  suite previously passed **14/14**. A *full post-repair rerun* is pending.
+
+`RegistryStatus` on q552u01 reports synchronized observations,
+`recovery=ready`, `single_lower_protocol=1` and no uncertain managed
+registrations. Read-only `-s` currently omits `single_lower=1` from its
+human capability summary; this small display defect does not negate the
+working protocol. Brief restart-time D-Bus introspection failure was not
+reproduced after the broker became ready; its exact cause is not established.
+
+**Next gate:** maintainer-operated **slim2 native KWin 6.7.6 X11** `-L
+under` compatibility, then full post-repair regression suites and final
+Step 1.8 review. These Wayland successes do **not** establish native X11
+acceptance.
 
 ## A. `-s` — read-only broker status
 
@@ -219,29 +229,29 @@ and clear unsupported/timeout/fail-closed results. Test `-L over`, configured
 the modified protocol. Avoid a complete repeat of historical RDP/VNC
 acceptance tests without a demonstrated need.
 
-## Implementation and validation sequence
+## Remaining validation and acceptance sequence
 
-1. **Establish exact baseline:** verify branch, HEAD and working tree; read
-   `ARCHITECTURE.md`, this task's HANDOFF and the existing CLI/broker/resident
-   code. Keep the archived Step 1.5–1.7 acceptance records intact.
-2. **Read-only increment (implemented, acceptance pending):** keep the
-   recorded Wayland/X11 evidence and focused test coverage; close remaining
-   validation/installed-helper integration gaps in the appropriate scope.
-3. **Next: validate integrated `under` candidate:** KWin 6.7.6 Wayland
-   feasibility is established; review the patch, run headless regressions and
-   conduct maintainer-operated native trials. Original plan: establish native lower
-   capability and full-stack readback feasibility; then extend the existing
-   one-window launch/broker/resident transaction with exact-UUID one-shot
-   lowering and explicit fail-closed behavior. No peer reflow or new selector.
-4. **Run focused regressions:** `bash -n`, applicable ShellCheck/Joetoo
-   `validate_scripts`, Python tests, JavaScript syntax/tests, D-Bus mock
-   checks, and tests of old `over` plus `-o` initial layers.
-5. **Obtain native evidence:** maintainer-authorized Wayland and native-X11
-   disposable-window checks. Record the actual compositor versions, steps,
-   successes, failures, invariants and any accepted limitations.
-6. **Review and merge:** present complete diff, test/evidence summary,
-   remaining risks and documentation changes; only the maintainer accepts
-   Step 1.8 and merges. Then resume Step 1.9 source stabilization.
+1. **Baseline:** keep `task/joetoo-kwin-step1.8-cli-completion` at
+   maintainer-pushed `73afa19` while testing; inspect branch and dirty-state
+   before any installation. Accepted Steps 1.1–1.7 stay closed.
+2. **Next — slim2 native X11:** verify KWin 6.7.6 native X11, installed
+   broker/resident source consistency, recovery/observation readiness and
+   `single_lower_protocol=1`. Test a disposable `-L under` on an active
+   desktop, then (if safe) an inactive target desktop without a desktop/focus
+   switch, validating registered UUID/slot, frame and stack verification.
+   Include a small `-L over` regression. Do not retest every remote adapter
+   without a specific reason.
+3. **Full post-repair regression:** rerun complete Python and JS suites,
+   plus Bash syntax and applicable ShellCheck/`validate_scripts` checks;
+   capture exact totals and any failures. Do not promote the earlier focused
+   6/20/44 PASS into a full-suite PASS.
+4. **Small polish and review:** include `single_lower=1` in `-s` human
+   capability reporting if compatible, verify `-o` and related close/recovery
+   boundaries as needed, reconcile the earlier unresolved desktop-3 RDP
+   launch without inventing its cause, and update evidence/HANDOFF.
+5. **Maintainer acceptance and PR:** reconcile branch ancestry against
+   accepted `main`, review the complete diff/limitations, and merge only
+   upon maintainer authorization. Then resume Step 1.9.
 
 ## Non-goals and stop conditions
 
@@ -251,11 +261,13 @@ clients, different window identity authority, Step 1.6 close redesign,
 Step 1.7 recovery rewrite, KWin 6.8 migration, `tarup`, Portage ebuild work or
 production system integration. Those remain outside this task.
 
-Stop and seek maintainer review if `under` requires anything beyond a
-verified one-shot change to the *new* window, changes security assumptions,
-or cannot pass the same fail-closed safety boundary on both accepted
-compositor backends. A correct explicit unsupported result is preferable
-to substituting different behavior and claiming success.
+Stop and seek maintainer review if the revised `under` contract cannot verify
+an exact newly managed UUID, preserved geometry/membership/peer order,
+protected layer semantics or bounded focus/desktop behavior on both accepted
+compositor backends. The **explicit, bounded inactive-desktop peer-raising
+fallback** is part of the current reviewed candidate, not a general license
+to reflow geometry or rearrange other windows arbitrarily. Fail closed if
+evidence is missing; never substitute `over` silently.
 
 ## Completion and transition
 
