@@ -17,7 +17,7 @@ class SingleRecipeTests(configured.ConfiguredLaunchTests):
         self.env['BROKER_STATE']=json.dumps(dict(observation=dict(synchronized=True),
             presence_counts=dict(uncertain=0),request_counts=dict(pending=0,running=0),
             placement_transaction=dict(state='IDLE'),initial_layout_protocol=1,recovery_snapshot_protocol=1,
-            single_raise_protocol=1,viewer_protocol=1,initial_layout_active=False))
+            single_raise_protocol=1,single_lower_protocol=1,viewer_protocol=1,initial_layout_active=False))
         self.env['MANAGED']=json.dumps(dict(count=0,windows=[]))
         shutil.copyfile(ROOT/'libexec/joetoo_kwin_rdp_target.py',self.folder/'libexec/joetoo_kwin_rdp_target.py')
         for name in ('joetoo_kwin_rdp_launch.py','joetoo_kwin_vnc_launch.py'):
@@ -108,6 +108,21 @@ _test_single_configured_window() {
             self.assertEqual(len(cohorts),1);self.assertTrue(cohorts[0]['single_raise'])
             self.assertEqual(cohorts[0]['entries'],[dict(registration_request_id='reg',layer='over')])
 
+    def test_under_uses_original_single_slot_and_lower_protocol(self):
+        output, trace = self.run_single(['3','konsole','local','btop','under'])
+        self.assertIn('intent:konsole:1:3:96,32,1804,972', trace)
+        cohorts = [json.loads(row[7:]) for row in trace if row.startswith('cohort:')]
+        self.assertEqual(len(cohorts), 1)
+        self.assertTrue(cohorts[0]['single_lower'])
+        self.assertEqual(cohorts[0]['lower_settle_ms'], 300)
+        self.assertNotIn('single_raise', cohorts[0])
+        self.assertEqual(cohorts[0]['entries'],[dict(registration_request_id='reg',layer='under')])
+        state = json.loads(self.env['BROKER_STATE']);state.pop('single_lower_protocol')
+        self.env['BROKER_STATE']=json.dumps(state)
+        output, trace = self.run_single(['3','konsole','local','btop','under'],expected=2)
+        self.assertIn('single-window lower', output)
+        self.assertFalse(trace)
+
     def test_sweep_released_slot_is_visible_to_real_single_launch_preflight(self):
         from test_managed_close import ManagedCloseTests
         close=ManagedCloseTests();close.setUp();self.addCleanup(close.tearDown)
@@ -135,9 +150,9 @@ _test_single_configured_window() {
 
     def test_layers_counts_and_structural_fields_reject_before_confirmation(self):
         base=['3','konsole','local','btop']
-        for layer in ('panel','under','bad',''):
+        for layer in ('panel','bad',''):
             output,trace=self.run_single(base+[layer],expected=2)
-            self.assertIn('LAYER' if layer not in ('panel','under') else 'not implemented yet',output)
+            self.assertIn('LAYER' if layer != 'panel' else 'not implemented yet',output)
             self.assertNotIn('version 2',output);self.assertEqual(trace,[])
         for operands in ([],base[:3],base+['over','1'],['3|konsole|local|btop'],
                          ['3','konsole','local','PRIVATE\n']):

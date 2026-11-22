@@ -2,10 +2,11 @@
 
 <!-- Copyright 2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
-**Status (2026-11-22): ACTIVE; read-only `-s` and `-i` IMPLEMENTED and
-native-smoke-tested on Wayland and X11; maintainer acceptance PENDING.**
-Step 1.8's remaining functional work is verified one-shot `-L ... under`.
-`-L ... panel` remains excluded. No Step 1.8 merge or acceptance is claimed.
+**Status (2026-11-22): ACTIVE; read-only `-s` and `-i` native-smoke-tested;
+first `-L under` candidate installed and smoke-tested on q552u01 Wayland:
+desktop 3 PASS, desktop 1 protected-layer verification false negative.
+Property-based participation follow-on is proposed, untested natively and
+not yet accepted.** `-L panel` remains excluded. Step 1.8 is not merged.
 
 **Historical boundary:** **All Steps 1.1–1.7 are accepted and closed.**
 Step 1.6 (`-d`/`-x`) was accepted and merged via
@@ -23,16 +24,17 @@ The **new** Step 1.8 is not a reopening or re-acceptance of either step.
   `24cd67f`; reconcile ancestry when preparing the Step 1.8 PR, not by an
   unreviewed rebase during native testing.
 - **Active branch:** `task/joetoo-kwin-step1.8-cli-completion`, pushed HEAD
-  **`cadf992`** and confirmed clean/synchronized on `q552u01` and `slim2`
-  in the maintainer's 2026-11-22 console output.
+  **`f84a8ec`** (maintainer-pushed 2026-11-22 documentation/evidence
+  update). The `-L under` candidate is not committed or published.
 - **Authoritative design:** [ARCHITECTURE §9](../ARCHITECTURE.md#9-cli-contract-accepted-behavior-and-proposed-step-18-completion),
   [§11](../ARCHITECTURE.md#11-numbered-implementation-and-review-gates),
   and [§12](../ARCHITECTURE.md#12-version-2-considerations).
 - **Task scope and tests:** [Step 1.8 README](README.md); the
   [maintainer-placed outline](step18-branch-outline.md)
   provides the initial work order.
-- **Current native evidence:** [q552u01 Wayland](step1.8-q552u01-readonly-wayland-evidence-2026-11-22.md)
-  and [slim2 X11](step1.8-slim2-readonly-x11-evidence-2026-11-22.md).
+- **Current native evidence:** [q552u01 read-only Wayland](step1.8-q552u01-readonly-wayland-evidence-2026-11-22.md),
+  [slim2 read-only X11](step1.8-slim2-readonly-x11-evidence-2026-11-22.md), and
+  [q552u01 V2/V3 lower feasibility, screenshots](step1.8-q552u01-one-shot-lower-feasibility-2026-11-22.md).
 - **Accepted predecessor evidence:** [Step 1.5 archive](../archive/task_step1.5/README.md),
   [Step 1.6 closure](../archive/task_step1.6/README.md), and
   [Step 1.7 closure](../archive/task_step1.7/README.md) are completed history,
@@ -58,14 +60,34 @@ rerun was not shown. `shellcheck_stub_filter` (joetoolkit 1.0.19) enabled a
 consumer-scoped header stub and successful source-following lint; details and
 limits are in the linked evidence, not a new Step 1.8 product requirement.
 
-**Next actor: maintainer**, to review/integrate this documentation update and
-continue the already scoped Step 1.8 work. **Next technical action:** establish
-on KWin 6.7.6 Wayland and X11 whether a safe one-shot `lowerWindow` operation
-and trustworthy bottom-to-top stack readback are available, initially by a
-nonmutating capability probe. If feasible, extend existing single-`over`
-launcher/broker/resident transaction to support exact-UUID `under` with focused
-tests; no peer reflow, new selector or persistent keep-below policy. Native
-operations and restarts remain maintainer-controlled.
+**Latest feasibility result (maintainer-operated):** KWin 6.7.6 Wayland
+V2 manual-click guarded lower and V3 automatic exact-UUID activate/verify/lower
+both returned `PASS`. At settle the target was bottommost, peer order, frames,
+desktop membership and keep flags unchanged. The active-window lower slot
+works; direct `lowerWindow(window)` is not exposed. The V3 probe guards the
+current desktop and does not lower desktop-3 target from desktop 1, per the
+maintainer's report. Full results and screenshots are in linked evidence.
+
+**Latest native integration:** On q552u01 KWin 6.7.6 Wayland the maintainer
+applied the first candidate, passed focused headless suites (14 Python CLI,
+19 Python broker, 40 JavaScript resident), and installed/reloaded it using
+`tools/restart_joetoo-kwind notest`. `-L 3 konsole ssh nuthuvia under`
+registered `win-014` and completed. `-L 1 ... under` registered and placed
+`win-013` but reported incomplete stacking: KWin correctly left a 64x36
+`xwaylandvideobridge` protected surface below the newly lowered Konsole.
+[Integrated native results and follow-on policy](step1.8-q552u01-under-integrated-participation-2026-11-22.md).
+
+**Next actor: maintainer**, to review and apply the follow-on participation
+patch, run focused and full regressions, then repeat `-L under` on desktops
+1 (protected lower-layer bridge) and 3 (ordinary peers), including an inactive
+third-desktop trial before Step 1.8 acceptance. The
+candidate's on-desktop path uses verified active-window lowering; its proposed
+inactive-desktop fallback raises eligible existing peers in their prior order,
+without desktop/focus switching, then verifies target bottommost and peer
+frames/order unchanged. That fallback is a *narrow proposed relaxation* of the
+earlier no-peer-restacking rule; it is not yet native-proven/accepted. A smaller
+slim2 X11 compatibility run can follow. No service restart is authorized by
+this HANDOFF alone.
 
 ## Implementation envelope and stop conditions
 
@@ -75,12 +97,21 @@ tests, CLI help and user-facing reference documentation, with this task's
 status/evidence. Do not modify Step 1.6/1.7 archived acceptance records;
 modify authoritative architecture only to record a reviewed decision.
 
-**Stop and return for review** if `under` cannot be implemented with a
-positively identified, bounded and read-back-verified lower on either
-supported KWin 6.7.6 backend; if achieving it requires rearranging peers,
-new permanent stacking policy, unsafe activation or a different identity
-mechanism; or if new security/API scope is necessary. Never silently fall
-back to `over` or treat an unverified stack position as success.
+**Participation policy:** Target must be an ordinary visible NormalLayer
+window. KWin's `normalWindow` alone is insufficient: KeepBelow/BelowLayer,
+KeepAbove/non-NormalLayer, minimized, hidden, and opacity-zero peers are
+*observed and protected*, not raised or required to be above the target.
+The full raw UUID stack, protected-exclusion reasons, and participating stack
+must remain independently checkable. This is a refinement of user-facing
+`under`, not a persistent KWin keep-below property or class-specific bypass.
+
+**Stop and return for review** if exact registered UUID authority fails,
+focus/desktop ownership changes unexpectedly, settled stack cannot be proved,
+peer relative order or geometry changes, or a persistent stacking policy,
+new selector/native plugin or security/API expansion is needed. Inactive-
+desktop peer raises are an explicit candidate exception, not blanket approval
+for peer reflow. Never silently fall back to `over` or report an unverified
+position as successful.
 
 **Reserved operations:** the maintainer controls task authorization,
 commits/PR/merge, native operations, service restarts and all
