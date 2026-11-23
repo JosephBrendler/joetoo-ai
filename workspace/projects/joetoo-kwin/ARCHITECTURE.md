@@ -38,13 +38,89 @@ requirements.
 
 | Component | Intended name | Owns | Must not do |
 | --- | --- | --- | --- |
-| Public Bash CLI | `joetoo-kwin` | Options, configuration selection, planning, launch orchestration, reporting | Infer ownership from class; kill unrelated processes |
-| Broker daemon | `joetoo-kwind` | Session D-Bus API, transactions, managed registry, result history, future checkpoint/reconciliation | Parent or supervise SSH/Konsole sessions; independently calculate layout geometry |
+| Public Bash CLI | `joetoo-kwin` | Options, configuration selection and orchestration through private planning/launch helpers, reporting | Infer ownership from class; kill unrelated processes; duplicate broker authorization |
+| Broker daemon | `joetoo-kwind` | Session D-Bus API, authenticated transactions, managed registry, result history, checkpoint and reconciliation coordination | Parent or supervise SSH/Konsole sessions; independently calculate layout geometry |
 | OpenRC user service | `joetoo-kwind` | Broker process supervision and user-session lifecycle | Terminate managed applications on service stop |
-| KWin resident JavaScript | `joetoo-kwin-resident.js` | KWin observations, exact UUID resolution, window placement, one-shot initial stack/focus, future safe close | Own launch configuration; infer transport connection from window presence |
+| KWin resident JavaScript | `joetoo-kwin-resident.js` | KWin observations, exact UUID resolution, window placement, one-shot stacking/focus and observed state | Own launch configuration; grant native close authority; infer transport connection from window presence |
 | Configuration/profile | `joetoo-kwin.conf` | Desired layout and configurable operational parameters, user override plus system fallback | Persist transient PID/UUID identity or credentials |
 | Native C++ KWin effect, separately built per compositor | `joetoo_managed_close.so` | Authenticated actual-window inspection, exact UUID identity and graceful managed close of Wayland/XWayland; optional legacy native X11 | Own launch configuration, supervise clients, or force-kill windows |
 | X11 protocol helper executable | `joetoo-kwin-close-x11` | Bounded XCB lifetime fence and graceful `WM_DELETE_WINDOW` for XWayland/native X11 | Act as a KWin plugin, adopt an unverified window, or kill applications |
+
+### Bash CLI, planner and launch helpers
+
+The public command is an orchestrator, not a second implementation of geometry,
+identity or transport policy. Its trusted private Bash components separate plan
+calculation from launch dispatch:
+
+| Source | Architectural responsibility |
+| --- | --- |
+| `joetoo-kwin` | Parse options, choose configuration, coordinate confirmation and report outcomes. |
+| `libexec/joetoo-kwin-plan-functions` | Validate launch plans and calculate shared desktop/slot geometry and layout policy. Interactive movement and planned placement must not acquire divergent calculations. |
+| `libexec/joetoo-kwin-launch-functions` | Dispatch validated, authorized launches and coordinate broker registration, placement and bounded results. |
+| `libexec/joetoo-kwin-session.bashrc` | Preserve the interactive Bash and SSH-session handoff contract in managed Konsole windows. |
+
+These helpers do not grant ownership of an existing window merely from a
+class, caption or PID. The broker and KWin-side verification retain their
+separate authority. Source-checkout and installed private-helper lookup must
+both work; the required install destinations and installed-image checks are
+specified in the [active Step 1.9 packaging contract](task_1.9/step1.9-packaging-inventory-contract-REVISED-DRAFT.md).
+
+### Python runtime modules and their boundaries
+
+`libexec/joetoo-kwind` is the non-root Python broker. Its sibling modules
+implement bounded parsing, state models, transactions and resource-specific
+operations; they are **not** independent sources of authority over unmanaged
+windows. Grouping below describes responsibility rather than declaring each
+file an independently started daemon.
+
+| Subsystem and source files (`libexec/`) | Responsibility and limit |
+| --- | --- |
+| `joetoo_kwin_registry.py` | Managed window/request state model and validated transitions. It does not observe KWin or grant adoption/close authority. |
+| `joetoo_kwin_readonly.py` | Validate and render bounded `-s`/`-i` broker replies; no D-Bus calls, config sourcing or registry/window mutation. |
+| `joetoo_kwin_managed_close.py` | Broker-owned authenticated close transactions and outcome handling; native effect confirms actual-window identity; no broad process killing. |
+| `joetoo_kwin_recovery.py`, `joetoo_kwin_persistence.py` | Authenticate and reconcile same-session checkpoint candidates; validate, privately persist and restore last-good recipes. Disk records alone do not reestablish current-window authority. |
+| `joetoo_kwin_launch_resources.py`, `joetoo-kwin-exposure.py` | Validate local paths and provision desktops within the launch contract; predict rectangle exposure, not actual compositor hit testing. |
+| `joetoo_kwin_rdp_target.py`, `joetoo_kwin_rdp_launch.py` | Offline RDP endpoint/sizing/security validation; client-specific SDL FreeRDP launch, readiness and correlation. Placement does not prove remote login. |
+| `joetoo_kwin_vnc_target.py`, `joetoo_kwin_vnc_launch.py`, `joetoo_kwin_vnc_identity.py` | Offline VNC-over-SSH validation; owned tunnel/viewer supervision and positive X11/XWayland viewer-role observation. Neither an authentication popup nor class matching alone proves identity. |
+| `joetoo_kwin_sftp_target.py`, `joetoo_kwin_sftp_advisory.py`, `joetoo_kwin_sftp_capability.py` | Offline SFTP URL normalization; optional post-confirmation endpoint advisories; local KIO worker capability discovery. Neither advisories nor local capability prove authenticated SFTP usability or veto a valid launch. |
+
+The broker owns D-Bus transaction authority, registration and the distinction
+between **observed**, **positively managed**, and **currently verified** windows.
+Resource helpers may gather evidence or supervise their own short-lived client
+processes, but they cannot promote ambiguous observations into authorization.
+OpenRC supervises the broker, **not** managed SSH, Konsole, VNC or RDP clients;
+a broker restart must not close those clients. Offline validators must not
+initiate network or graphical side effects. The source selection is maintained
+in the [single curated `MANIFEST`](MANIFEST); the separate install inventory
+and required sibling-module completeness checks belong to Step 1.9, not to
+this architecture table.
+
+### Configuration and selection ownership
+
+CLI launch configuration (including per-run `-f`, selected profiles, system
+fallback and additive defaults) is distinct from the OpenRC user-service
+configuration and its administrator/account overrides. `eselect` selects a
+user launch profile; it does not start the broker or authorize changing a live
+window. No package installation may create/overwrite HOME configuration,
+select a profile automatically or start/enable a user service. The effective
+layering, inactive examples and installation locations are defined by the
+[Step 1.9 configuration and packaging contract](task_1.9/step1.9-packaging-inventory-contract-REVISED-DRAFT.md)
+and the [configuration reference](docs/configuration-reference.md).
+
+### Principal control and evidence paths
+
+1. The CLI and trusted Bash helpers validate intent and, where necessary,
+   obtain explicit confirmation before dispatching a managed launch/operation.
+2. The broker authenticates requests, maintains the managed registry and
+   coordinates KWin-resident observations and exact-UUID placement outcomes.
+3. Client-specific Python helpers validate targets or manage the bounded
+   application-side lifecycle; transport/authentication results remain
+   independent from local window placement and ownership.
+4. For managed close or authenticated same-session identity, the broker uses
+   the loaded native effect, which checks actual compositor-window identity.
+   The XCB helper is used only for the appropriate X11/XWayland close path.
+5. Read-only queries report validated broker state; snapshots and historical
+   records do not silently adopt a new KWin session or authorize destruction.
 
 ### Native compiled components: two plugin variants, one protocol helper
 
@@ -749,3 +825,75 @@ version 1 work, **not** deferred to Version 2.
 
 Version 2 decisions should be taken from concrete usage and evidence,
 not from previously explored but superseded design alternatives.
+
+## 13. Development, verification and release tooling architecture
+
+The development checkout contains runtime source, tests, diagnostic helpers,
+legacy proofs of concept and release-preparation tools. They serve different
+purposes and are not interchangeable with an installed Gentoo package.
+The [project README](README.md#development-files-and-checks) lists practical
+checks and current validation platforms; task archives preserve dated results.
+This section records durable verification **boundaries**, not test counts,
+host-specific commands or an additional curated-file inventory.
+
+### Headless checks and isolation
+
+- `tests/` contains Python `unittest` and Node.js tests for state,
+  configuration, parsing, launch/recovery contracts, and KWin/broker protocol
+  behavior with controlled fixtures or mocks where appropriate. The Bash CLI,
+  helper scripts, and native sources also require suitable syntax/static/build
+  checks. A headless PASS establishes only the behavior exercised by that test.
+- Negative and uncertain outcomes are first-class cases: malformed targets,
+  mismatched identities, changed session owners, missing installed helpers,
+  timeouts, cleanup uncertainty, and refusal without unsafe fallback.
+- Tests must not rely accidentally on a developer checkout, user's HOME,
+  ambient `PYTHONPATH`, running compositor, or reachable remote endpoint when
+  they purport to verify an isolated production installation. A mock cannot
+  establish real KWin identity, client readiness or network authentication.
+
+### Native session verification
+
+Real KDE/KWin X11 and Wayland/XWayland sessions are needed to validate observed
+window identity, broker/resident reconnection, focus/stacking/geometry,
+managed close and resource-specific viewer behavior. Verify the actual loaded
+native effect and helper variant for the compositor/SDK rather than inferring
+compatibility from successful compilation. Distinguish local registration and
+placement from remote connection, authentication and usability. Service stop
+or restart must leave managed applications running; unresolved identities
+must fail conservatively. These are maintainer-operated or expressly
+separately authorized tests, not automatic headless checks.
+
+`tools/joetoo-kwind-install-poc` is a **development-only user-local** installer
+and checker, not the production source archive or an ebuild installed-image
+completeness test. Session restart/diagnostic tools likewise are not proof of
+safe package installation and can affect a real graphical session. The
+[project README](README.md#development-files-and-checks) is the appropriate
+place for runnable commands and current harness entry points.
+
+### Source transfer, archive and package acceptance
+
+1. The project-root [`MANIFEST`](MANIFEST) is the sole explicit curated
+   **source-to-source** allowlist. Human-operated
+   [`tools/joetoo-kwin-stage-upstream`](tools/joetoo-kwin-stage-upstream)
+   separates default planning from deliberate transfer, byte/mode verification
+   and release checks. It does not create the tarball or certify installation.
+2. The maintainer audits curated source, links, modes, comments, copyright,
+   SPDX/provenance and unexpected files before `tarup` creates a source archive
+   under `joetoo-upstream`. The archive is not a development-directory copy.
+3. A separate `joetoo` ebuild owns **source-to-installed-file** mapping,
+   dependencies, KWin plugin variants, system configuration protection,
+   OpenRC lifecycle and licensing. The actual installed image must include
+   every required private helper and resolve imports/paths without the source
+   checkout, including restore resource dependencies; no installer may mutate
+   user HOME or auto-enable an effect/service.
+4. Only after installed-image isolation and package checks pass can native
+   **packaged-path** X11/Wayland smoke tests establish release acceptance.
+   POC checks, headless tests and native *development-tree* results cannot
+   substitute for this final gate.
+
+The detailed current install inventory, stage gates and remaining Step 1.9
+obligations are in the [revised packaging contract](task_1.9/step1.9-packaging-inventory-contract-REVISED-DRAFT.md)
+and [active HANDOFF](task_1.9/HANDOFF.md). `joetoo-upstream` and `joetoo`
+retain their separate repository policies and human-maintainer integration
+boundaries. Development tools and test fixtures are not included in the
+release merely because they exist in `joetoo-ai`.

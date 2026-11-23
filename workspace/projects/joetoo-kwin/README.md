@@ -139,6 +139,11 @@ this does **not** constitute autodetection or a universal display requirement.
 
 ## Development files and checks
 
+The runtime component ownership map and separation of test, native-session,
+source-release and installed-package verification are documented in
+[ARCHITECTURE §§3 and 13](ARCHITECTURE.md#3-components-and-ownership).
+The list below is a development quick reference, not a release inventory.
+
 - `joetoo-kwin`: Bash CLI and launch planner orchestration.
 - `libexec/joetoo-kwin-plan-functions`, `libexec/joetoo-kwin-launch-functions`:
   shared plan, geometry and application dispatch.
