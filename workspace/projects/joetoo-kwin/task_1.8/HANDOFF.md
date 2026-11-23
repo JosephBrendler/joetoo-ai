@@ -2,19 +2,30 @@
 
 <!-- Copyright 2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
-**Status (2026-11-22): ACTIVE — native X11/Wayland stacking PASS;
-launch-control keyboard-focus restoration still OPEN.** Implementation
-`73afa19`, maintainer-pushed Wayland/evidence baseline `5ab6ea6` on
-`task/joetoo-kwin-step1.8-cli-completion`. q552u01 Wayland and gmki91
-KWin 6.7.6 X11 displayed/inactive desktop `-L under` passed, along with
-local VNC `under`, RDP `over`, omitted-layer `over` and prelaunch refusals.
-Full post-repair suites passed **1,094 Python / 169 JavaScript** on gmki91.
-The maintainer then **instrumented real X11 input-focus loss** after an
-inactive-target `-L under`; a guarded experimental X11 activation restored
-the original Konsole, and `-o` exhibits the same visible symptom. The
-maintainer recalls similar behavior on Wayland, not yet instrumented.
-**Next:** [shared control-context/focus policy task](step1.8-codex-control-context-focus-completion-TASK-DRAFT-2026-11-22.md), not a stacking redesign.
-No Step 1.8 acceptance, merge or `-L panel` support is claimed.
+**Status (2026-11-23): ACTIVE — native functional and regression evidence
+collected; final focus-policy decision and maintainer acceptance pending.**
+Current branch `task/joetoo-kwin-step1.8-cli-completion` at pushed
+`4be1b0b` (`fix restore focus step1.8`), plus four uncommitted local files.
+Native X11/Wayland `-L under`, CLI `-s`/`-i`, configured `-o`, and
+managed-close recovery checks have positive evidence. q552u01's latest full
+suites: **1,113 Python + 180 JavaScript PASS**, plus **54** focused POC
+installer tests PASS. The original Konsole regained usable keyboard focus
+on Wayland after both `-L` and `-o`.
+
+**OPEN acceptance decision:** a displayed-desktop configured `-o` `panel`
+launch successfully verified its preferred new Konsole, but the shared
+completion path then activated the *original control Konsole*. This
+conflicts with the prior requirement to preserve intentional preferred
+focus; the current restore path also lacks proven competing-user-activation
+protection. The maintainer must either authorize a documented policy change
+(with its safety implications reviewed) or authorize a narrow guard/fix and
+focused revalidation. **Do not mark Step 1.8 accepted yet.**
+
+**New evidence:** [2026-11-23 q552u01 focus, managed-close and regression
+record](step1.8-q552u01-focus-and-closeout-evidence-2026-11-23.md), with
+[console transcript](step1.8-q552u01-acceptance-console-2026-11-23.txt)
+and [preferred-focus screenshot](screenshots/20261123-q552u01-wayland-panel-focus-override.png).
+`-L panel` remains unsupported. Step 1.9 production packaging remains paused.
 
 **Historical boundary:** **All Steps 1.1–1.7 are accepted and closed.**
 Step 1.6 (`-d`/`-x`) was accepted and merged via
@@ -31,10 +42,10 @@ The **new** Step 1.8 is not a reopening or re-acceptance of either step.
   scope/documentation update). The task branch's actual merge-base is
   `24cd67f`; reconcile ancestry when preparing the Step 1.8 PR, not by an
   unreviewed rebase during native testing.
-- **Active branch:** `task/joetoo-kwin-step1.8-cli-completion`, maintainer-
-  pushed HEAD **`5ab6ea6`** (`under-wayland-native-validation`), following
-  implementation commit **`73afa19`**. gmki91 test evidence is proposed in
-  this subsequent docs-only update and requires maintainer review/commit.
+- **Active branch:** `task/joetoo-kwin-step1.8-cli-completion`, pushed
+  HEAD **`4be1b0b`** (focus restoration), following `1747017`, `5ab6ea6`
+  and `73afa19`. Four additional files are locally modified and uncommitted
+  as of the 2026-11-23 maintainer status review.
 - **Authoritative design:** [ARCHITECTURE §9](../ARCHITECTURE.md#9-cli-contract-accepted-behavior-and-proposed-step-18-completion),
   [§11](../ARCHITECTURE.md#11-numbered-implementation-and-review-gates),
   and [§12](../ARCHITECTURE.md#12-version-2-considerations).
@@ -47,7 +58,46 @@ The **new** Step 1.8 is not a reopening or re-acceptance of either step.
   [initial protected-bridge negative](step1.8-q552u01-under-integrated-participation-2026-11-22.md),
   [corrected Wayland native validation](step1.8-q552u01-under-wayland-native-validation-2026-11-22.md),
   [gmki91 X11 native validation](step1.8-gmki91-x11-native-validation-2026-11-22.md),
-  and **[launch-control focus loss/restoration experiments](step1.8-launch-control-focus-evidence-2026-11-22.md)**.
+  [launch-control focus loss/restoration experiments](step1.8-launch-control-focus-evidence-2026-11-22.md),
+## Current next actions — 2026-11-23
+
+1. **Focus-policy decision is the only identified substantive acceptance
+   blocker.** Current `-o` `panel` initially activated its preferred new
+   Konsole (UUID `d84c39fe-64cd-4d58-b58b-860565bfd693`), then the
+   global completion path requested control restoration, and the maintainer
+   typed in the original Konsole without clicking. Determine whether
+   returning to the controller after `-o` is now explicitly accepted, or
+   whether `-o` should retain intentional preferred focus. Separately review
+   competing user/client activation: source does not establish a distinct
+   user-intent veto before its final KWin activation. Record the policy
+   disposition; if code changes are needed, apply narrowly and rerun focused
+   tests/native revalidation. Do not reinterpret passing launch/stacking
+   transactions as failed merely because post-mission focus policy is open.
+2. **Review and incorporate pending four-file local diff:**
+   `tools/joetoo-kwind-install-poc`, `tests/test_openrc_user_setup.py`,
+   `tools/restart_joetoo-kwind`, and the Step 1.9 packaging-inventory draft.
+   The POC now installs/verifies/archives `joetoo_kwin_sftp_target.py` (15
+   user-owned files); Step 1.9 retains the independent production `${ED}`
+   installed-tree completeness/isolation gate. Development restart now checks
+   `joetoo_managed_close` and polls KWinBridge/KWinCloseNative D-Bus readiness.
+   The already-loaded branch and service readiness passed on q552u01; the
+   restart helper's automatic-load branch was not separately tested.
+3. **Documentation and review:** reconcile `ARCHITECTURE.md`'s stale `-L
+   under` text and the chosen preferred-focus policy; retain Step 1.8 native
+   evidence links. Human `-s` display of `single_lower=1` is optional polish.
+   One isolated earlier desktop-3 RDP failure was not attributed to stacking;
+   do not treat unverified remote connectivity as a Step 1.8 gate.
+4. **Reconcile branch ancestry:** `main` at `7fdd2cf`, Step 1.8 branch at
+   `4be1b0b`, merge-base `24cd67f`. `main`'s one intervening commit touches
+   `ARCHITECTURE.md` and three Step 1.9 docs. Both sides changed
+   `ARCHITECTURE.md`; the local Step 1.9 packaging-inventory edit also
+   overlaps `main`. Compare deliberately; do not assume conflict-free merge
+   or perform an unreviewed rebase.
+5. **After explicit maintainer policy and technical acceptance:** review
+   final diff and evidence, commit/push authorized changes, prepare/review the
+   PR and merge. On accepted merge, close Step 1.8 and resume Step 1.9.
+
+  and **[2026-11-23 q552u01 closeout evidence](step1.8-q552u01-focus-and-closeout-evidence-2026-11-23.md)**.
 - **Accepted predecessor evidence:** [Step 1.5 archive](../archive/task_step1.5/README.md),
   [Step 1.6 closure](../archive/task_step1.6/README.md), and
   [Step 1.7 closure](../archive/task_step1.7/README.md) are completed history,
@@ -59,7 +109,7 @@ verified one-shot `-L ... under` for **only the newly managed window**. Preserve
 `-L` omitted/explicit `over` and configured `-o` layer behavior. `-L panel`
 and all peer geometry/reflow remain Version 2.
 
-## Latest result and next actor
+## Historical results and next-actor notes through 2026-11-22 (superseded)
 
 **Read-only increment (maintainer-operated):** `-s`/`-i` added in `1670bea`;
 `-s` terminal-state false Busy corrected and tested in `f3fef58`;
@@ -155,7 +205,7 @@ Then prepare the Step 1.8 PR/ancestry reconciliation against accepted
 `main`. slim2 may provide optional second X11 host coverage. No Step 1.9
 resumption before maintainer acceptance/merge.
 
-## Shared control context — approved direction, implementation pending
+## Shared control context — original approved requirements (historical)
 
 The project-wide concept is **capture early, restore conditionally**.
 A CLI process does not automatically own the currently active GUI window:

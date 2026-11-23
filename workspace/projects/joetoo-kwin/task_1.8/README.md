@@ -2,20 +2,22 @@
 
 <!-- Copyright 2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
-**Status (2026-11-22): ACTIVE.** Implementation commit `73afa19`;
-latest maintainer-pushed Step 1.8 evidence baseline `5ab6ea6`. Corrected
-`-L under` has successful displayed/inactive native Wayland on q552u01 and
-native X11 on gmki91, including protected-layer correctness and no desktop
-switch. VNC `under`, RDP `over`, omitted-layer default `over`, and two
-prelaunch refusal cases passed in gmki91 native tests; full post-repair
-**1,094 Python + 169 JavaScript PASS**. A **separate launch-control
-keyboard-focus defect** is now instrumented on X11 after `-L`, also visibly
-reported after `-o`, with Wayland suspected but not independently traced.
-The maintainer approves an early, shared control-context capture and
-**mission-/user-activity-conditional focus restoration design direction**;
-implementation, native revalidation and Step 1.8 acceptance are still
-pending. `-L panel` stays excluded. Branch ancestry against accepted
-`main` remains for PR review. Earlier Steps 1.1–1.7 stay closed.
+**Status (2026-11-23): ACTIVE — focus restoration implemented and native
+X11/Wayland exercised; acceptance awaits one focus-policy decision and
+Git/documentation review.** HEAD `4be1b0b` on
+`task/joetoo-kwin-step1.8-cli-completion` (four local uncommitted changes).
+Corrected `-L under` and read-only `-s`/`-i` have positive native evidence
+on X11/Wayland. q552u01's full current-tree regression: **1,113 Python
+and 180 JavaScript PASS**; **54** focused installer tests PASS. Wayland
+`-L` and `-o` both returned focus to the original control Konsole with
+immediately usable keyboard input. **Qualification:** a displayed-desktop
+`-o` `panel` mission first verified focus on its preferred new Konsole,
+then the completion path restored the controller, contrary to the previously
+stated preference-preservation requirement. Competing-user-activation
+protection also remains unproven. The maintainer must decide the intended
+policy or authorize a focused correction before formal acceptance. `-L
+panel` remains unsupported. Step 1.9 packaging stays out of this task.
+See [2026-11-23 native focus/closeout evidence](step1.8-q552u01-focus-and-closeout-evidence-2026-11-23.md).
 
 **Accepted foundation:** All Steps **1.1–1.7 are accepted and closed**.
 Step 1.5d's `-L over`/`-l` behavior is accepted
@@ -40,7 +42,7 @@ stacking framework**:
 | --- | --- | --- |
 | `joetoo-kwin -s` | Parsed, then reports not yet integrated | Implemented; terminal-`OK` classification fixed; native Wayland/X11 smoke PASS |
 | `joetoo-kwin -i MANAGED_ID` | Parsed, then reports not yet integrated | Implemented; present/missing records demonstrated on Wayland and present record on X11 |
-| `joetoo-kwin -L DESKTOP PROGRAM MODE TARGET under` | Not accepted on earlier baseline | **Implemented on `73afa19`; q552u01 Wayland PASS:** displayed desktop 1, inactive target desktop 3, and VNC viewer. Native X11 pending. |
+| `joetoo-kwin -L DESKTOP PROGRAM MODE TARGET under` | Not accepted on earlier baseline | Implemented on `73afa19`; native Wayland q552u01 and X11 gmki91 **PASS**, including displayed and inactive targets. Later q552u01 `win-012` confirms keyboard return after an inactive `under` launch. |
 | `joetoo-kwin -L ... [over]` | **Accepted** default/explicit `over` | Preserve behavior and native regression evidence |
 | `joetoo-kwin -L ... panel` | Unsupported | **Remain unsupported; Version 2**, with explicit refusal before side effects |
 
@@ -145,11 +147,13 @@ reproduced after the broker became ready; its exact cause is not established.
 **Native X11 gate:** gmki91 KWin 6.7.6 X11 `under` displayed/inactive,
 VNC `under`, RDP `over`, and omitted-layer `over` PASS, plus full passing
 Python/JS suites. See [X11 evidence](step1.8-gmki91-x11-native-validation-2026-11-22.md).
-**Independent open focus issue:** direct X11 snapshots prove input focus and
-EWMH active window left the launching Konsole after `-L`, even though
-stacking passed. X11 experimental activation restored focus; `-o` reproduces
-the visible symptom; Wayland is reported but not instrumented. See
-[focus investigation](step1.8-launch-control-focus-evidence-2026-11-22.md).
+**Historical focus defect, now repaired for ordinary control return:** X11
+snapshots originally proved focus loss; the subsequent shared control-context
+implementation at `4be1b0b` passed native return-to-controller tests on X11
+and Wayland. The 2026-11-23 `-o panel` preferred-focus override remains an
+**open policy question**, not a passing preservation test. See the
+[original investigation](step1.8-launch-control-focus-evidence-2026-11-22.md)
+and [new q552u01 evidence](step1.8-q552u01-focus-and-closeout-evidence-2026-11-23.md).
 
 ## A. `-s` — read-only broker status
 
@@ -262,27 +266,32 @@ No `xdotool` product dependency, unguarded `EXIT` trap or persistent focus
 forcing. See [focus evidence](step1.8-launch-control-focus-evidence-2026-11-22.md)
 and [Codex next-step task DRAFT](step1.8-codex-control-context-focus-completion-TASK-DRAFT-2026-11-22.md).
 
-## Remaining validation and acceptance sequence
+## Remaining validation and acceptance sequence (updated 2026-11-23)
 
-1. **Baseline achieved:** Step 1.8 branch `5ab6ea6` on gmki91; q552u01
-   native Wayland, gmki91 KWin 6.7.6 X11 displayed/inactive `under`, viewer
-   `under`/`over` and default `over`, two correct refusals, broker ready;
-   full post-repair **1,094 Python / 169 JavaScript PASS**.
-2. **Next — Codex Phase A design review:** map shared early capture,
-   authenticated UUID/provenance, command-by-command mission focus policy,
-   competing user activity, native X11/Wayland API limits, no-restack guard,
-   bounded readback, separate return status and proposed tests. Obtain
-   maintainer decisions before substantive implementation.
-3. **Authorized code and validation:** only after design approval, produce
-   one small reviewable diff and targeted static/mock tests. Maintainer runs
-   native X11/Wayland focus revalidation and any installation/restart; no
-   X11-only product dependency or stacking algorithm rewrite.
-4. **Polish and close:** reconcile stale `ARCHITECTURE.md` `-L under` wording,
-   small `-s` capability display omission, isolated q552u01 desktop-3 RDP
-   failure and remaining close/recovery questions. Review code and evidence,
-   reconcile branch ancestry, and obtain maintainer acceptance/merge.
-   Step 1.9 remains paused until then. Second-host slim2 X11 coverage
-   is optional.
+1. **Decide preferred-focus and competing-activity policy.** Current `-o`
+   `panel` tests verified the preferred window's focus during initial layout
+   but the shared completion path then returned keyboard focus to the control
+   Konsole. This is a departure from the prior preferred-focus contract.
+   Decide explicitly whether controller return is now the approved policy,
+   and separately address potential overriding of subsequent user activation.
+   If a behavior change is required, authorize a narrow fix and repeat focused
+   unit/native checks. Do not assert this policy is accepted from the
+   controller's successful `echo` alone.
+2. **Review four local changes:** the 15-file POC SFTP parser installation
+   fix and its tests, development restart effect/readiness checks, and the
+   Step 1.9 installed-image completeness gate. Baseline complete suites are
+   **1,113 Python / 180 JavaScript PASS** and focused installer **54 PASS**;
+   rerun relevant checks only if further implementation changes require it.
+3. **Documentation/ancestry:** reconcile `ARCHITECTURE.md`'s obsolete
+   `-L under` policy and the decided focus policy. Review `main`'s `7fdd2cf`
+   versus Step 1.8 `4be1b0b`, merge-base `24cd67f`; both sides changed
+   architecture, while the uncommitted Step 1.9 draft also overlaps `main`.
+   Preserve existing history and do not rebase/merge without approval.
+4. **Maintainer acceptance/commit/push/PR/merge:** after policy and diff
+   review, accept the Step 1.8 native/automated evidence, commit and push,
+   prepare/review the PR and merge. Then close Step 1.8 and resume Step 1.9.
+   Optional human `-s` capability-display polish and earlier isolated remote
+   RDP failure are not demonstrated core Step 1.8 blockers.
 
 ## Non-goals and stop conditions
 
