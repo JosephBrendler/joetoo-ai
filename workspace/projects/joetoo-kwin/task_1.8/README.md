@@ -2,17 +2,20 @@
 
 <!-- Copyright 2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
-**Status (2026-11-22): ACTIVE; `-L under` implementation pushed at `73afa19`.**
-Read-only `-s` and `-i` have native Wayland/X11 smoke evidence. The corrected
-`-L under` now has **positive q552u01 Wayland native results** for displayed
-desktop 1 (including the protected XWayland Video Bridge) and inactive
-desktop 3 without switching away from desktop 1. A TigerVNC `under` and an
-SDL RDP `over` launch also completed locally. Post-repair focused tests pass;
-**slim2 native X11 `-L under`, full post-repair regression suites, and final
-maintainer acceptance remain pending.** `-L panel` is excluded. The accepted
-`main` reference is `7fdd2cf`; task branch merge-base was `24cd67f`, so
-ancestry must be reconciled at PR review, not during native testing. The
-former Step 1.8 was folded into Step 1.7; this is a separate active task.
+**Status (2026-11-22): ACTIVE.** Implementation commit `73afa19`;
+latest maintainer-pushed Step 1.8 evidence baseline `5ab6ea6`. Corrected
+`-L under` has successful displayed/inactive native Wayland on q552u01 and
+native X11 on gmki91, including protected-layer correctness and no desktop
+switch. VNC `under`, RDP `over`, omitted-layer default `over`, and two
+prelaunch refusal cases passed in gmki91 native tests; full post-repair
+**1,094 Python + 169 JavaScript PASS**. A **separate launch-control
+keyboard-focus defect** is now instrumented on X11 after `-L`, also visibly
+reported after `-o`, with Wayland suspected but not independently traced.
+The maintainer approves an early, shared control-context capture and
+**mission-/user-activity-conditional focus restoration design direction**;
+implementation, native revalidation and Step 1.8 acceptance are still
+pending. `-L panel` stays excluded. Branch ancestry against accepted
+`main` remains for PR review. Earlier Steps 1.1–1.7 stay closed.
 
 **Accepted foundation:** All Steps **1.1–1.7 are accepted and closed**.
 Step 1.5d's `-L over`/`-l` behavior is accepted
@@ -79,9 +82,9 @@ change Step 1.5d acceptance or constitute Step 1.8 final acceptance.
 - **Scope/remaining gaps:** the successful CLI invocations used the
   **project source tree** and the maintainer's POC broker/resident installer.
   Installed-CLI packaging/lookup for the newer read-only helper is not proven;
-  Step 1.9 owns packaging. Step 1.8 is **not accepted/merged**. Current
-  testing/evidence status and a baseline for the next slim2 gate are in the
-  [Wayland integration record](step1.8-q552u01-under-wayland-native-validation-2026-11-22.md).
+  Step 1.9 owns packaging. Step 1.8 is **not accepted/merged**. Current Wayland and native gmki91 X11 validation status is in the
+  [Wayland integration record](step1.8-q552u01-under-wayland-native-validation-2026-11-22.md)
+  and [X11 evidence](step1.8-gmki91-x11-native-validation-2026-11-22.md).
 
 ## One-shot lower: feasibility, implementation, native evidence (2026-11-22)
 
@@ -129,7 +132,8 @@ records these maintainer-operated results:
 - **Regression correction:** after 3 Python / 29 JS failures in a *pre-repair*
   full run, the post-repair focused suites returned **6/6** config,
   **20/20** broker and **44/44** initial-layout JS PASS; the single-recipe
-  suite previously passed **14/14**. A *full post-repair rerun* is pending.
+  suite previously passed **14/14**. A later gmki91 full post-repair run
+passed **1,094/1,094 Python and 169/169 JavaScript**.
 
 `RegistryStatus` on q552u01 reports synchronized observations,
 `recovery=ready`, `single_lower_protocol=1` and no uncertain managed
@@ -138,10 +142,14 @@ human capability summary; this small display defect does not negate the
 working protocol. Brief restart-time D-Bus introspection failure was not
 reproduced after the broker became ready; its exact cause is not established.
 
-**Next gate:** maintainer-operated **slim2 native KWin 6.7.6 X11** `-L
-under` compatibility, then full post-repair regression suites and final
-Step 1.8 review. These Wayland successes do **not** establish native X11
-acceptance.
+**Native X11 gate:** gmki91 KWin 6.7.6 X11 `under` displayed/inactive,
+VNC `under`, RDP `over`, and omitted-layer `over` PASS, plus full passing
+Python/JS suites. See [X11 evidence](step1.8-gmki91-x11-native-validation-2026-11-22.md).
+**Independent open focus issue:** direct X11 snapshots prove input focus and
+EWMH active window left the launching Konsole after `-L`, even though
+stacking passed. X11 experimental activation restored focus; `-o` reproduces
+the visible symptom; Wayland is reported but not instrumented. See
+[focus investigation](step1.8-launch-control-focus-evidence-2026-11-22.md).
 
 ## A. `-s` — read-only broker status
 
@@ -229,29 +237,52 @@ and clear unsupported/timeout/fail-closed results. Test `-L over`, configured
 the modified protocol. Avoid a complete repeat of historical RDP/VNC
 acceptance tests without a demonstrated need.
 
+## Shared control context and mission-completion focus (approved direction)
+
+This is **broader than `-o` / `-L`**, but it does **not** mean unconditional
+focus restoration after every command. Capture the launching graphical
+control context **as early as reliably possible** (exact KWin UUID, desktop,
+activation/focus context) before any focus-changing work. The active window
+is not necessarily the shell's own GUI control window: no guessed adoption
+for SSH, headless/TTY, background or ambiguous cases.
+
+At the mission-completion boundary, use an explicit semantic policy:
+restore the control window only if it survives, its initiating identity and
+desktop are still valid, the mission does not intentionally leave another
+window focused, and no competing user activity occurred. Preserve `-o`'s
+accepted preferred-focus intent until the maintainer explicitly decides
+otherwise. `-m`, `-d`, `-x`, `-r` and read-only operations each need a
+reviewed policy. A failed or skipped focus restoration is recorded separately
+from successful window registration/placement/stacking.
+
+KWin's `workspace.activeWindow` setter can also **raise** a window and
+switch desktops. Restoration must not silently destroy `under` peer order,
+protected-layer policy, desktop membership, or the user's later activation.
+No `xdotool` product dependency, unguarded `EXIT` trap or persistent focus
+forcing. See [focus evidence](step1.8-launch-control-focus-evidence-2026-11-22.md)
+and [Codex next-step task DRAFT](step1.8-codex-control-context-focus-completion-TASK-DRAFT-2026-11-22.md).
+
 ## Remaining validation and acceptance sequence
 
-1. **Baseline:** keep `task/joetoo-kwin-step1.8-cli-completion` at
-   maintainer-pushed `73afa19` while testing; inspect branch and dirty-state
-   before any installation. Accepted Steps 1.1–1.7 stay closed.
-2. **Next — slim2 native X11:** verify KWin 6.7.6 native X11, installed
-   broker/resident source consistency, recovery/observation readiness and
-   `single_lower_protocol=1`. Test a disposable `-L under` on an active
-   desktop, then (if safe) an inactive target desktop without a desktop/focus
-   switch, validating registered UUID/slot, frame and stack verification.
-   Include a small `-L over` regression. Do not retest every remote adapter
-   without a specific reason.
-3. **Full post-repair regression:** rerun complete Python and JS suites,
-   plus Bash syntax and applicable ShellCheck/`validate_scripts` checks;
-   capture exact totals and any failures. Do not promote the earlier focused
-   6/20/44 PASS into a full-suite PASS.
-4. **Small polish and review:** include `single_lower=1` in `-s` human
-   capability reporting if compatible, verify `-o` and related close/recovery
-   boundaries as needed, reconcile the earlier unresolved desktop-3 RDP
-   launch without inventing its cause, and update evidence/HANDOFF.
-5. **Maintainer acceptance and PR:** reconcile branch ancestry against
-   accepted `main`, review the complete diff/limitations, and merge only
-   upon maintainer authorization. Then resume Step 1.9.
+1. **Baseline achieved:** Step 1.8 branch `5ab6ea6` on gmki91; q552u01
+   native Wayland, gmki91 KWin 6.7.6 X11 displayed/inactive `under`, viewer
+   `under`/`over` and default `over`, two correct refusals, broker ready;
+   full post-repair **1,094 Python / 169 JavaScript PASS**.
+2. **Next — Codex Phase A design review:** map shared early capture,
+   authenticated UUID/provenance, command-by-command mission focus policy,
+   competing user activity, native X11/Wayland API limits, no-restack guard,
+   bounded readback, separate return status and proposed tests. Obtain
+   maintainer decisions before substantive implementation.
+3. **Authorized code and validation:** only after design approval, produce
+   one small reviewable diff and targeted static/mock tests. Maintainer runs
+   native X11/Wayland focus revalidation and any installation/restart; no
+   X11-only product dependency or stacking algorithm rewrite.
+4. **Polish and close:** reconcile stale `ARCHITECTURE.md` `-L under` wording,
+   small `-s` capability display omission, isolated q552u01 desktop-3 RDP
+   failure and remaining close/recovery questions. Review code and evidence,
+   reconcile branch ancestry, and obtain maintainer acceptance/merge.
+   Step 1.9 remains paused until then. Second-host slim2 X11 coverage
+   is optional.
 
 ## Non-goals and stop conditions
 
