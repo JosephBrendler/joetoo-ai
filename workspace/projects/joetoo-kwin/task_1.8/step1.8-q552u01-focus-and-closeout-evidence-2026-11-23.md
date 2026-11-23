@@ -72,7 +72,7 @@ PLACEMENT: succeeded
 
 **Scope:** this one-window `under` run had `lower_method=null`, so it tests configured launch and controller focus, **not** an independently verified relative lower beneath a peer. The desktop-5 test above covers inactive `under` peer behavior.
 
-## 4. Configured `-o` with preferred `panel` Konsole on displayed desktop 1 — POLICY GATE
+## 4. Configured `-o` with preferred `panel` Konsole on displayed desktop 1 — POLICY ACCEPTED
 
 Configuration used and validated with `./joetoo-kwin -c -f "$test_config"`:
 
@@ -109,7 +109,28 @@ nicely returned focus
 
 **Established:** the KWin initial-layout transaction successfully put focus on the new preferred window, *then* the subsequent mission-completion control restoration brought usable input focus back to the original control Konsole. The screenshot and typed `echo` support the latter. No independent after-restoration KWin UUID snapshot was supplied; do not claim one. The maintainer described the behavior positively as "nicely returned focus." This is evidence of **working controller return**, not evidence that previously accepted preferred-focus semantics are preserved.
 
-**Open contract/policy question:** `task_1.8/README.md` and `HANDOFF.md` previously required preserving intentional configured `-o` preferred focus and skipping restoration on competing user activity. At `4be1b0b`, `joetoo-kwin` invokes `control_focus_restore` at ordinary mission completion; resident `controlFocusFromBroker` activates the captured control window if it still exists, is not minimized/off-desktop, and is not already active. That path does not establish a mission-specific preferred-focus veto or a competing-user-activation veto. It can therefore override the just-verified preferred new Konsole, and may override a different window activated while a long launch is running. **Decide intended policy explicitly; if preferred focus must persist or user activation must win, authorize a narrow correction before Step 1.8 acceptance.** The successful `echo` does not decide the policy by itself.
+**Maintainer decision (2026-11-23, after reviewing this evidence):**
+The observed controller-return behavior is the **intended Version 1
+contract**. Configured `-o` still verifies the selected `panel`/`over`
+window's focus *during initial layout*, but that is not a commitment
+to leave the operator in that window after a serialized mission.
+The eligible original launch Konsole should regain usable keyboard
+focus at completion. All launch operations are intentionally serial,
+and blocking VNC/RDP authentication occurs on the launch desktop,
+not the remote layout desktop. No Version 1 workflow is designed
+to move the user among layout desktops. The prior proposed
+preferred-focus-preservation rule is superseded. Version 2 may
+reconsider navigation/focus if parallel multi-launch behavior
+makes it necessary.
+
+**Separate evidence limitation:** the code at `4be1b0b` does
+not establish a veto when a human explicitly focuses a different
+window while a mission is pending. The current best-effort
+controller restoration may supersede that activation. This test
+did not exercise such a race. No safeguard against competing
+user activity is claimed; review that limitation explicitly
+during PR acceptance. There was no change to source behavior
+after this policy decision.
 
 ## 5. Native managed-close and POC installation regression — PASS
 
@@ -138,7 +159,10 @@ Four uncommitted files at branch HEAD `4be1b0b`: `task_1.9/step1.9-packaging-inv
 
 ## 7. Remaining acceptance gates and scope boundaries
 
-1. **Policy:** decide whether mission completion should restore the control Konsole even after configured `-o` has chosen a preferred window; determine behavior on competing user/client activation and the source's absence of a dedicated veto. Record an explicit approved contract or implement and validate a narrow corrective guard. This is the **one identified substantive technical/policy gate**.
+1. **Policy disposition:** the maintainer approved Version 1
+   controller return even after a configured preferred focus target.
+   The competing-manual-activation veto remains unproved and is
+   documented as a limitation, not a verified feature.
 2. **Docs and Git:** review the four-file worktree diff, reconcile `ARCHITECTURE.md` and Step 1.9 draft with `main`; update CLI/manual policy wording as necessary; verify final branch tests if behavior is changed.
 3. **Maintainer-controlled transition:** only after review, accept, commit/push, prepare/review the PR, merge, close Step 1.8 and resume Step 1.9. `-L panel`, ebuild installed-image tests, KWin 6.8 migration, and broad RDP/VNC reacceptance are not Step 1.8 prerequisites.
 

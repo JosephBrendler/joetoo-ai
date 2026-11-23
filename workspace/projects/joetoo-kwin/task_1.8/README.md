@@ -2,21 +2,19 @@
 
 <!-- Copyright 2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
-**Status (2026-11-23): ACTIVE — focus restoration implemented and native
-X11/Wayland exercised; acceptance awaits one focus-policy decision and
-Git/documentation review.** HEAD `4be1b0b` on
-`task/joetoo-kwin-step1.8-cli-completion` (four local uncommitted changes).
-Corrected `-L under` and read-only `-s`/`-i` have positive native evidence
-on X11/Wayland. q552u01's full current-tree regression: **1,113 Python
-and 180 JavaScript PASS**; **54** focused installer tests PASS. Wayland
-`-L` and `-o` both returned focus to the original control Konsole with
-immediately usable keyboard input. **Qualification:** a displayed-desktop
-`-o` `panel` mission first verified focus on its preferred new Konsole,
-then the completion path restored the controller, contrary to the previously
-stated preference-preservation requirement. Competing-user-activation
-protection also remains unproven. The maintainer must decide the intended
-policy or authorize a focused correction before formal acceptance. `-L
-panel` remains unsupported. Step 1.9 packaging stays out of this task.
+**Status (2026-11-23): ACTIVE — Version 1 controller-return focus
+policy approved; native functional validation and regressions PASS;
+maintainer acceptance/PR/merge remain.** Corrected `-L under` and
+read-only `-s`/`-i` have positive native X11/Wayland evidence.
+q552u01's full current-tree regression: **1,113 Python and 180
+JavaScript PASS**, including **54 focused installer tests**.
+The original Konsole regained usable keyboard focus after Wayland
+`-L` and configured `-o`. The `-o panel` case also verified a
+preferred new Konsole during initial layout, then deliberately returned
+focus to the controller at mission completion under the maintainer's
+2026-11-23 decision. A distinct competing-user-activation veto has
+not been demonstrated; do not claim one. `-L panel` is still
+unsupported; production packaging remains Step 1.9 work.
 See [2026-11-23 native focus/closeout evidence](step1.8-q552u01-focus-and-closeout-evidence-2026-11-23.md).
 
 **Accepted foundation:** All Steps **1.1–1.7 are accepted and closed**.
@@ -250,14 +248,22 @@ activation/focus context) before any focus-changing work. The active window
 is not necessarily the shell's own GUI control window: no guessed adoption
 for SSH, headless/TTY, background or ambiguous cases.
 
-At the mission-completion boundary, use an explicit semantic policy:
-restore the control window only if it survives, its initiating identity and
-desktop are still valid, the mission does not intentionally leave another
-window focused, and no competing user activity occurred. Preserve `-o`'s
-accepted preferred-focus intent until the maintainer explicitly decides
-otherwise. `-m`, `-d`, `-x`, `-r` and read-only operations each need a
-reviewed policy. A failed or skipped focus restoration is recorded separately
-from successful window registration/placement/stacking.
+**Approved Version 1 policy (maintainer, 2026-11-23):** The
+workflow is serialized, and blocking VNC/RDP authentication remains
+on the launching desktop. Layout's preferred `panel`/`over` focus
+is only an intermediate, bounded initial-layout result. At normal
+mission completion the CLI attempts to return keyboard focus to the
+original eligible controller, including after configured `-o`;
+it does not take the operator to target desktops. This intentionally
+supersedes the former proposed rule to retain a newly focused `-o`
+window at mission completion. Unavailable, missing, minimized or
+off-desktop controllers fail/skip without changing the original
+mission's return status. The current code does not have an
+independently verified competing-manual-activation veto; a different
+active window may be superseded by controller return. Record this
+as a Version 1 limitation, not an established safeguard. Parallel
+multi-desktop navigation and more nuanced user-activity policy can
+be reconsidered in Version 2.
 
 KWin's `workspace.activeWindow` setter can also **raise** a window and
 switch desktops. Restoration must not silently destroy `under` peer order,
@@ -268,15 +274,13 @@ and [Codex next-step task DRAFT](step1.8-codex-control-context-focus-completion-
 
 ## Remaining validation and acceptance sequence (updated 2026-11-23)
 
-1. **Decide preferred-focus and competing-activity policy.** Current `-o`
-   `panel` tests verified the preferred window's focus during initial layout
-   but the shared completion path then returned keyboard focus to the control
-   Konsole. This is a departure from the prior preferred-focus contract.
-   Decide explicitly whether controller return is now the approved policy,
-   and separately address potential overriding of subsequent user activation.
-   If a behavior change is required, authorize a narrow fix and repeat focused
-   unit/native checks. Do not assert this policy is accepted from the
-   controller's successful `echo` alone.
+1. **Focus-policy decision recorded.** Controller return after
+   serialized Version 1 launches, including `-o panel`, is the
+   intended result. Do not misclassify initial-layout preferred
+   focus followed by control restoration as a failure. Competing
+   manual activation lacks a dedicated veto; record the limitation,
+   not a fictitious passing test. No behavior change is authorized
+   or required by this decision.
 2. **Review four local changes:** the 15-file POC SFTP parser installation
    fix and its tests, development restart effect/readiness checks, and the
    Step 1.9 installed-image completeness gate. Baseline complete suites are

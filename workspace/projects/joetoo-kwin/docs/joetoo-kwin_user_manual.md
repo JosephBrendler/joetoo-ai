@@ -169,7 +169,12 @@ separate from explicit layers and logical slots. `-L over` uses the graphical
 region and raises only its new exact window once, without reflowing, recascading
 or changing existing windows. A single `over` is not a fifth panel. Launching a group does not automatically
 switch the current desktop; preferred focus is considered only when the target
-desktop is displayed.
+desktop is displayed. Under the serialized Version 1 workflow, the
+preferred window may receive temporary verified focus during initial
+layout, but an eligible original launch Konsole is restored to keyboard
+focus after the command finishes. This is intentional even for an `-o`
+`panel`/`over` group. Blocking viewer authentication occurs on the
+launching desktop, not by navigating among target desktops.
 
 Logical slots reserve identity, not screen rectangles. `-o` derives per-desktop
 slots in recipe order; `-L` asks the registry for a safe unused slot, including

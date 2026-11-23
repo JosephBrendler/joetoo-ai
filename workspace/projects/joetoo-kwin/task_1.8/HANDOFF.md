@@ -2,24 +2,32 @@
 
 <!-- Copyright 2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
-**Status (2026-11-23): ACTIVE — native functional and regression evidence
-collected; final focus-policy decision and maintainer acceptance pending.**
-Current branch `task/joetoo-kwin-step1.8-cli-completion` at pushed
-`4be1b0b` (`fix restore focus step1.8`), plus four uncommitted local files.
-Native X11/Wayland `-L under`, CLI `-s`/`-i`, configured `-o`, and
-managed-close recovery checks have positive evidence. q552u01's latest full
-suites: **1,113 Python + 180 JavaScript PASS**, plus **54** focused POC
-installer tests PASS. The original Konsole regained usable keyboard focus
-on Wayland after both `-L` and `-o`.
+**Status (2026-11-23): ACTIVE — Version 1 control-return focus policy
+explicitly approved; native functional/regression validation complete;
+maintainer acceptance and PR review pending.** On the
+`task/joetoo-kwin-step1.8-cli-completion` branch, native X11/Wayland
+`-L under`, read-only `-s`/`-i`, configured `-o`, and managed-close
+checks have positive evidence. q552u01 reported **1,113 Python and 180
+JavaScript PASS**, including **54 focused POC installer tests**. Both
+Wayland `-L` and `-o` returned usable keyboard focus to the invoking Konsole.
 
-**OPEN acceptance decision:** a displayed-desktop configured `-o` `panel`
-launch successfully verified its preferred new Konsole, but the shared
-completion path then activated the *original control Konsole*. This
-conflicts with the prior requirement to preserve intentional preferred
-focus; the current restore path also lacks proven competing-user-activation
-protection. The maintainer must either authorize a documented policy change
-(with its safety implications reviewed) or authorize a narrow guard/fix and
-focused revalidation. **Do not mark Step 1.8 accepted yet.**
+**Maintainer policy decision, 2026-11-23:** For serialized Version 1
+launches, returning focus to the eligible original control Konsole at
+mission completion is the *intended* result, including after a configured
+`-o` `panel`/`over` window was provisionally selected and focused by
+initial layout. Layout preferred focus is an intermediate transaction
+outcome, not the final user-navigation destination. VNC/RDP blocking
+authentication is handled on the launch desktop; Version 1 does not
+move the operator among target desktops during the serial workflow.
+The earlier proposed final preferred-focus preservation rule is superseded.
+
+**Known limit:** the current restoration path does not independently
+distinguish a competing manual activation during the mission; a surviving,
+eligible original controller can be raised/reactivated even after another
+window becomes active. Do not claim a tested user-activity veto. Any stronger
+competing-activity or parallel cross-desktop navigation policy is a
+separate future design decision. **Formal Step 1.8 acceptance/merge has
+not yet been recorded.**
 
 **New evidence:** [2026-11-23 q552u01 focus, managed-close and regression
 record](step1.8-q552u01-focus-and-closeout-evidence-2026-11-23.md), with
@@ -42,10 +50,12 @@ The **new** Step 1.8 is not a reopening or re-acceptance of either step.
   scope/documentation update). The task branch's actual merge-base is
   `24cd67f`; reconcile ancestry when preparing the Step 1.8 PR, not by an
   unreviewed rebase during native testing.
-- **Active branch:** `task/joetoo-kwin-step1.8-cli-completion`, pushed
-  HEAD **`4be1b0b`** (focus restoration), following `1747017`, `5ab6ea6`
-  and `73afa19`. Four additional files are locally modified and uncommitted
-  as of the 2026-11-23 maintainer status review.
+- **Active branch:** `task/joetoo-kwin-step1.8-cli-completion`;
+  focus restoration was committed at `4be1b0b`, following `1747017`,
+  `5ab6ea6` and `73afa19`. Later evidence/installer/restart edits were
+  reviewed, applied and pushed by the maintainer on 2026-11-23; record the
+  exact branch tip in the final PR review rather than treating `4be1b0b`
+  as the final HEAD.
 - **Authoritative design:** [ARCHITECTURE §9](../ARCHITECTURE.md#9-cli-contract-accepted-behavior-and-proposed-step-18-completion),
   [§11](../ARCHITECTURE.md#11-numbered-implementation-and-review-gates),
   and [§12](../ARCHITECTURE.md#12-version-2-considerations).
@@ -59,49 +69,46 @@ The **new** Step 1.8 is not a reopening or re-acceptance of either step.
   [corrected Wayland native validation](step1.8-q552u01-under-wayland-native-validation-2026-11-22.md),
   [gmki91 X11 native validation](step1.8-gmki91-x11-native-validation-2026-11-22.md),
   [launch-control focus loss/restoration experiments](step1.8-launch-control-focus-evidence-2026-11-22.md),
+  and [2026-11-23 q552u01 closeout evidence](step1.8-q552u01-focus-and-closeout-evidence-2026-11-23.md).
+- **Accepted predecessor evidence:** [Step 1.5 archive](../archive/task_step1.5/README.md),
+  [Step 1.6 closure](../archive/task_step1.6/README.md), and
+  [Step 1.7 closure](../archive/task_step1.7/README.md) are completed history,
+  not active implementation instructions.
+
 ## Current next actions — 2026-11-23
 
-1. **Focus-policy decision is the only identified substantive acceptance
-   blocker.** Current `-o` `panel` initially activated its preferred new
-   Konsole (UUID `d84c39fe-64cd-4d58-b58b-860565bfd693`), then the
-   global completion path requested control restoration, and the maintainer
-   typed in the original Konsole without clicking. Determine whether
-   returning to the controller after `-o` is now explicitly accepted, or
-   whether `-o` should retain intentional preferred focus. Separately review
-   competing user/client activation: source does not establish a distinct
-   user-intent veto before its final KWin activation. Record the policy
-   disposition; if code changes are needed, apply narrowly and rerun focused
-   tests/native revalidation. Do not reinterpret passing launch/stacking
-   transactions as failed merely because post-mission focus policy is open.
-2. **Review and incorporate pending four-file local diff:**
+1. **Policy resolved:** the maintainer explicitly approved returning
+   keyboard focus to the eligible original launch Konsole at the end of
+   each serialized Version 1 launch. The new `-o` `panel` Konsole's
+   preferred-focus verification remains valid as an *initial-layout*
+   result; controller restoration afterward is intentional, not a defect.
+   The source lacks a competing-manual-activation veto; preserve that as
+   an explicit evidence limitation rather than claiming it was tested.
+   There is no newly authorized focus implementation change.
+2. **Review the four-file SFTP/operations update now pushed by the maintainer:**
    `tools/joetoo-kwind-install-poc`, `tests/test_openrc_user_setup.py`,
    `tools/restart_joetoo-kwind`, and the Step 1.9 packaging-inventory draft.
-   The POC now installs/verifies/archives `joetoo_kwin_sftp_target.py` (15
-   user-owned files); Step 1.9 retains the independent production `${ED}`
-   installed-tree completeness/isolation gate. Development restart now checks
-   `joetoo_managed_close` and polls KWinBridge/KWinCloseNative D-Bus readiness.
-   The already-loaded branch and service readiness passed on q552u01; the
-   restart helper's automatic-load branch was not separately tested.
+   The POC installs/verifies/archives `joetoo_kwin_sftp_target.py` (15
+   user-owned files); production `${ED}` completeness/isolation remains
+   Step 1.9 work. Development restart checks the `joetoo_managed_close`
+   effect and polls KWinBridge/KWinCloseNative D-Bus readiness. The
+   already-loaded/readiness path passed; automatic loading was not separately
+   tested. No unreviewed product redesign is requested.
 3. **Documentation and review:** reconcile `ARCHITECTURE.md`'s stale `-L
    under` text and the chosen preferred-focus policy; retain Step 1.8 native
    evidence links. Human `-s` display of `single_lower=1` is optional polish.
    One isolated earlier desktop-3 RDP failure was not attributed to stacking;
    do not treat unverified remote connectivity as a Step 1.8 gate.
-4. **Reconcile branch ancestry:** `main` at `7fdd2cf`, Step 1.8 branch at
-   `4be1b0b`, merge-base `24cd67f`. `main`'s one intervening commit touches
-   `ARCHITECTURE.md` and three Step 1.9 docs. Both sides changed
-   `ARCHITECTURE.md`; the local Step 1.9 packaging-inventory edit also
-   overlaps `main`. Compare deliberately; do not assume conflict-free merge
-   or perform an unreviewed rebase.
-5. **After explicit maintainer policy and technical acceptance:** review
-   final diff and evidence, commit/push authorized changes, prepare/review the
-   PR and merge. On accepted merge, close Step 1.8 and resume Step 1.9.
-
-  and **[2026-11-23 q552u01 closeout evidence](step1.8-q552u01-focus-and-closeout-evidence-2026-11-23.md)**.
-- **Accepted predecessor evidence:** [Step 1.5 archive](../archive/task_step1.5/README.md),
-  [Step 1.6 closure](../archive/task_step1.6/README.md), and
-  [Step 1.7 closure](../archive/task_step1.7/README.md) are completed history,
-  not active implementation instructions.
+4. **Reconcile branch ancestry:** `main` was `7fdd2cf` at the review
+   checkpoint; merge-base `24cd67f`. Focus implementation `4be1b0b`
+   predates subsequent maintainer-pushed edits; compare the current branch
+   tip, not that historical commit, with `main` before PR. Both sides
+   changed `ARCHITECTURE.md` and the Step 1.9 draft is also in scope.
+   Review conflicts deliberately; do not rewrite history unreviewed.
+5. **Next maintainer gate:** review the final diff, reconcile the PR
+   against `main`, explicitly accept Step 1.8, then commit/push any remaining
+   approved documentation and prepare/review/merge the PR. Close Step 1.8
+   and resume Step 1.9 only after accepted merge.
 
 **Bounded new behavior:** implement read-only `-s` using existing broker
 `RegistryStatus()`, read-only `-i MANAGED_ID` using existing `GetManaged()`, and

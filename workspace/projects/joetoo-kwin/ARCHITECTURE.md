@@ -254,6 +254,23 @@ performed to realize focus. After initialization, KWin and the user control
 raising, movement, resizing, focus and desktop assignment without continuous
 layout restoration.
 
+**Version 1 mission-completion control focus (maintainer decision,
+2026-11-23):** The preferred `panel`/`over` focus chosen for configured
+initial layout is a temporary, verified layout outcome, not the operator's
+final focus destination. Launch operations are serialized; blocking
+VNC/RDP authentication occurs on the launch desktop. At normal CLI
+mission completion, an eligible original control Konsole is restored
+to usable keyboard focus, including following configured `-o`, with
+no automatic move to a target layout desktop. This supersedes the
+earlier proposed preference-preservation requirement. The request
+is best-effort and must not change the original mission return code
+or select a new arbitrary window. The current implementation has
+no independent veto for user activation of another window during
+a pending mission; such activation may be superseded. Do not
+claim that case is protected or tested. More complex cross-desktop
+navigation/parallel-launch focus policy belongs to future Version 2
+design, not the Version 1 acceptance contract.
+
 ### Logical association, duplicate protection and actual state
 
 Positive registration preserves original intended `(desktop, slot)` in the
@@ -488,7 +505,7 @@ Step 1.7 decisions are not Version 2 deferrals.
 | `-c [-f CONFIG]` | **Accepted 1.5a:** Validate config and display a colorized dry-run plan without launching |
 | `-f FILE` | **Accepted 1.5a:** Explicit configuration precedence, no implicit symlink edits |
 | `-o [-f CONFIG]` | **Accepted 1.5c:** Confirm then launch and positively register/position managed windows |
-| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | **Accepted 1.5d(#):** Confirm then launch one managed window; # layer `over` implemented 1.5, `under` active 1.8; no live-desktop reflow |
+| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | `over` accepted in 1.5d; `under` implemented and native-validated in Step 1.8 (acceptance pending); `panel` unsupported; no live-desktop reflow |
 | `-m l`, `-m r` | **Accepted 1.5b:** Two-panel active-window geometry on current desktop |
 | `-m DESKTOP` | **Accepted 1.5b:** Change active window's desktop, preserve geometry |
 | `-m DESKTOP l (or r)` | **Accepted 1.5b:** Two-panel placement on specified desktop |
@@ -498,38 +515,36 @@ Step 1.7 decisions are not Version 2 deferrals.
 | `-x` | **Accepted 1.6:** confirmed fixed-set progressive retirement of authenticated absences and verified graceful closes; retain failed/unresolved entries |
 | `-d MANAGED_ID` | **Accepted 1.6:** confirmed graceful close of one authenticated managed window; record/slot retained |
 | `-l` | **Accepted Step 1.7:** List broker-managed windows read-only, one record per fixed-width table row, including stable managed ID, desktop/slot, presence, placement and UUID (Step 1.5d) |
-| `-i MANAGED_ID` | List information about one managed window, not implemented in Step 1.5d |
-| `-s` | Show status of the broker itself, not implemented in Step 1.5d |
+| `-i MANAGED_ID` | Step 1.8 implemented/native-validated read-only detail for one managed record (acceptance pending) |
+| `-s` | Step 1.8 implemented/native-validated read-only broker status (acceptance pending) |
 | `-S` | **Accepted Step 1.7:** export a complete verified managed arrangement as private last-good launch intent with timestamped history; refuse incomplete saves |
 | `-r` | **Accepted Step 1.7:** preflight and confirm restore of saved recipes as **new** managed instances, never adopting old UUIDs or PIDs |
 | `-v`, `-q` | **Accepted 1.5a:** Adjust verbosity using established joetoo CLI conventions |
 
-**Step 1.5d CLI decisions (maintainer, revised 2026-11-11).** The `-L` operands
-are the same logical fields as one `-o` recipe, but supplied as **separate
-positional arguments**, not a single pipe-delimited argument:
-`DESKTOP PROGRAM MODE TARGET [LAYER]`. **Only `over` is implemented for `-L`**:
-an omitted LAYER defaults to `over`; explicit `over` is supported; explicit
-`panel` or `under` must be rejected before launch with a helpful diagnostic
-such as `-L: layer 'panel' is not implemented yet; use 'over' or omit LAYER`.
-Do not promise a release/version for unsupported layers. Crucially, `-o`
-retains its accepted `under`/`panel`/`over` layers and implicit `panel` default.
+**Step 1.5d CLI decisions, refined in Step 1.8.** `-L` uses the same
+logical fields as one `-o` recipe, supplied as **separate positional
+arguments**: `DESKTOP PROGRAM MODE TARGET [LAYER]`. An omitted layer
+still defaults to `over`; both explicit `over` and the Step 1.8 one-shot
+`under` are implemented and native-validated on X11/Wayland. Only `panel`
+remains unsupported for `-L`, with refusal before launch. Configured `-o`
+retains its `under`/`panel`/`over` classifications and implicit `panel`
+default. Step 1.8 formal acceptance/merge is recorded separately.
 
 `-L` launches **one** new window, using the existing program/mode/target
 validators, graphical-region geometry, confirmation, broker reservation,
 positive exact-UUID registration, placement and cleanup machinery. It chooses
 an unused logical slot without modifying any existing or retained reservation;
 there is no sixth SLOT operand. It places the new window on its requested
-desktop and performs a bounded, verified **one-shot raise** so it appears above
-existing windows, without a permanent keep-above rule. It must not change the
-geometry, ownership or identity of existing managed **or unmanaged** windows,
-and must not perform live-desktop panel reflow, peer recascading or a new
-application-independent managed-ID geometry transaction. Before launching or
-contacting a remote endpoint, report the specific invalid field/requirement
-(desktop/program/mode/target/layer), safely redacting sensitive input.
-Preserve already-accepted `-o` behavior and fail-closed Busy/source/identity
-requirements. If a one-shot raise cannot be positively targeted and verified
-on both KWin backends, report the constraint instead of adopting a different
-window or weakening ownership.
+desktop with **one-shot verified stacking**: `over` raises only the new exact
+UUID; `under` lowers it beneath participating normal-layer peers, or raises
+eligible peers in preserved order when the target desktop is inactive.
+Neither creates persistent KeepAbove/KeepBelow. Protected/hidden/non-normal
+peers do not define the `under` participation order. Existing peer geometry,
+ownership and UUID identity are preserved; no live panel reflow or recascading
+is permitted. Validate the operation before application/network side effects,
+redact sensitive input, and fail closed if identity, source, placement or
+stacking readback cannot be verified. Do not silently substitute `over` for
+an unsupported `under` attempt.
 
 Live reflow (needed to `panel` an additional window) beyond accepted `-L` behavior is deferred; see
 [Version 2 Considerations](#12-version-2-considerations) and the archived
@@ -700,6 +715,15 @@ version 1 work, **not** deferred to Version 2.
 7. **Non-KWin backends:** possible separate evaluation of shared Bash
    planning for LXQt/GNOME, without promising KWin-specific identity/movement
    support or version 1 portability.
+8. **User focus changes during a mission (accepted Version 1 limitation):**
+   An operator may activate another window while a launch is in progress.
+   Managed launch/stacking actions normally use verified window UUIDs and
+   guard focus-sensitive stages; active-window commands such as `-m` instead
+   select whichever window is active when captured. An intervening click may
+   change such a command's target, interrupt a guarded layout step, or be
+   overridden by final restoration of the originating Konsole's focus.
+   The maintainer accepts this limitation for Version 1 (2026-11-23).
+   Consider stronger activity-aware coordination in Version 2 if needed.
 
 ### Open Version 2 decisions (maintainer)
 
