@@ -35,6 +35,12 @@ project directory. The Step 1 CLI and planner remain archived prototypes.
   `-d` / `-x`, accepted and merged by
   [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32) at `a6999e2`.
   Entire task directory and supporting originals were retained.
+- [Step 1.8 accepted record](task_step1.8/README.md),
+  [archive HANDOFF](task_step1.8/HANDOFF.md), and
+  [PR #36 merge-closure evidence](task_step1.8/step1.8-pr36-merge-closure-2026-11-23.md) —
+  accepted `-s`, `-i MANAGED_ID`, and one-shot `-L under`, with native
+  X11/Wayland evidence, controller-return focus policy, and explicit Version 1
+  limitations. Merged 2026-11-23 at `67c054c`; entire task directory retained.
 
 Archived evidence, screenshots, example configurations, scripts, patch builders
 and command transcripts retain their historical meaning. Original filenames
@@ -47,5 +53,6 @@ or external configuration symlinks referring to `task_step1.5/` may need an
 explicit path adjustment; this transition does not modify user profiles.
 
 Current work is indexed by the [Step 1.9 HANDOFF](../task_1.9/HANDOFF.md)
-and [task README](../task_1.9/README.md). [Step 1.7](task_step1.7/README.md)
-is accepted/merged and archived; archival records are not active permission.
+and [task README](../task_1.9/README.md). [Step 1.7](task_step1.7/README.md) and
+[Step 1.8](task_step1.8/README.md) are accepted/merged and archived;
+archival records are not active permission.

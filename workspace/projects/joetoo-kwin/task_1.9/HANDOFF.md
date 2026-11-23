@@ -1,62 +1,74 @@
 # Step 1.9 — Version 1 packaging and integration HANDOFF
 
-**Status (2026-11-21): IN PROGRESS, PAUSED for proposed new Step 1.8 CLI completion.**
-The existing Step 1.7 **includes the former Step 1.8** and remains fully
-accepted (merged [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33),
-`df118da`). The newly proposed **Step 1.8** is a distinct, post-1.7 task:
-read-only `-s`, `-i MANAGED_ID` and a verified one-shot `-L under`. `-L panel`
-and live panel reflow remain Version 2, not a Version 1 release gate.
+**Status (2026-11-23): ACTIVE — Step 1.8 accepted/merged; source
+stabilization and Gentoo packaging remain.** This is the **sole active
+joetoo-kwin task dispatcher**. The new Step 1.8 CLI completion (`-s`,
+`-i MANAGED_ID`, and one-shot `-L under`) was merged through
+[PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36) at
+`main` `67c054c`. Its [archived HANDOFF](../archive/task_step1.8/HANDOFF.md),
+[task README](../archive/task_step1.8/README.md) and
+[merge closure](../archive/task_step1.8/step1.8-pr36-merge-closure-2026-11-23.md)
+preserve the acceptance evidence. Do not recreate the Step 1.8 branch or
+repeat its native acceptance tests for administrative closure.
 
-## Source, authority, and current evidence
+## Source, scope, evidence and authority
 
-- **Repository/project:** `JosephBrendler/joetoo-ai`,
-  `workspace/projects/joetoo-kwin/`; last confirmed `main` baseline **`24cd67f`**
-  (maintainer pushed `release/README.md`). Refresh actual HEAD and worktree
-  before starting another implementation.
-- **Design:** [ARCHITECTURE §9/§11/§12](../ARCHITECTURE.md), including the new
-  Step 1.8 proposed acceptance boundary and historical Version 2 separation.
-- **Packaging scope:** [task README](README.md) and the
-  [revised inventory/contract](step1.9-packaging-inventory-contract-REVISED-DRAFT.md).
-  The project-root [`MANIFEST`](../MANIFEST) is the authoritative curated
-  source-to-source file list; [`tools/joetoo-kwin-stage-upstream`](../tools/joetoo-kwin-stage-upstream)
-  is the human-run transfer/checker.
-- **Actual progress:** source MANIFEST and staging script committed; all eight
-  colocated config companions, three inactive `.conf` examples, and
-  `release/README.md` authored/committed. Prior upstream staging existed,
-  **but no post-`24cd67f` upstream parity or tarup success is claimed**.
-- **Open packaging work:** source/installed libexec and OpenRC service paths;
-  human maintainability-comment review of every shipped Bash, OpenRC,
-  eselect, Python and JS script (including sourced/imported modules, excluding
-  test fixtures); final headers/provenance and relative-links audit; complete
-  transfer validation; `tarup`, ebuild/install image and native package QA.
-- **Version boundary:** initial source package may target accepted KWin **6.7.6**;
-  KWin 6.8 compatibility work is not a prerequisite for this 0.1.0 release.
+- **Repository:** `JosephBrendler/joetoo-ai`;
+  `workspace/projects/joetoo-kwin/`. Accepted source baseline
+  `main` at `67c054c` after PR #36. A separate documentation-only
+  archive-transition candidate was committed as `48dc17a` on
+  `task/joetoo-kwin-step1.8-archive-step1.9-resume` and is awaiting
+  maintainer review/merge. Refresh actual HEAD before any new work.
+- **Design:** [ARCHITECTURE §9/§11/§12](../ARCHITECTURE.md); the
+  [project status](../README.md); [Step 1.8 archived acceptance](../archive/task_step1.8/README.md).
+- **Detailed packaging scope:** [Step 1.9 README](README.md) and
+  [revised packaging inventory/contract](step1.9-packaging-inventory-contract-REVISED-DRAFT.md).
+  The latter remains a **revised draft** until outstanding installed-image,
+  optional native-X11 plugin and ebuild choices are verified/settled.
+  Source-to-source selection is the project-root [`MANIFEST`](../MANIFEST);
+  the human-run staging/checking tool is
+  [`tools/joetoo-kwin-stage-upstream`](../tools/joetoo-kwin-stage-upstream).
+- **Completed preparation:** MANIFEST and staging script committed; eight
+  colocated configuration READMEs, three inactive configuration examples,
+  `release/README.md`, initial licensing metadata and the native close
+  sources are in the development checkout. No current upstream parity,
+  accepted tarball, production ebuild or installed-image QA is claimed.
+- **Reserved operations:** the maintainer controls authorization, commits,
+  PR merges, native KWin/service tests, integration into `joetoo-upstream`
+  and `joetoo`, `tarup`, Portage builds and publication. Neither this
+  HANDOFF nor the archive permits an agent to modify protected repos or
+  administer hosts.
 
-## Current next actor and stop boundary
+## Current next actor and ordered actions
 
-**Next actor: maintainer.** Review this proposed revised Version 1 scope, then
-create/authorize a *new* `task/joetoo-kwin-step1.8-cli-completion` branch from
-current accepted `main`. Write its bounded `task_1.8/README.md` and
-`task_1.8/HANDOFF.md` before implementation, linking to ARCHITECTURE rather
-than copying the historical acceptance record. No Step 1.8 code or native
-operation is authorized merely by this Step 1.9 HANDOFF.
+**Next actor: maintainer.** Review and merge the documentation-only
+Step 1.8 archive/Step 1.9 reactivation candidate, then authorize the
+separate Step 1.9 implementation/release-stabilization branch from the
+new accepted `main`. Keep the already approved scope and do not introduce
+a new functional CLI milestone.
 
-**When new Step 1.8 is accepted/merged**, return to Step 1.9: refresh the
-MANIFEST, complete packaging-path integration and human comment review, stage
-curated source to `joetoo-upstream`, perform provenance/tarup checks, then
-build and inspect the `joetoo` ebuild. These are separate maintainer gates.
+1. **Reconcile source and installed runtime inventory:** include the
+   accepted Step 1.8 `libexec/joetoo_kwin_readonly.py`, verify sibling imports
+   and all SFTP/RDP/VNC/close/recovery helpers, and repair CLI source-versus-
+   installed lookup and both OpenRC `JOETOO_KWIND_EXEC` defaults.
+2. **Human maintainability and provenance review:** inspect comments of
+   every shipped Bash/OpenRC/eselect/Python/JS script, plus licensing,
+   headers, third-party attribution and relevant C++ provenance. Use focused
+   syntax/regression checks for any corrections; avoid unrelated rewrites.
+3. **Curate and validate source transfer:** human-run `--plan`, `--apply`,
+   `--verify`/`--release-check`, inspect stale/unlisted files and links,
+   review the source archive and run `tarup` only when ready.
+4. **Create and validate the production ebuild:** inspect `${ED}` against
+   the source-to-installed contract in an isolated fixture, including an
+   SFTP restore intent; decide the optional legacy native-X11 effect policy,
+   then run maintainer-operated installed-path native Wayland/X11 smoke QA.
 
-`joetoo-upstream` and `joetoo` remain advisory-only for AI agents. No agent
-write/commit, `tarup`, `emerge`, host administration, service restart or effect
-load is authorized by this handoff. The maintainer owns commits, PRs, merges,
-protected repository integrations and native acceptance.
+## Completion and stop boundary
 
-## Completion boundary
-
-Step 1.9 is complete only after the newly accepted CLI contract is packaged,
-maintainability comments and source provenance are human reviewed, install
-paths/dependencies/permissions and OpenRC user lifecycle are verified, and the
-maintainer accepts the resulting source archive and Gentoo 0.1.0 package.
-Preserve Step 1.7 safety and history. Do not expand the release to KWin 6.8,
-Version 2 panel insertion/reflow, new remote protocols, or a redundant full
-RDP/VNC regression matrix absent an actual change requiring it.
+The first target remains `dev-util/joetoo-kwin-0.1.0` with an accepted
+KWin 6.7.6 development baseline. KWin 6.8, Version 2 panel reflow,
+parallel remote authentication, new viewer clients and general focus-policy
+redesign are **not** release prerequisites. No release succeeds by merely
+passing source-tree or POC-installer tests; actual source provenance,
+`tarup`, Portage installed-image completeness, path/isolation and appropriate
+native package smoke checks require separate maintainer verification.

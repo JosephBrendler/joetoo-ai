@@ -1,11 +1,19 @@
 # Step 1.9 — joetoo-kwin 0.1.0 source-release and Gentoo packaging contract
 
-**REVISED DRAFT — maintainer decisions incorporated, 2026-11-20**  
-**Accepted development baseline:** `JosephBrendler/joetoo-ai`, `main` at `0ec0234e589ce2b42bbfcfb6ebcec0207b627d60` (PR #34).  
-**Intended first Portage package:** **`dev-util/joetoo-kwin-0.1.0`**.  
-**No code, repository, package, tarball, host, or live user configuration has been modified by this review.**
+**REVISED DRAFT — release and installed-image verification remain open (2026-11-23).**
+**Accepted development baseline:** `JosephBrendler/joetoo-ai`, `main` at
+`67c054c` ([Step 1.8 PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36)).
+**Intended first Portage package:** `dev-util/joetoo-kwin-0.1.0`.
 
-This supersedes the earlier *Step 1.9 — Version 1 packaging inventory and installation contract (DRAFT)*. It reflects the curated source organization on `joetoo-ai/main` at `24cd67f` (2026-11-21), and the maintainer's proposal to **pause Step 1.9 for a new Step 1.8 CLI-completion task**. “Approved” below means a decision stated by the maintainer, subject to indicated verification—not permission for an agent to modify protected `joetoo-upstream`/`joetoo` repositories. The human maintainer retains integration, `tarup`, ebuild and publication authority.
+This contract retains the maintainer's earlier Step 1.9 release decisions
+and supplements them with the accepted Step 1.8 CLI implementation.
+The former Step 1.8 pause is over; its
+[archived evidence](../archive/task_step1.8/README.md) and
+[merge closure](../archive/task_step1.8/step1.8-pr36-merge-closure-2026-11-23.md)
+are references, not new implementation gates. "Settled" or "approved"
+designates a maintainer decision, not evidence of successful installed-tree,
+provenance, tarball or package QA. The human maintainer retains integration,
+`tarup`, ebuild and publication authority.
 
 ## 1. Release model — two phases, not direct joetoo-ai-to-host deployment
 
@@ -36,7 +44,7 @@ production Gentoo systems (files owned by Portage, no HOME mutations)
 
 ### Phase 1 — source stabilization, human upstream integration and `tarup`
 
-1. **Within `joetoo-ai` (reviewable candidate):** preserve the accepted 1.7 behavior; keep the committed project-root `MANIFEST`, `tools/joetoo-kwin-stage-upstream`, per-role colocated READMEs, config examples and `release/README.md` current. Resolve installed runtime helper paths without breaking development operation. **New source-stabilization requirement:** a maintainer/human must review the maintainability comments for *every shipped script* (Bash CLI and sourced helpers, OpenRC/eselect, Python helpers and resident JavaScript), whether marked executable or loaded as a module; exclude test fixtures and discarded development tools. Correct outdated/opaque comments without unrelated logic rewrites; run appropriate static and focused regression checks. Complete final copyright/provenance audit separately. **Step 1.9 is paused pending acceptance of the new Step 1.8 CLI completion** (`-s`, `-i`, `-L under`).
+1. **Within `joetoo-ai` (reviewable candidate):** preserve the accepted 1.7 behavior; keep the committed project-root `MANIFEST`, `tools/joetoo-kwin-stage-upstream`, per-role colocated READMEs, config examples and `release/README.md` current. Resolve installed runtime helper paths without breaking development operation. **New source-stabilization requirement:** a maintainer/human must review the maintainability comments for *every shipped script* (Bash CLI and sourced helpers, OpenRC/eselect, Python helpers and resident JavaScript), whether marked executable or loaded as a module; exclude test fixtures and discarded development tools. Correct outdated/opaque comments without unrelated logic rewrites; run appropriate static and focused regression checks. Complete final copyright/provenance audit separately. **Step 1.8 is accepted/merged**; include and package `-s`, `-i` and `-L under` from the accepted baseline.
 2. **Human integrates approved source into `joetoo-upstream/dev-util/joetoo-kwin/`**, retaining source permissions and references; do not copy the entire development/archive workspace blindly. Include native sources and build files, runtime helpers, templates, documentation and attributable licensing metadata. Decide whether tests are shipped as release sources (recommended: focused tests, not historical console transcripts).
 3. Add **`COPYRIGHT.exceptions`** and **`LICENSES.package`** to the source directory. Audit all shipped source files' copyright headers and provenance; do not put a source file on the exception list merely to suppress an inconvenient error. Source files from Gentoo or other third parties require correct separate attribution/license handling.
 4. Run `tarup` as the ordinary human user **from `~/joetoo-upstream/dev-util`**. Actual tool: [`dev-util/joetoolkit/devtools/tarup`](https://github.com/JosephBrendler/joetoo-upstream/blob/master/dev-util/joetoolkit/devtools/tarup). Its first-release version is 0.0.0 when no matching archive exists; thus `tarup joetoo-kwin -minor` creates **`joetoo-kwin-0.1.0.tbz2`**. This depends on *no preexisting matching release archive*; inspect the category directory first. `tarup` requires the current SPDX list over the network, performs copyright checks, stages licensing, and prompts before creating the archive. Do **not** execute it from `joetoo-ai` or run it as root.
@@ -98,7 +106,7 @@ This fragment intentionally omits unresolved license/ABI/dependency details and 
 | `joetoo-kwin` | Bash CLI | `/usr/bin/joetoo-kwin`, 0755 |
 | `libexec/joetoo-kwin-plan-functions`, `joetoo-kwin-launch-functions`, `joetoo-kwin-session.bashrc` | Trusted plan geometry, launch and original interactive Bash | `L/`, readable 0644 |
 | `libexec/joetoo-kwind` | User-session D-Bus broker | `L/joetoo-kwind`, 0755 |
-| `libexec/joetoo_kwin_registry.py`, `joetoo_kwin_managed_close.py`, `joetoo_kwin_recovery.py`, `joetoo_kwin_persistence.py` | Managed registry, authenticated close, reconciliation and last-good history | `L/`, 0644 |
+| `libexec/joetoo_kwin_registry.py`, `joetoo_kwin_managed_close.py`, `joetoo_kwin_recovery.py`, `joetoo_kwin_persistence.py`, `joetoo_kwin_readonly.py` | Managed registry, authenticated close, recovery, last-good history and Step 1.8 read-only broker/status formatting | `L/`, 0644 |
 | `libexec/joetoo_kwin_rdp_{launch,target}.py`, `joetoo_kwin_vnc_{launch,target,identity}.py` | RDP/VNC validation, launch and identity correlation | `L/`, 0644 |
 | `libexec/joetoo_kwin_sftp_{target,advisory,capability}.py`, `joetoo_kwin_launch_resources.py`, `joetoo-kwin-exposure.py` | SFTP preflight, desktop resources and visibility | `L/`, 0644 |
 | `joetoo-kwin-resident.js` | KWin resident placement/observation | `/usr/share/joetoo-kwin/`, 0644 |
@@ -114,7 +122,7 @@ This fragment intentionally omits unresolved license/ABI/dependency details and 
 
 **Not in the current curated release:** `tools/joetoo-kwind-install-poc`, `tools/joetoo-kwind-configure-openrc-user`, `poc-user-conf.d/`, historical task archives, test fixtures and the staging utility itself. The first two may help a maintainer's *development* workflow; do not list either as an installed helper unless intentionally added to `MANIFEST` and separately reviewed. The development installer currently covers only a subset of runtime modules and is not production-package QA. Python broker imports require all sibling modules to remain together under `L`.
 
-**Pending source-path integration:** the CLI still resolves several helpers relative to its source directory. Centralize source-checkout versus `/usr/bin`/`L` helper resolution without changing existing development tests. Coordinate both `JOETOO_KWIND_EXEC` defaults (`user-init.d/` and `conf.d/`) to `L/joetoo-kwind`; keep resident resource resolution and Python snapshot validation working in both layouts. Add Step 1.8's `-s`, `-i` and `-L under` files/behavior **before** the final source freeze, then re-run staging validation.
+**Pending source-path integration:** the CLI still resolves several helpers relative to its source directory. Centralize source-checkout versus `/usr/bin`/`L` helper resolution without changing existing development tests. Coordinate both `JOETOO_KWIND_EXEC` defaults (`user-init.d/` and `conf.d/`) to `L/joetoo-kwind`; keep resident resource resolution and Python snapshot validation working in both layouts. The accepted Step 1.8 source includes `-s`, `-i` and `-L under`; include `joetoo_kwin_readonly.py` in `${ED}` and re-run staging and isolated installed-image validation.
 
 ## 3. Native C++ output, plugin compatibility and X11/XWayland distinctions
 
@@ -365,12 +373,12 @@ SFTP worker, not Dolphin's underlying local-file capability.
 | KWin upgrade | **Post-0.1.0 compatibility work:** 0.1.0 may explicitly target accepted KWin 6.7.6. KWin 6.8 rebuild/SDK tests and automatic rebuild policy are subsequent work, **not a new prerequisite** to this 6.7.6 source release. |
 | Licensing | **Source audit needed:** provisional project-root `LICENSES.package`/`COPYRIGHT.exceptions` included in curated transfer, license texts furnished by `tarup` and installed through eclass; review all shipped headers and third-party attributions |
 | Test/source contents | **Settled:** no historical archives/POC installers or test fixtures in the current curated source tarball; none installed in production. New **human maintainability-comment review** covers every shipped executable/interpreted script, even modules installed as data, excluding tests/fixtures. |
-| Version 1 CLI completion | **New Step 1.8 proposed before source freeze:** `-s` using existing `RegistryStatus`, `-i MANAGED_ID` using existing `GetManaged`, verified one-shot `-L under`; `-L panel` remains Version 2. Step 1.9 paused pending acceptance. |
+| Version 1 CLI completion | **Accepted and merged 2026-11-23, PR #36 (`67c054c`):** `-s` via broker status, `-i MANAGED_ID` via managed detail, verified one-shot `-L under`; `-L panel` remains Version 2. Include the read-only helper and run real installed-tree QA in Step 1.9. |
 
-### Remaining choices and sequence after the Step 1.8 pause
+### Remaining Step 1.9 choices and sequence
 
-1. **New Step 1.8 (separate branch):** complete and accept `-s`, `-i MANAGED_ID`, and exactly one new `-L under` behavior with native Wayland/X11 proof. Do not reopen already accepted Step 1.7, `-o` layer behavior or Version 2 panel reflow.
-2. **Return to Step 1.9:** complete source-versus-installed helper lookups and synchronized OpenRC defaults; perform the requested human maintainability-comment review of every shipped interpreted script, excluding tests/fixtures; run focused regression/static checks.
+1. **Accepted Step 1.8 baseline:** do not redo the Step 1.8 CLI implementation or native acceptance. Include its read-only helper and one-shot lower behavior in source release and installed QA; preserve accepted Step 1.7, `-o` and Version 2 boundaries.
+2. **Continue Step 1.9:** complete source-versus-installed helper lookups and synchronized OpenRC defaults; perform the requested human maintainability-comment review of every shipped interpreted script, excluding tests/fixtures; run focused regression/static checks.
 3. Run `joetoo-kwin-stage-upstream --plan` / `--apply` / `--release-check`, review the final curated tree, resolve headers/provenance and stale relative links, then human-run `tarup`; archive inspection precedes ebuild integration.
 4. Decide whether to ship the temporary legacy native-X11 plugin behind default-off `USE=x11` or omit that optional variant. XWayland close requires the **Wayland effect and XCB helper regardless**.
 5. **Defer KWin 6.8 compatibility** until after a working 0.1.0 package targeting the accepted 6.7.6 implementation; do not turn the upgrade into a Step 1.9 release gate.
@@ -391,9 +399,9 @@ Publishing into `joetoo-upstream`, running `tarup`, modifying `joetoo` ebuilds, 
 | `docs`, `documentation` | `docs/configuration-reference.md`, `docs/joetoo-kwin_user_manual.md`; source `release/README.md` becomes curated root `README.md` |
 | Deliberately uncurated | `archive/`, all `task_*/`, `tests/`/fixtures, `tools/`, `poc-user-conf.d/`, local workspace README/history, scratch artifacts and old transcripts |
 
-A prior `--plan` reported all present except the release README; `release/README.md` was subsequently committed in `24cd67f`. This is **not** evidence of a successful post-commit `--apply`, verified upstream parity, or `tarup` pass. After new Step 1.8 is accepted, human-run full transfer and `--release-check`, and inspect the entire upstream tree for stale/unlisted files (there is deliberately no `rsync --delete`). Review *all* copyright headers/third-party provenance and the staged `LICENSE`/`LICENSES/*.txt`; `native/managed-close/metadata.json` is an intended header exception, ordinary CMake/scripts/docs are not. `tarup` consumes the whole curated upstream directory, not only whichever files the last staging invocation copied.
+A prior `--plan` reported all present except the release README; `release/README.md` was subsequently committed in `24cd67f`. This is **not** evidence of a successful post-commit `--apply`, verified upstream parity, or `tarup` pass. With Step 1.8 accepted and merged, human-run full transfer and `--release-check`, and inspect the entire upstream tree for stale/unlisted files (there is deliberately no `rsync --delete`). Review *all* copyright headers/third-party provenance and the staged `LICENSE`/`LICENSES/*.txt`; `native/managed-close/metadata.json` is an intended header exception, ordinary CMake/scripts/docs are not. `tarup` consumes the whole curated upstream directory, not only whichever files the last staging invocation copied.
 
-## 9. Source references reviewed
+## 9. Historical source references reviewed (2026-11-20)
 
 - [joetoo-ai Step 1.9 HANDOFF](https://github.com/JosephBrendler/joetoo-ai/blob/0ec0234e589ce2b42bbfcfb6ebcec0207b627d60/workspace/projects/joetoo-kwin/task_1.9/HANDOFF.md), [task README](https://github.com/JosephBrendler/joetoo-ai/blob/0ec0234e589ce2b42bbfcfb6ebcec0207b627d60/workspace/projects/joetoo-kwin/task_1.9/README.md), [architecture](https://github.com/JosephBrendler/joetoo-ai/blob/0ec0234e589ce2b42bbfcfb6ebcec0207b627d60/workspace/projects/joetoo-kwin/ARCHITECTURE.md).
 - [CLI source: select_config/prepare_config_sources and source lookup](https://github.com/JosephBrendler/joetoo-ai/blob/0ec0234e589ce2b42bbfcfb6ebcec0207b627d60/workspace/projects/joetoo-kwin/joetoo-kwin), [OpenRC user service](https://github.com/JosephBrendler/joetoo-ai/blob/0ec0234e589ce2b42bbfcfb6ebcec0207b627d60/workspace/projects/joetoo-kwin/user-init.d/joetoo-kwind), [global service config](https://github.com/JosephBrendler/joetoo-ai/blob/0ec0234e589ce2b42bbfcfb6ebcec0207b627d60/workspace/projects/joetoo-kwin/conf.d/joetoo-kwind), [POC override](https://github.com/JosephBrendler/joetoo-ai/blob/0ec0234e589ce2b42bbfcfb6ebcec0207b627d60/workspace/projects/joetoo-kwin/poc-user-conf.d/joetoo-kwind).

@@ -122,7 +122,7 @@ LAST_KNOWN_FRAME: 68 23 768 558
 
 The direct `RegistryStatus | jq .` additionally reported `placement_transaction: {id: null, state: IDLE}`, `managed_count: 2`, `presence_counts: {present: 2, missing: 0, uncertain: 0}`, `request_count: 2`, `observation.synchronized: true`, and `recovery: ready`; the source-tree CLI accurately rendered this information.
 
-These `win-003`/`win-004` UUIDs match the new windows recorded in [accepted Step 1.7 slim2 X11 evidence](../archive/task_step1.7/step1.7-slim2-native-x11-evidence-2026-11-19.md). That supports continuity of those registered identities after the broker restart; this abbreviated Step 1.8 test did **not** repeat all of Step 1.7's recovery-specific assertions or before/after comparisons.
+These `win-003`/`win-004` UUIDs match the new windows recorded in [accepted Step 1.7 slim2 X11 evidence](../task_step1.7/step1.7-slim2-native-x11-evidence-2026-11-19.md). That supports continuity of those registered identities after the broker restart; this abbreviated Step 1.8 test did **not** repeat all of Step 1.7's recovery-specific assertions or before/after comparisons.
 
 ## Assessment and outstanding work
 

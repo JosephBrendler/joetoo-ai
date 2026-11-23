@@ -4,7 +4,8 @@ This is the project-specific design record for `joetoo-ai/workspace/projects/joe
 It distinguishes accepted requirements, implemented and accepted contracts, proposed
 future capabilities, and open design questions. The [project README](README.md)
 records current implementation status. The [accepted Step 1.6 archive](archive/task_step1.6/README.md)
-and [Step 1.7 archive](archive/task_step1.7/README.md) preserve their merged
+and [Step 1.7 archive](archive/task_step1.7/README.md), plus the
+[Step 1.8 archive](archive/task_step1.8/README.md), preserve their merged
 results and evidence. The [active Step 1.9 HANDOFF](task_1.9/HANDOFF.md)
 tracks version 1 packaging/integration; [Step 1.5c.4 native closure](archive/task_step1.5/step1.5c4-native-acceptance.md)
 and other task evidence retain the earlier acceptance history.
@@ -498,14 +499,14 @@ A fresh KWin session must never inherit destructive authority over old UUIDs.
 Step 1.9 packaging is the next distinct version 1 workstream; these accepted
 Step 1.7 decisions are not Version 2 deferrals.
 
-## 9. CLI contract (accepted behavior and proposed Step 1.8 completion)
+## 9. CLI contract (accepted Version 1 behavior)
 
 | Invocation | Acceptance status and Intended action |
 | --- | --- |
 | `-c [-f CONFIG]` | **Accepted 1.5a:** Validate config and display a colorized dry-run plan without launching |
 | `-f FILE` | **Accepted 1.5a:** Explicit configuration precedence, no implicit symlink edits |
 | `-o [-f CONFIG]` | **Accepted 1.5c:** Confirm then launch and positively register/position managed windows |
-| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | `over` accepted in 1.5d; `under` implemented and native-validated in Step 1.8 (acceptance pending); `panel` unsupported; no live-desktop reflow |
+| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | **Accepted 1.5d/1.8:** omitted/explicit `over` and verified one-shot `under`; `panel` unsupported, no live-desktop reflow |
 | `-m l`, `-m r` | **Accepted 1.5b:** Two-panel active-window geometry on current desktop |
 | `-m DESKTOP` | **Accepted 1.5b:** Change active window's desktop, preserve geometry |
 | `-m DESKTOP l (or r)` | **Accepted 1.5b:** Two-panel placement on specified desktop |
@@ -515,8 +516,8 @@ Step 1.7 decisions are not Version 2 deferrals.
 | `-x` | **Accepted 1.6:** confirmed fixed-set progressive retirement of authenticated absences and verified graceful closes; retain failed/unresolved entries |
 | `-d MANAGED_ID` | **Accepted 1.6:** confirmed graceful close of one authenticated managed window; record/slot retained |
 | `-l` | **Accepted Step 1.7:** List broker-managed windows read-only, one record per fixed-width table row, including stable managed ID, desktop/slot, presence, placement and UUID (Step 1.5d) |
-| `-i MANAGED_ID` | Step 1.8 implemented/native-validated read-only detail for one managed record (acceptance pending) |
-| `-s` | Step 1.8 implemented/native-validated read-only broker status (acceptance pending) |
+| `-i MANAGED_ID` | **Accepted Step 1.8:** read-only detail for one validated broker-managed ID |
+| `-s` | **Accepted Step 1.8:** read-only broker/registry status |
 | `-S` | **Accepted Step 1.7:** export a complete verified managed arrangement as private last-good launch intent with timestamped history; refuse incomplete saves |
 | `-r` | **Accepted Step 1.7:** preflight and confirm restore of saved recipes as **new** managed instances, never adopting old UUIDs or PIDs |
 | `-v`, `-q` | **Accepted 1.5a:** Adjust verbosity using established joetoo CLI conventions |
@@ -528,7 +529,8 @@ still defaults to `over`; both explicit `over` and the Step 1.8 one-shot
 `under` are implemented and native-validated on X11/Wayland. Only `panel`
 remains unsupported for `-L`, with refusal before launch. Configured `-o`
 retains its `under`/`panel`/`over` classifications and implicit `panel`
-default. Step 1.8 formal acceptance/merge is recorded separately.
+default. Step 1.8 was merged through [PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36);
+see its [archived acceptance record](archive/task_step1.8/README.md).
 
 `-L` launches **one** new window, using the existing program/mode/target
 validators, graphical-region geometry, confirmation, broker reservation,
@@ -611,8 +613,8 @@ accepted decisions refine older scope outlines without rewriting history.
 | **1.5d** | Single-recipe `-L` launch (`over` only, no reflow), read-only `-l` inventory and integrated native regression | **ACCEPTED, CLOSED AND MERGED (2026-11-12, [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30))**; safe unused-slot reservation, exact-UUID placement, verified one-shot raise, existing-window preservation and accepted `-o` semantics; [native acceptance evidence](archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md). |
 | **1.6** | Managed `-d MANAGED_ID` and `-x` graceful close/retirement | **ACCEPTED, CLOSED AND MERGED (2026-11-18, [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32), `a6999e2`)**; authenticated close, progressive retirement, retained failed/unresolved records and no force killing; [archived X11/Wayland evidence](archive/task_step1.6/README.md). |
 | **1.7 (includes former 1.8)** | Private same-session checkpoint/reconciliation plus durable `.conf` last-good snapshot, `-S` and `-r` | **ACCEPTED, CLOSED AND MERGED (2026-11-19, [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33), `df118da`)**; verified recovery, private snapshot/history and fresh-instance restore; [archived X11/Wayland evidence](archive/task_step1.7/README.md). |
-| **1.8 (new CLI completion)** | Read-only `-s` broker status, `-i MANAGED_ID` detail and verified one-shot `-L ... under`; `-L ... panel` remains Version 2 | **ACTIVE — NOT YET IMPLEMENTED OR ACCEPTED (2026-11-21)**; distinct from the former Step 1.8 absorbed into Step 1.7. Requires bounded implementation, regressions and native X11/Wayland acceptance; [active HANDOFF](task_1.8/HANDOFF.md). |
-| **1.9** | Source stabilization, human maintainability-comment review, curated source transfer, `tarup`, Gentoo ebuild and installation/upgrade QA | **IN PROGRESS — PAUSED PENDING STEP 1.8 ACCEPTANCE (2026-11-21)**; source `MANIFEST`, staging utility, configuration READMEs/examples and release README prepared in `joetoo-ai`. Packaged-path integration, final source audit, archive creation and package QA remain; [Step 1.9 HANDOFF](task_1.9/HANDOFF.md). |
+| **1.8 (new CLI completion)** | Read-only `-s` broker status, `-i MANAGED_ID` detail and verified one-shot `-L ... under`; `-L ... panel` remains Version 2 | **ACCEPTED, CLOSED AND MERGED (2026-11-23, [PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36), `67c054c`)**; native X11/Wayland and regression evidence, accepted Version 1 controller-return focus policy and deferred competing-activation limitation; [archive](archive/task_step1.8/README.md). |
+| **1.9** | Source stabilization, human maintainability-comment review, curated source transfer, `tarup`, Gentoo ebuild and installation/upgrade QA | **ACTIVE AGAIN after Step 1.8 merge (2026-11-23)**; source `MANIFEST`, staging utility, configuration READMEs/examples and release README prepared in `joetoo-ai`. Runtime installed helper/path integration, comment and provenance review, archive and ebuild/installed-image QA remain; [Step 1.9 HANDOFF](task_1.9/HANDOFF.md). |
 
 ### Accepted remote-resource contract (Step 1.5; historical detail archived)
 
