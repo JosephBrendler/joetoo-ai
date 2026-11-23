@@ -5,7 +5,7 @@
 **Intended first Portage package:** **`dev-util/joetoo-kwin-0.1.0`**.  
 **No code, repository, package, tarball, host, or live user configuration has been modified by this review.**
 
-This supersedes the earlier *Step 1.9 — Version 1 packaging inventory and installation contract (DRAFT)*, retaining the full functional file inventory and incorporating later decisions on source-release metadata, the native C++ binary boundary, feature dependencies, and the Plasma 6.8 transition. “Approved” below means a decision **stated by the maintainer in the review**, subject to the indicated verification—not permission for an AI agent to write to either protected repository. `joetoo` and `joetoo-upstream` have advisory-only AI policies; their human maintainer carries out integration, `tarup`, ebuild execution and publication.
+This supersedes the earlier *Step 1.9 — Version 1 packaging inventory and installation contract (DRAFT)*. It reflects the curated source organization on `joetoo-ai/main` at `24cd67f` (2026-11-21), and the maintainer's proposal to **pause Step 1.9 for a new Step 1.8 CLI-completion task**. “Approved” below means a decision stated by the maintainer, subject to indicated verification—not permission for an agent to modify protected `joetoo-upstream`/`joetoo` repositories. The human maintainer retains integration, `tarup`, ebuild and publication authority.
 
 ## 1. Release model — two phases, not direct joetoo-ai-to-host deployment
 
@@ -36,7 +36,7 @@ production Gentoo systems (files owned by Portage, no HOME mutations)
 
 ### Phase 1 — source stabilization, human upstream integration and `tarup`
 
-1. **Within `joetoo-ai` (reviewable candidate):** normalize and document the *existing* service-vs-launch config roles, repair working first-use examples and the `eselect` path instructions, resolve installed helper locations without source-tree regression, and build the complete source-release file manifest. Keep Step 1.7 behavior intact.
+1. **Within `joetoo-ai` (reviewable candidate):** preserve the accepted 1.7 behavior; keep the committed project-root `MANIFEST`, `tools/joetoo-kwin-stage-upstream`, per-role colocated READMEs, config examples and `release/README.md` current. Resolve installed runtime helper paths without breaking development operation. **New source-stabilization requirement:** a maintainer/human must review the maintainability comments for *every shipped script* (Bash CLI and sourced helpers, OpenRC/eselect, Python helpers and resident JavaScript), whether marked executable or loaded as a module; exclude test fixtures and discarded development tools. Correct outdated/opaque comments without unrelated logic rewrites; run appropriate static and focused regression checks. Complete final copyright/provenance audit separately. **Step 1.9 is paused pending acceptance of the new Step 1.8 CLI completion** (`-s`, `-i`, `-L under`).
 2. **Human integrates approved source into `joetoo-upstream/dev-util/joetoo-kwin/`**, retaining source permissions and references; do not copy the entire development/archive workspace blindly. Include native sources and build files, runtime helpers, templates, documentation and attributable licensing metadata. Decide whether tests are shipped as release sources (recommended: focused tests, not historical console transcripts).
 3. Add **`COPYRIGHT.exceptions`** and **`LICENSES.package`** to the source directory. Audit all shipped source files' copyright headers and provenance; do not put a source file on the exception list merely to suppress an inconvenient error. Source files from Gentoo or other third parties require correct separate attribution/license handling.
 4. Run `tarup` as the ordinary human user **from `~/joetoo-upstream/dev-util`**. Actual tool: [`dev-util/joetoolkit/devtools/tarup`](https://github.com/JosephBrendler/joetoo-upstream/blob/master/dev-util/joetoolkit/devtools/tarup). Its first-release version is 0.0.0 when no matching archive exists; thus `tarup joetoo-kwin -minor` creates **`joetoo-kwin-0.1.0.tbz2`**. This depends on *no preexisting matching release archive*; inspect the category directory first. `tarup` requires the current SPDX list over the network, performs copyright checks, stages licensing, and prompts before creating the archive. Do **not** execute it from `joetoo-ai` or run it as root.
@@ -87,41 +87,34 @@ src_install() {
 
 This fragment intentionally omits unresolved license/ABI/dependency details and is not a substitute for the final ebuild.
 
-## 2. Source-to-installed-file manifest (accepted paths / proposed ownership)
+## 2. Current curated source inventory and proposed installed ownership
 
-**Maintainer decision:** use **`L=/usr/libexec/joetoo-kwin`** as the application-private runtime helper directory, with only necessary CLI and service path fixes. Root-owned application files and read-only templates are installed by Portage; no user HOME is populated. Paths below are target contracts to be verified in Phase 1 before the ebuild.
+**Two different manifests must not be conflated.** The authoritative **source-to-source** selection is the versioned project-root [`MANIFEST`](../MANIFEST), processed by [`tools/joetoo-kwin-stage-upstream`](../tools/joetoo-kwin-stage-upstream); it includes an optional third field to rename `release/README.md` to upstream root `README.md`. The ebuild's **source-to-installed-file** inventory below is a separate install policy. Presence in the source tarball never implies automatic activation under `/etc`, HOME, or a graphical session.
 
-| Source in joetoo-kwin/ | Runtime role | Installed destination | Mode |
-| --- | --- | --- | --- |
-| `joetoo-kwin` | Public Bash CLI | `/usr/bin/joetoo-kwin` | 0755 |
-| `libexec/joetoo-kwin-plan-functions` | Defaults, geometry, validation | `L/joetoo-kwin-plan-functions` | 0644 |
-| `libexec/joetoo-kwin-launch-functions` | Launch orchestration | `L/joetoo-kwin-launch-functions` | 0644 |
-| `libexec/joetoo-kwin-session.bashrc` | Original interactive Bash session | `L/joetoo-kwin-session.bashrc` | 0644 |
-| `libexec/joetoo-kwind` | Session-bus broker | `L/joetoo-kwind` | 0755 |
-| `libexec/joetoo_kwin_registry.py` | Managed registry | `L/joetoo_kwin_registry.py` | 0644 |
-| `libexec/joetoo_kwin_managed_close.py` | Authenticated close frontend | `L/joetoo_kwin_managed_close.py` | 0644 |
-| `libexec/joetoo_kwin_recovery.py` | Same-KWin-session checkpoint | `L/joetoo_kwin_recovery.py` | 0644 |
-| `libexec/joetoo_kwin_persistence.py` | Last-good snapshots/history | `L/joetoo_kwin_persistence.py` | 0644 |
-| `libexec/joetoo_kwin_rdp_launch.py`, `joetoo_kwin_rdp_target.py` | RDP identity/launch and validation | `L/` | 0644 |
-| `libexec/joetoo_kwin_vnc_launch.py`, `joetoo_kwin_vnc_target.py`, `joetoo_kwin_vnc_identity.py` | VNC SSH/viewer supervisor and XCB identity | `L/` | 0644 |
-| `libexec/joetoo_kwin_sftp_target.py`, `joetoo_kwin_sftp_advisory.py`, `joetoo_kwin_sftp_capability.py` | SFTP URI, advisory and KIO preflight | `L/` | 0644 |
-| `libexec/joetoo_kwin_launch_resources.py`, `joetoo-kwin-exposure.py` | Desktop provisioning and geometry exposure | `L/` | 0644 |
-| `joetoo-kwin-resident.js` | KWin JavaScript resident | `/usr/share/joetoo-kwin/joetoo-kwin-resident.js` | 0644 |
-| `user-init.d/joetoo-kwind` | **User-mode** OpenRC unit | `/etc/user/init.d/joetoo-kwind` | 0755 |
-| `conf.d/joetoo-kwind` | Global OpenRC service defaults | `/etc/conf.d/joetoo-kwind` | 0644, config-protected |
-| `user-conf.d/joetoo-kwind` | Example of optional admin service override | Documentation example; optionally `/etc/user/conf.d/joetoo-kwind` only if approved | 0644 |
-| `joetoo-kwin-per-run-template.conf` | **Short** editable launch-plan example | `/usr/share/joetoo-kwin/joetoo-kwin-per-run-template.conf` | 0644 |
-| `joetoo-kwin-template.conf` | **Long**, annotated settings/plan reference | Documentation/examples, e.g. `/usr/share/doc/${PF}/examples/` | 0644 |
-| `eselect/joetoo-kwin.eselect` | Always-installed user profile selector (optional to *use*) | `/usr/share/eselect/modules/joetoo-kwin.eselect` | 0644 |
-| `docs/configuration-reference.md`, `docs/joetoo-kwin_user_manual.md` | Full configuration guide and user manual | `/usr/share/doc/${PF}/` | 0644 |
-| Revised README files and functional `.conf` examples (Section 4) | Role-specific setup/migration guidance | `/usr/share/doc/${PF}/` and/or `/usr/share/joetoo-kwin/examples/` | 0644 |
-| `tools/joetoo-kwind-configure-openrc-user` | Explicit, non-root rc_env_allow configuration helper | Install as an **opt-in** user command if retained after review | 0755 |
-| `tools/joetoo-kwind-install-poc`, `poc-user-conf.d/joetoo-kwind` | Historical **development** home installer/override | Do not transfer to the curated first-release upstream tree; never run from ebuild | n/a |
-| `COPYRIGHT.exceptions`, `LICENSES.package` | tarup source metadata; audit and SPDX text selectors | Curated upstream source root (not active runtime configuration) | Source-only metadata |
+**Runtime path contract:** `L=/usr/libexec/joetoo-kwin` is the application-private directory. Root-owned package files only; user-owned configs, snapshots and profiles are never written by Portage. The table records intended destinations, **not completed ebuild QA**.
 
-Current development installer covers **only fourteen user-owned files**; it omits plan, launch, `.bashrc` and SFTP/geometry helpers. Do not treat `tools/joetoo-kwind-install-poc --check` as complete production-package QA. The Python broker imports sibling modules relative to its own real directory, so they must remain together in `L`.
+| Current curated source path(s) | Function | Proposed installed destination / treatment |
+| --- | --- | --- |
+| `joetoo-kwin` | Bash CLI | `/usr/bin/joetoo-kwin`, 0755 |
+| `libexec/joetoo-kwin-plan-functions`, `joetoo-kwin-launch-functions`, `joetoo-kwin-session.bashrc` | Trusted plan geometry, launch and original interactive Bash | `L/`, readable 0644 |
+| `libexec/joetoo-kwind` | User-session D-Bus broker | `L/joetoo-kwind`, 0755 |
+| `libexec/joetoo_kwin_registry.py`, `joetoo_kwin_managed_close.py`, `joetoo_kwin_recovery.py`, `joetoo_kwin_persistence.py` | Managed registry, authenticated close, reconciliation and last-good history | `L/`, 0644 |
+| `libexec/joetoo_kwin_rdp_{launch,target}.py`, `joetoo_kwin_vnc_{launch,target,identity}.py` | RDP/VNC validation, launch and identity correlation | `L/`, 0644 |
+| `libexec/joetoo_kwin_sftp_{target,advisory,capability}.py`, `joetoo_kwin_launch_resources.py`, `joetoo-kwin-exposure.py` | SFTP preflight, desktop resources and visibility | `L/`, 0644 |
+| `joetoo-kwin-resident.js` | KWin resident placement/observation | `/usr/share/joetoo-kwin/`, 0644 |
+| `native/managed-close/` sources | Build Wayland KWin effect plus XWayland XCB close helper, optional separate native-X11 effect | Compiled plugin(s) under respective KWin effect directories; helper under KDE libexec; no auto-load; see §3 |
+| `user-init.d/joetoo-kwind` | OpenRC **user** service | `/etc/user/init.d/joetoo-kwind`, 0755 |
+| `conf.d/joetoo-kwind` | Global OpenRC service config | `/etc/conf.d/joetoo-kwind`, 0644, config protected |
+| `user-conf.d/joetoo-kwind`, `account-conf.d/joetoo-kwind` | Optional administrator and account service overrides | Install as *inactive examples only*; never create `/etc/user/conf.d/` or account active file automatically |
+| `config-examples/system/defaults.conf`, `config-examples/user/defaults.conf` | Sparse additive CLI defaults | Inactive read-only package examples; user/administrator explicitly elects to copy |
+| `joetoo-kwin-per-run-template.conf`, `joetoo-kwin-template.conf` | Short launch starter and long annotated reference | Starter `/usr/share/joetoo-kwin/`, reference docs/examples; never populate HOME |
+| `eselect/joetoo-kwin.eselect` | Optional-to-use profile selector | Always install `/usr/share/eselect/modules/`, 0644 |
+| `ARCHITECTURE.md`, `docs/{configuration-reference,joetoo-kwin_user_manual}.md`, eight colocated `README_*_conf.md` companions, `release/README.md` → `README.md` | Design, user guide, role-specific setup guidance, top-level source-release entrypoint | Read-only documentation, preserving useful companion hierarchy; do not install prose into active `/etc` configuration |
+| `MANIFEST`, `COPYRIGHT.exceptions`, `LICENSES.package` | Curated source provenance / tarup metadata | Source archive only; license texts staged and installed through `joetoo_license` eclass |
 
-**Minimal source-path changes:** CLI currently uses `$(dirname -- "${BASH_SOURCE[0]}")/libexec` for `-c`, `-o`, `-L`, `-S`, `-r` and some `-d` paths. Define a single safe source-versus-installed helper resolution contract, used consistently, with no arbitrary untrusted path injection. Keep source-tree tests working. Change the user service's `JOETOO_KWIND_EXEC` default and `/etc/conf.d/joetoo-kwind` default **together** to `L/joetoo-kwind`. The resident's resource path is already absolute and suitable. The Python snapshot validator needs the installed `/usr/bin/joetoo-kwin` path when packaged.
+**Not in the current curated release:** `tools/joetoo-kwind-install-poc`, `tools/joetoo-kwind-configure-openrc-user`, `poc-user-conf.d/`, historical task archives, test fixtures and the staging utility itself. The first two may help a maintainer's *development* workflow; do not list either as an installed helper unless intentionally added to `MANIFEST` and separately reviewed. The development installer currently covers only a subset of runtime modules and is not production-package QA. Python broker imports require all sibling modules to remain together under `L`.
+
+**Pending source-path integration:** the CLI still resolves several helpers relative to its source directory. Centralize source-checkout versus `/usr/bin`/`L` helper resolution without changing existing development tests. Coordinate both `JOETOO_KWIND_EXEC` defaults (`user-init.d/` and `conf.d/`) to `L/joetoo-kwind`; keep resident resource resolution and Python snapshot validation working in both layouts. Add Step 1.8's `-s`, `-i` and `-L under` files/behavior **before** the final source freeze, then re-run staging validation.
 
 ## 3. Native C++ output, plugin compatibility and X11/XWayland distinctions
 
@@ -183,9 +176,9 @@ Wayland uses `${KDE_INSTALL_PLUGINDIR}/kwin/effects/plugins/`. The helper
 installs once at `${KDE_INSTALL_LIBEXECDIR}/joetoo-kwin-close-x11`.
 The code's compositor-binary check must remain intact.
 
-## 4. Configuration architecture — verified implementation versus proposed cleanup
+## 4. Configuration architecture — current layered roles and colocated companions
 
-There are **two independent configuration trees**. The development POC override is a *sample of the third service layer*, not a fourth load layer. The `XDG_CONFIG_HOME` fallback is a directory choice, **not an additional independent user defaults layer**.
+**As of `24cd67f`, the eight role-specific companion READMEs and three inert configuration examples are authored in `joetoo-ai`, committed in `7ae5325`.** Their paths are recorded in the project-root `MANIFEST`; they are not a pending future `docs/README_*` glob. The active loader and its two distinct configuration trees have **not** changed. The development POC override remains a *separate development file* demonstrating the third service tier, not a fourth tier. `XDG_CONFIG_HOME` fallback selects one user directory; it is not another precedence layer. Installed-path changes and full package smoke checks remain pending.
 
 ### A. OpenRC **service** configuration (three effective tiers)
 
@@ -200,9 +193,9 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/rc/conf.d/joetoo-kwind
 
 The actual user service `user-init.d/joetoo-kwind` re-sources `/etc/conf.d/joetoo-kwind` to impose the intended order, with a default executable fallback. The global file currently sets `JOETOO_KWIND_EXEC=/usr/libexec/joetoo-kwind` and `JOETOO_KWIND_RESIDENT_JS=/usr/share/joetoo-kwin/joetoo-kwin-resident.js`, and the later service overrides can replace these. It does **not** set planner recipes, layout geometry or default launch settings.
 
-`poc-user-conf.d/joetoo-kwind` is a development-only example installed into **the same tier (3) path** by `tools/joetoo-kwind-install-poc`. It points the service at `~/.local/libexec/joetoo-kwind` and `~/.local/share/joetoo-kwin/joetoo-kwin-resident.js`; it must **not** become production's default per-user override. The optional `tools/joetoo-kwind-configure-openrc-user` separately adjusts the user OpenRC `rc_env_allow` setting, which is an OpenRC environment-control concern, not a new `joetoo-kwind` conf.d tier.
+`poc-user-conf.d/joetoo-kwind` is still used **only by the development installer** and points to HOME-local development executables. The separate source-release `account-conf.d/joetoo-kwind` is an **inactive example of the same tier (3)** with its own colocated README; it must not overwrite the POC fixture or become an active HOME file during package install. The development-only `tools/joetoo-kwind-configure-openrc-user` concerns OpenRC environment forwarding (`rc_env_allow`), not another configuration tier.
 
-**Recommended production deployment:** install and config-protect the active `/etc/conf.d/joetoo-kwind` for default system command paths. Ship a *functional example* of `/etc/user/conf.d/joetoo-kwind` and a separate *functional example* of the account override in read-only shared examples; create neither active override automatically. Write concise role-specific README files. Avoid adding an extra active global override file unless the maintainer expressly chooses it.
+**Current production proposal:** config-protect the active `/etc/conf.d/joetoo-kwind`; ship the two override examples as read-only data, with READMEs beside their source examples. Do not install optional overrides as active configuration. The global command path still needs its source/installed layout correction and subsequent QA.
 
 ### B. `joetoo-kwin` **launch** configuration (built-ins + two additive defaults + exactly one selected plan)
 
@@ -272,24 +265,25 @@ For **packaged** installation replace the `cp` source with `/usr/share/joetoo-kw
 
 Proposed naming clarification: keep compatibility filenames for 0.1.0, but add explicit README labels **SHORT STARTER** versus **FULL ANNOTATED REFERENCE**. If the maintainer prefers renaming them later, preserve old names as references/aliases and update the guide in the same source transition; do not silently swap their content or make the full file active global defaults.
 
-### D. Pre-upstream configuration cleanup and documentation deliverables
+### D. Configuration examples and companion READMEs — authored and colocated
 
-**Recommendation: yes, perform this before the `joetoo-upstream` transition**, because it avoids publishing ambiguous config paths in a release artifact. Keep it bounded to documentation, runnable examples and the required packaged-path corrections—not a new configuration loader architecture or rework of accepted precedence.
+The source organization is now intentionally **colocated**. A companion is immediately beside the configuration, example or selector it describes, rather than collected into `docs/` (which already holds the consolidated configuration reference). Each row is a literal `MANIFEST` entry (group label is display-only, not a directory selector):
 
-Every distinct shipped `.conf`/config role gets a concise paired **`README_xxx_conf.md`** (or a clearly linked section in an adjacent reference when semantics are identical). Suggested files, named by role to avoid confusing the two `joetoo-kwind` override paths:
-
-| Configuration role | Paired documentation / example to author for 0.1.0 |
+| Source configuration / example | Adjacent source README |
 | --- | --- |
-| `conf.d/joetoo-kwind` → `/etc/conf.d/joetoo-kwind` | `README_global_joetoo_kwind_conf.md` — actual defaults, root ownership, sourcing, protected upgrade |
-| `user-conf.d/joetoo-kwind` → optional `/etc/user/conf.d/joetoo-kwind` | `README_system_user_joetoo_kwind_conf.md` — optional root override and order |
-| `poc-user-conf.d/joetoo-kwind` → account `.config/rc/conf.d/...` | `README_account_joetoo_kwind_conf.md` — user override; explain POC-only source and migration |
-| `/etc/joetoo-kwin/defaults.conf` | `README_system_defaults_conf.md` — sparse administrator defaults example, never whole manual |
-| XDG user `joetoo-kwin/defaults.conf` | `README_user_defaults_conf.md` — sparse account defaults example, correctly resolved directory |
-| system fallback/user/`-f` `joetoo-kwin.conf` | `README_joetoo_kwin_launch_conf.md` — single selected plan; precedence, minimal functional plan, source-vs-packaged paths |
-| `profiles/*.conf` + selector-created active link | `README_eselect_profiles_conf.md` — explicit profile setup, safe switch and migration, install preconditions |
-| short/long shipped `.conf` templates | `README_joetoo_kwin_templates_conf.md` — explain precisely which is short versus full and how to copy |
+| `conf.d/joetoo-kwind` (active packaged global service config) | `conf.d/README_global_joetoo_kwind_conf.md` |
+| `user-conf.d/joetoo-kwind` (inactive admin example) | `user-conf.d/README_system_user_joetoo_kwind_conf.md` |
+| `account-conf.d/joetoo-kwind` (inactive account override example) | `account-conf.d/README_account_joetoo_kwind_conf.md` |
+| `config-examples/system/defaults.conf` (inactive system CLI example) | `config-examples/system/README_system_defaults_conf.md` |
+| `config-examples/user/defaults.conf` (inactive user CLI example) | `config-examples/user/README_user_defaults_conf.md` |
+| `joetoo-kwin-per-run-template.conf`, `joetoo-kwin-template.conf` | `README_joetoo_kwin_launch_conf.md` and `README_joetoo_kwin_templates_conf.md` in source root |
+| `eselect/joetoo-kwin.eselect` | `eselect/README_eselect_profiles_conf.md` |
 
-Each README needs: exact *source* and *installed* role/path; whether it is active or sample-only; load order; ownership/mode; behavior when absent; one functional commented example; safe upgrade/migration rule; and link to the full user manual/configuration guide. Pairing need not require eight redundant manuals: keep each brief (prefer a screenful) and cross-reference one authoritative configuration guide. Add appropriate copyright/SPDX metadata for `tarup`.
+`docs/configuration-reference.md` is the detailed source of truth for settings and precedence; `docs/joetoo-kwin_user_manual.md` is the operational guide. `release/README.md` (added at `24cd67f`) is intentionally remapped by `MANIFEST` to the **upstream tarball root** `README.md`, not the development project root README. `ARCHITECTURE.md` and the source transfer metadata are also curated.
+
+**Status:** all eight companions and the three release-only examples exist in the development checkout, but their presence does **not** establish parity with `joetoo-upstream`, installation locations, or tarup acceptance. Re-run the human-operated staging script after accepted new Step 1.8 changes. The ebuild must retain the source organization as useful documentation while not installing samples into active per-account or administrator paths. Review relative links in archived docs so omitted `archive/`/`task_1.9/` destinations are not presented as local files.
+
+**Expanded Step 1.9 source-stabilization gate (human):** review the maintainability comments of every script that will ship, including Bash CLI/sourced helpers, OpenRC and eselect files, all shipped Python helpers and resident JS—even if the file's installed mode is 0644. Exclude test fixtures, archived POCs and unshipped tooling. Verify comments describe current behavior (including argument/return contracts, security invariants, and nontrivial flags), do not misstate implemented CLI support, and do not conceal a functional change. Use `validate_scripts`/ShellCheck, `bash -n`, Python syntax checks, JS syntax checks and focused existing tests as appropriate. Review compiled C++ comments as part of the normal native source/provenance check, separately from this script-comment gate. Keep corrections narrowly scoped and accept/review meaningful edits rather than rewriting already clear modules.
 
 ## 5. Approved USE policy and subordinate client dependencies
 
@@ -364,60 +358,40 @@ SFTP worker, not Dolphin's underlying local-file capability.
 | Release name | **Settled:** `dev-util/joetoo-kwin-0.1.0`; first archive `joetoo-kwin-0.1.0.tbz2` via `tarup joetoo-kwin -minor` only if no earlier tarball exists |
 | Paths | **Settled:** `/usr/bin/joetoo-kwin`, private `/usr/libexec/joetoo-kwin`, global OpenRC conf.d and user OpenRC unit; minimal path changes before transfer |
 | `eselect` | **Settled:** always installed, never auto-run; keep GPL-3.0-or-later heading with Gentoo API acknowledgment and AI-assistance statement; no copied-Gentoo-code finding in the source comparison performed |
-| Config and docs | **Settled:** clean per-role README examples and profile docs before source transfer; global service config active, root/user overrides shipped as examples only; user plan HOME never modified by Portage |
+| Config and docs | **Development source authored:** colocated eight READMEs, inactive account/system/user examples, both templates, source release README and architecture in `MANIFEST`; source-to-installed paths and tarball link QA pending. Global OpenRC file active, overrides example-only; never modify HOME. |
 | Runtime clients | **Settled:** default-on `rdp`, `vnc`, `sftp`; subordinate `sdl-freerdp` and `tigervnc` groups; no required OpenH264; optional flags install dependencies but do not remove core validators |
 | Native core | **Settled:** Wayland plugin **and** `joetoo-kwin-close-x11` helper always built for Wayland/XWayland support; never select compiler SDK from a running display |
 | Native legacy X11 | **Still decide:** keep temporary off-by-default `USE=x11` for `kwin_x11` 6.7, or omit it from first production ebuild (neither choice changes XWayland support) |
-| KWin upgrade | **Implementation/QA needed:** build against newer installed KWin SDK, run 6.8 compatibility tests, embed actual built-against identity, warn on runtime mismatch, implement/plan reliable re-emerge on same-subslot updates |
+| KWin upgrade | **Post-0.1.0 compatibility work:** 0.1.0 may explicitly target accepted KWin 6.7.6. KWin 6.8 rebuild/SDK tests and automatic rebuild policy are subsequent work, **not a new prerequisite** to this 6.7.6 source release. |
 | Licensing | **Source audit needed:** provisional project-root `LICENSES.package`/`COPYRIGHT.exceptions` included in curated transfer, license texts furnished by `tarup` and installed through eclass; review all shipped headers and third-party attributions |
-| Test/source contents | **Settled:** no historical task archives/POC installer or focused tests installed onto production; curated release may retain focused build/test sources deliberately but not blindly |
+| Test/source contents | **Settled:** no historical archives/POC installers or test fixtures in the current curated source tarball; none installed in production. New **human maintainability-comment review** covers every shipped executable/interpreted script, even modules installed as data, excluding tests/fixtures. |
+| Version 1 CLI completion | **New Step 1.8 proposed before source freeze:** `-s` using existing `RegistryStatus`, `-i MANAGED_ID` using existing `GetManaged`, verified one-shot `-L under`; `-L panel` remains Version 2. Step 1.9 paused pending acceptance. |
 
-### Remaining choices, narrowly bounded
+### Remaining choices and sequence after the Step 1.8 pause
 
-1. Is the legacy *native* `kwin_x11` 6.7 plugin still worth shipping behind
-   off-by-default `USE=x11`, or should 0.1.0 omit that optional artifact?
-2. Confirm exact source and ABI compatibility with KWin 6.8; select the
-   reliable built-against metadata and later-update rebuild mechanism using
-   actual test results, not a guessed API.
-3. Complete the **final** curated-source file/license/header audit; the new
-   metadata files are an accurate *starting point*, not an assertion that
-   `tarup` already passes against the full development project.
+1. **New Step 1.8 (separate branch):** complete and accept `-s`, `-i MANAGED_ID`, and exactly one new `-L under` behavior with native Wayland/X11 proof. Do not reopen already accepted Step 1.7, `-o` layer behavior or Version 2 panel reflow.
+2. **Return to Step 1.9:** complete source-versus-installed helper lookups and synchronized OpenRC defaults; perform the requested human maintainability-comment review of every shipped interpreted script, excluding tests/fixtures; run focused regression/static checks.
+3. Run `joetoo-kwin-stage-upstream --plan` / `--apply` / `--release-check`, review the final curated tree, resolve headers/provenance and stale relative links, then human-run `tarup`; archive inspection precedes ebuild integration.
+4. Decide whether to ship the temporary legacy native-X11 plugin behind default-off `USE=x11` or omit that optional variant. XWayland close requires the **Wayland effect and XCB helper regardless**.
+5. **Defer KWin 6.8 compatibility** until after a working 0.1.0 package targeting the accepted 6.7.6 implementation; do not turn the upgrade into a Step 1.9 release gate.
 
-**Next bounded joetoo-ai implementation:** revise source-vs-installed config
-examples and their README companions, fix packaged CLI/service helper lookup,
-then test native Wayland 6.8 compilation in a controlled environment. A
-published `joetoo-upstream` release and `joetoo` ebuild remain human-maintained
-under their repository AI policies.
+Publishing into `joetoo-upstream`, running `tarup`, modifying `joetoo` ebuilds, installing or testing native binaries remain the maintainer's explicit operations, never an agent side effect.
 
-## 8. Curated joetoo-upstream source-transfer manifest
+## 8. Curated joetoo-upstream source-transfer manifest — now external and authoritative
 
-**Destination root:** `joetoo-upstream/dev-util/joetoo-kwin/`. This is a
-selection from the development project, **not** the entire joetoo-ai checkout.
-Keep the source release complete enough for the human maintainer to inspect,
-build and license it; production installations must not contain development
-workspaces or historical evidence.
+**Source-of-truth:** `joetoo-ai/workspace/projects/joetoo-kwin/MANIFEST` (present at `24cd67f`). It is a `GROUP|SOURCE[|DESTINATION]` ordered allowlist, *not* the ebuild install manifest. `GROUP` controls only reporting labels. Source and optional target paths control their respective locations; `release/README.md|README.md` intentionally renames the curated source README for the tarball root. `tools/joetoo-kwin-stage-upstream` validates/uses this manifest, preserving newer human edits and verifying byte/mode parity. Human invokes the transfer—nothing in this document authorizes an agent to write to upstream.
 
-| Source in `joetoo-ai/workspace/projects/joetoo-kwin/` | In upstream tarball? | Installed in production? |
-| --- | --- | --- |
-| `joetoo-kwin`, required `libexec/` planner/broker/runtime helpers, `joetoo-kwin-resident.js` | Yes, full manifest §2 | Yes |
-| `native/managed-close/{adapter.cpp,x11.cpp,channel.h,CMakeLists.txt,metadata.json}` | Yes | Selected compiled plugin(s) and **the executable helper** |
-| `user-init.d/joetoo-kwind`, `conf.d/joetoo-kwind` | Yes | Yes, root-owned global paths |
-| `user-conf.d/joetoo-kwind`, functional per-user override samples | Yes | Read-only examples; no active HOME file |
-| `joetoo-kwin-per-run-template.conf`, `joetoo-kwin-template.conf`, config-role README companions | Yes | Shared starter/reference examples, docs |
-| `eselect/joetoo-kwin.eselect` | Yes | **Always** |
-| `docs/configuration-reference.md`, `docs/joetoo-kwin_user_manual.md`, native README | Yes | Yes, docs |
-| **`LICENSES.package` and `COPYRIGHT.exceptions`** (new in project root) | **Yes, required by `tarup`** | Used during archive creation; eclass installs actual staged license texts |
-| Focused, selected test sources useful for build verification | Optional curated subset | **No** |
-| `archive/`, `task_1.9/`, historical native transcripts, `tools/joetoo-kwind-install-poc`, POC-only test tools, scratch build products | **No** | **No** |
+| Curated component group | Source-tree status / destination |
+| --- | --- |
+| `metadata`, `license`, `architecture` | `MANIFEST`, `COPYRIGHT.exceptions`, `LICENSES.package`, `ARCHITECTURE.md` in the curated root |
+| `cli`, `resident`, `libexec` | `joetoo-kwin`, `joetoo-kwin-resident.js`, explicit complete list of required `libexec/` helpers |
+| `native` | `native/managed-close/{adapter.cpp,x11.cpp,channel.h,CMakeLists.txt,metadata.json,README.md}` |
+| `openrc`, `config`, `config-example` | `conf.d/`, `user-conf.d/`, `account-conf.d/`, `user-init.d/`; two `config-examples/{system,user}/defaults.conf` samples |
+| `config-template`, `config-readme`, `selector` | Short and annotated templates, **eight colocated** `README_*_conf.md` companions and `eselect/joetoo-kwin.eselect` |
+| `docs`, `documentation` | `docs/configuration-reference.md`, `docs/joetoo-kwin_user_manual.md`; source `release/README.md` becomes curated root `README.md` |
+| Deliberately uncurated | `archive/`, all `task_*/`, `tests/`/fixtures, `tools/`, `poc-user-conf.d/`, local workspace README/history, scratch artifacts and old transcripts |
 
-The release metadata must be audited against the **actual curated** source
-set. Ordinary source (including `native/managed-close/CMakeLists.txt`, which
-currently lacks a typical copyright line) should gain correct copyright
-headers rather than be added to `COPYRIGHT.exceptions` merely to suppress
-validation. `metadata.json` cannot carry source comments and is justified as
-an exception. Current `tarup` packages the complete curated directory and
-stages `/LICENSE` plus `LICENSES/*.txt`; a generalized exclusion-file feature
-is a possible future improvement, not required for 0.1.0.
+A prior `--plan` reported all present except the release README; `release/README.md` was subsequently committed in `24cd67f`. This is **not** evidence of a successful post-commit `--apply`, verified upstream parity, or `tarup` pass. After new Step 1.8 is accepted, human-run full transfer and `--release-check`, and inspect the entire upstream tree for stale/unlisted files (there is deliberately no `rsync --delete`). Review *all* copyright headers/third-party provenance and the staged `LICENSE`/`LICENSES/*.txt`; `native/managed-close/metadata.json` is an intended header exception, ordinary CMake/scripts/docs are not. `tarup` consumes the whole curated upstream directory, not only whichever files the last staging invocation copied.
 
 ## 9. Source references reviewed
 

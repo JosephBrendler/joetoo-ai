@@ -498,7 +498,7 @@ A fresh KWin session must never inherit destructive authority over old UUIDs.
 Step 1.9 packaging is the next distinct version 1 workstream; these accepted
 Step 1.7 decisions are not Version 2 deferrals.
 
-## 9. CLI contract (target; not all flags implemented)
+## 9. CLI contract (accepted behavior and proposed Step 1.8 completion)
 
 | Invocation | Acceptance status and Intended action |
 | --- | --- |
