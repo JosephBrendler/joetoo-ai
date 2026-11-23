@@ -2,20 +2,28 @@
 
 <!-- Copyright 2026 Joseph Brendler; SPDX-License-Identifier: GPL-3.0-or-later -->
 
-**Status (2026-11-23): ACTIVE — Version 1 controller-return focus
-policy approved; native functional validation and regressions PASS;
-maintainer acceptance/PR/merge remain.** Corrected `-L under` and
-read-only `-s`/`-i` have positive native X11/Wayland evidence.
-q552u01's full current-tree regression: **1,113 Python and 180
-JavaScript PASS**, including **54 focused installer tests**.
-The original Konsole regained usable keyboard focus after Wayland
-`-L` and configured `-o`. The `-o panel` case also verified a
-preferred new Konsole during initial layout, then deliberately returned
-focus to the controller at mission completion under the maintainer's
-2026-11-23 decision. A distinct competing-user-activation veto has
-not been demonstrated; do not claim one. `-L panel` is still
-unsupported; production packaging remains Step 1.9 work.
-See [2026-11-23 native focus/closeout evidence](step1.8-q552u01-focus-and-closeout-evidence-2026-11-23.md).
+> **Archived / accepted / merged — 2026-11-23.** The new Step 1.8
+> CLI completion was reviewed and merged through
+> [PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36), at
+> `main` commit `67c054c`. No further Step 1.8 implementation or acceptance
+> gate remains. [Merge-closure record](step1.8-pr36-merge-closure-2026-11-23.md)
+> and [archived HANDOFF](HANDOFF.md) document the transition to
+> [active Step 1.9 packaging](../../task_1.9/HANDOFF.md).
+
+**Accepted result:** `-s`, `-i MANAGED_ID`, and one-shot `-L ... under`
+passed native X11/Wayland validation; `-L over` and configured `-o`
+regressions were reviewed. The final Wayland control-console check verified
+return of usable keyboard focus after `-o`. Full headless results recorded
+for q552u01 were **1,113 Python PASS** and **180 JavaScript PASS**;
+**54** focused installer tests were also reported. These are historical
+maintainer-run results, not package-install or remote-transport QA.
+
+**Accepted Version 1 limitation:** an intervening manual click can change
+focus during a long launch, and final restoration may override that choice.
+The maintainer accepts this behavior for serialized Version 1 workflows;
+user-activity-aware policies and more complex parallel launches are deferred
+to [Version 2 considerations](../../ARCHITECTURE.md#12-version-2-considerations).
+`-L panel` and live reflow remain unsupported.
 
 **Accepted foundation:** All Steps **1.1–1.7 are accepted and closed**.
 Step 1.5d's `-L over`/`-l` behavior is accepted
@@ -25,8 +33,8 @@ Step 1.6 managed `-d`/`-x` close is accepted
 Step 1.7 checkpoint/recovery and `-S`/`-r` is accepted
 ([PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33)).
 This task must preserve all of those decisions and their evidence.
-The [active HANDOFF](HANDOFF.md) owns task dispatch and authorization;
-[ARCHITECTURE §9/§11/§12](../ARCHITECTURE.md) owns product requirements.
+The [archived HANDOFF](HANDOFF.md) preserves the historical task dispatch;
+[ARCHITECTURE §9/§11/§12](../../ARCHITECTURE.md) owns product requirements.
 The [initial planning outline](step18-branch-outline.md)
 is supplemental to this task scope.
 
@@ -82,7 +90,7 @@ change Step 1.5d acceptance or constitute Step 1.8 final acceptance.
 - **Scope/remaining gaps:** the successful CLI invocations used the
   **project source tree** and the maintainer's POC broker/resident installer.
   Installed-CLI packaging/lookup for the newer read-only helper is not proven;
-  Step 1.9 owns packaging. Step 1.8 is **not accepted/merged**. Current Wayland and native gmki91 X11 validation status is in the
+  Step 1.9 owns packaging. At this November 22 checkpoint Step 1.8 was not yet merged; the final accepted Wayland and native gmki91 X11 evidence is in the
   [Wayland integration record](step1.8-q552u01-under-wayland-native-validation-2026-11-22.md)
   and [X11 evidence](step1.8-gmki91-x11-native-validation-2026-11-22.md).
 
@@ -157,7 +165,7 @@ and [new q552u01 evidence](step1.8-q552u01-focus-and-closeout-evidence-2026-11-2
 
 Reuse the existing session-bus method
 `org.joetoo.KWinBridge.RegistryStatus()` in
-[`libexec/joetoo-kwind`](../libexec/joetoo-kwind). That method already
+[`libexec/joetoo-kwind`](../../libexec/joetoo-kwind). That method already
 returns in-memory managed counts, observation synchronization, placement
 transaction state, recovery, relevant protocol/capability and cleanup fields.
 It is a broker snapshot, **not** an independent remote-connection check.
@@ -272,30 +280,24 @@ No `xdotool` product dependency, unguarded `EXIT` trap or persistent focus
 forcing. See [focus evidence](step1.8-launch-control-focus-evidence-2026-11-22.md)
 and [Codex next-step task DRAFT](step1.8-codex-control-context-focus-completion-TASK-DRAFT-2026-11-22.md).
 
-## Remaining validation and acceptance sequence (updated 2026-11-23)
+## Final acceptance and merge disposition — 2026-11-23
 
-1. **Focus-policy decision recorded.** Controller return after
-   serialized Version 1 launches, including `-o panel`, is the
-   intended result. Do not misclassify initial-layout preferred
-   focus followed by control restoration as a failure. Competing
-   manual activation lacks a dedicated veto; record the limitation,
-   not a fictitious passing test. No behavior change is authorized
-   or required by this decision.
-2. **Review four local changes:** the 15-file POC SFTP parser installation
-   fix and its tests, development restart effect/readiness checks, and the
-   Step 1.9 installed-image completeness gate. Baseline complete suites are
-   **1,113 Python / 180 JavaScript PASS** and focused installer **54 PASS**;
-   rerun relevant checks only if further implementation changes require it.
-3. **Documentation/ancestry:** reconcile `ARCHITECTURE.md`'s obsolete
-   `-L under` policy and the decided focus policy. Review `main`'s `7fdd2cf`
-   versus Step 1.8 `4be1b0b`, merge-base `24cd67f`; both sides changed
-   architecture, while the uncommitted Step 1.9 draft also overlaps `main`.
-   Preserve existing history and do not rebase/merge without approval.
-4. **Maintainer acceptance/commit/push/PR/merge:** after policy and diff
-   review, accept the Step 1.8 native/automated evidence, commit and push,
-   prepare/review the PR and merge. Then close Step 1.8 and resume Step 1.9.
-   Optional human `-s` capability-display polish and earlier isolated remote
-   RDP failure are not demonstrated core Step 1.8 blockers.
+The maintainer reviewed the Step 1.8 native and regression results, approved
+return to the launch Konsole after serialized missions and explicitly accepted
+the intervening manual-focus limitation. The PR originally conflicted with
+an intervening `main` change in `ARCHITECTURE.md`; the maintainer reconciled
+the five conflict blocks, merged `main` into the feature branch at `fe60d46`,
+then merged [PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36).
+GitHub's final `main` merge was **`67c054c`**. The task branch was deleted,
+and source checkouts on gmki91, q552u01 and slim2 were fast-forwarded to the
+same commit. These are maintainer-reported actions, not new automated tests.
+
+See the [PR merge-closure record](step1.8-pr36-merge-closure-2026-11-23.md)
+for primary terminal evidence and the pointer to the active
+[Step 1.9 HANDOFF](../../task_1.9/HANDOFF.md).
+
+The original technical investigations below remain historical; superseded
+"not accepted" language in their dated sections describes earlier checkpoints.
 
 ## Non-goals and stop conditions
 
@@ -315,9 +317,12 @@ evidence is missing; never substitute `over` silently.
 
 ## Completion and transition
 
-Step 1.8 is complete **only** when the maintainer accepts `-s`, `-i`, and
-verified `-L under` on both supported KWin 6.7.6 compositor backends,
-including focused non-regression evidence. At that point update the task
-HANDOFF/README with the actual result, close the task and resume
-[Step 1.9](../task_1.9/HANDOFF.md), which retains the human
-maintainability-comment/source audit and packaging gates.
+**Step 1.8 is CLOSED.** Maintainer-reviewed native X11/Wayland evidence,
+focus policy and regression results were accepted with the limitations above;
+[PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36) was merged at
+`67c054c`. Details and permanent evidence links are in the
+[closure record](step1.8-pr36-merge-closure-2026-11-23.md).
+
+Packaging paths, installed-image completeness/isolation, source audit,
+curated staging, `tarup` and ebuild QA are active
+[Step 1.9](../../task_1.9/HANDOFF.md).

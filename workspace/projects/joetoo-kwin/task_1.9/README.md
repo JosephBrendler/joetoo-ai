@@ -1,14 +1,16 @@
 # Step 1.9 — Version 1 packaging and integration
 
-**Status at `joetoo-ai/main` `24cd67f` (2026-11-21): source curation and
-configuration documentation in progress; packaging temporarily paused for a
-new Step 1.8 CLI-completion task.** No production ebuild, published tarball,
-package installation or native packaged-path smoke-test result is claimed.
-Step 1.7 (which absorbed the *former* Step 1.8) remains accepted and merged
-([PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33), `df118da`).
+**Status (2026-11-23): ACTIVE, resumed after Step 1.8 acceptance and
+merge.** The intervening CLI-completion task was reviewed and merged through
+[PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36), making
+`67c054c` the accepted `joetoo-ai/main` source baseline. Its
+[archived evidence](../archive/task_step1.8/README.md) and
+[merge closure](../archive/task_step1.8/step1.8-pr36-merge-closure-2026-11-23.md)
+are historical; Step 1.9 does not rerun the whole native CLI validation
+matrix solely because of packaging. No production ebuild, published tarball,
+installed-path checks or native packaged-path acceptance is yet claimed.
 The [active dispatcher](HANDOFF.md) identifies the next actor and reserved
-authorizations; this task README is a state/history summary, not permission
-to operate on either protected repository.
+authorizations; this README records scope and history.
 
 ## Objective and release boundary
 
@@ -21,12 +23,15 @@ remote-resource contracts. The intended release is
 production install image. KWin 6.8 support is subsequent compatibility work,
 not a prerequisite for delivering the accepted 6.7.6 implementation.
 
-An additional Version 1 CLI scope issue has been discovered: `-s` and `-i`
-are recognized but unimplemented; `-L under` was previously deferred. The
-maintainer proposes a **new Step 1.8** to finish read-only status/detail
-and verified one-shot lowering without panel reflow. See
-[ARCHITECTURE §9/§11/§12](../ARCHITECTURE.md) for the proposed scope, explicit
-historical correction and Version 2 deferral of `-L panel`.
+The previously missing Version 1 CLI commands are now accepted:
+read-only `-s`, read-only `-i MANAGED_ID`, and verified one-shot
+`-L ... under`. The `-L panel`/live-reflow feature remains deferred to
+Version 2. See the [Step 1.8 acceptance archive](../archive/task_step1.8/README.md),
+[PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36) and
+[ARCHITECTURE §9/§11/§12](../ARCHITECTURE.md) for the accepted scope.
+Production packaging and installation of these new helpers are still
+Step 1.9 obligations, not assumed complete merely because the CLI passed
+source-tree validation.
 
 ## Completed source-preparation progress (not yet release acceptance)
 
@@ -52,11 +57,14 @@ historical correction and Version 2 deferral of `-L panel`.
   verification. The native Wayland KWin effect and XWayland XCB helper remain
   core, separate from the optional legacy native-X11 effect.
 
-## Remaining Step 1.9 stabilization work — after new Step 1.8 acceptance
+## Remaining Step 1.9 stabilization work — resumed
 
-1. **Freeze the accepted CLI semantics.** Merge/accept new Step 1.8 first;
-   update affected manual/usage text and run focused X11/Wayland regression.
-   Do not reopen accepted Step 1.7 snapshot/recovery or existing `-o` layers.
+1. **Use the accepted Step 1.8 CLI baseline.** Preserve its
+   `-s`, `-i` and `-L under` behavior and include `joetoo_kwin_readonly.py`
+   in both the curated transfer and the installed libexec inventory.
+   `-L panel` remains unsupported; do not reopen the Step 1.7 snapshot/
+   recovery or serial `-o` contracts. Run focused regression only when
+   implementation changes warrant it.
 2. **Repair packaged paths only where needed.** Use a consistent safe resolver
    for source-checkout and installed `/usr/bin`/`/usr/libexec/joetoo-kwin/`
    layouts. Synchronize both global OpenRC and user-service broker executable
@@ -102,10 +110,11 @@ precedence and stage gates. The `MANIFEST` supplies exact curated source paths;
 
 ## Current next transition
 
-The **maintainer** decides whether to accept the proposed revised architecture
-and starts the new `task/joetoo-kwin-step1.8-cli-completion` branch from a
-fresh, clean accepted `main`. That task should have its own small README and
-HANDOFF (not historical changes to the already accepted Step 1.7 archive),
-with explicit test cases for `-s`, `-i`, and verified `-L under`. On acceptance,
-resume this Step 1.9 source freeze and packaging integration. See
-[HANDOFF](HANDOFF.md) for the authorization and next-actor boundary.
+Step 1.8 is [accepted and archived](../archive/task_step1.8/README.md).
+After the documentation-only archive/transition PR is reviewed, the
+maintainer starts the Step 1.9 source-stabilization implementation branch
+from updated `main`, using [HANDOFF](HANDOFF.md) as the only active
+dispatcher. Next concrete work is the source-versus-installed helper inventory,
+including the read-only helper, plus installed path and OpenRC defaults
+before a source release or ebuild is claimed. Protected repositories, native
+operations and publication remain maintainer-controlled.

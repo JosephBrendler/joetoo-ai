@@ -6,7 +6,7 @@ in `joetoo-ai`, not yet the packaged version 1 application. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for accepted and proposed product contracts,
 including managed-operation requirements.
 
-## Current status — November 19, 2026
+## Current status — November 23, 2026
 
 **Step 1.5 is accepted and archived** (RDP [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29),
 `-L` and `-l` [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30),
@@ -34,7 +34,16 @@ see the [archived Step 1.7 closure](archive/task_step1.7/README.md),
 [formal acceptance](archive/task_step1.7/step1.7-maintainer-acceptance-2026-11-19.md)
 and [PR #33 merge record](archive/task_step1.7/step1.7-pr33-merge-closure-2026-11-19.md).
 
-**Next: Step 1.9 — Version 1 packaging/integration.** See the
+**Step 1.8 (new CLI completion) was ACCEPTED and MERGED on
+2026-11-23** through [PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36)
+(`main` commit `67c054c`). It adds `-s` broker status, `-i MANAGED_ID`
+read-only detail and one-shot `-L ... under` with X11/Wayland native
+validation, and returns keyboard focus to the eligible launching Konsole
+following serialized launches. The accepted Version 1 focus-race limitation
+is deferred to Version 2. See [Step 1.8 archive](archive/task_step1.8/README.md)
+and [merge closure](archive/task_step1.8/step1.8-pr36-merge-closure-2026-11-23.md).
+
+**Now active: Step 1.9 — Version 1 packaging/integration.** See the
 [active HANDOFF](task_1.9/HANDOFF.md), [kickoff scope](task_1.9/README.md),
 [architecture](ARCHITECTURE.md) and
 [Version 2 Considerations](ARCHITECTURE.md#12-version-2-considerations).
@@ -45,7 +54,7 @@ and [PR #33 merge record](archive/task_step1.7/step1.7-pr33-merge-closure-2026-1
 | TigerVNC over SSH | Positive viewer identity, owned forwarding lifecycle and verified placement on X11 and Wayland/XWayland; retained as a supported peer |
 | SDL FreeRDP | Configured serial `-o`, native X11/Wayland registration and exact-UUID placement, finite readiness and verified clean-failure continuation; [final acceptance](archive/task_step1.5/step1.5c5d-increment5-final-native-acceptance-2026-11-11.md) |
 | Configuration | Layered defaults/per-run settings, optional user-owned `eselect` profiles and severity-sensitive display; [configuration acceptance](archive/task_step1.5/step1.5c5d-increment4-stage4-native-acceptance-2026-11-11.md) |
-| Single-window launch and inventory | `-L DESKTOP PROGRAM MODE TARGET [LAYER]` supports `over` only (also the omitted-layer default), retained-slot selection and verified one-shot raise without peer reflow; `-l` lists managed records read-only; [native acceptance](archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md) |
+| Single-window launch and inventory | `-L DESKTOP PROGRAM MODE TARGET [LAYER]` supports verified one-shot `over` and `under` (default `over`); `panel` is unsupported. `-l`, `-s` and `-i MANAGED_ID` are read-only; [Step 1.5d over](archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md) and [Step 1.8 under/status/detail](archive/task_step1.8/README.md) |
 | Recovery and restorable layout | Private same-session checkpoint and historical identity/observations; `-S` protocol-2 last-good snapshots and depth-limited history; `-r` creates newly registered windows after confirmation; [Step 1.7 X11/Wayland evidence](archive/task_step1.7/README.md) |
 
 **Final recorded fixture/regression evidence:** 7 focused Python tests,
@@ -70,7 +79,8 @@ intermediate corrections and native limitations are documented in the
 [Step 1.5 archive](archive/task_step1.5/README.md),
 [Step 1.5d native acceptance](archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md),
 [Step 1.6 evidence](archive/task_step1.6/README.md), and
-[Step 1.7 closure](archive/task_step1.7/README.md).
+[Step 1.7 closure](archive/task_step1.7/README.md), and
+[Step 1.8 closure](archive/task_step1.8/README.md).
 Those historical materials remain primary evidence, not active instructions.
 
 ## Accepted configuration and lifecycle baseline
@@ -129,6 +139,11 @@ this does **not** constitute autodetection or a universal display requirement.
 
 ## Development files and checks
 
+The runtime component ownership map and separation of test, native-session,
+source-release and installed-package verification are documented in
+[ARCHITECTURE §§3 and 13](ARCHITECTURE.md#3-components-and-ownership).
+The list below is a development quick reference, not a release inventory.
+
 - `joetoo-kwin`: Bash CLI and launch planner orchestration.
 - `libexec/joetoo-kwin-plan-functions`, `libexec/joetoo-kwin-launch-functions`:
   shared plan, geometry and application dispatch.
@@ -144,6 +159,7 @@ this does **not** constitute autodetection or a universal display requirement.
   completed tasks, including `archive/step1.4/` and `archive/task_step1.5/`.
 - `archive/task_step1.6/`: accepted and merged Step 1.6 records and supporting originals.
 - `archive/task_step1.7/`: accepted and merged Step 1.7 evidence, logs and closure.
+- `archive/task_step1.8/`: accepted and merged Step 1.8 evidence, screenshots and closure.
 - `task_1.9/`: active version 1 packaging/integration task and handoff.
 - `tools/joetoo-kwind-install-poc`: user-owned installation/checking helper.
 
@@ -171,9 +187,11 @@ or separately authorized, consistent with applicable repository policy.
 - [Step 1.5 closure and historical dispatch](archive/task_step1.5/HANDOFF.md)
 - [Step 1.5c.4 native evidence](archive/task_step1.5/step1.5c4-native-acceptance.md)
 - [Step 1.5c.4 merge-readiness audit](archive/task_step1.5/step1.5c4-review.md)
+- [Step 1.8 accepted CLI completion and closure](archive/task_step1.8/README.md)
 
 Historical proposals and illustrative targets do not authorize new work.
 The [active Step 1.9 HANDOFF](task_1.9/HANDOFF.md) records current scope and
 next decisions. [Archived Step 1.7](archive/task_step1.7/README.md) and
-[Step 1.6](archive/task_step1.6/README.md) records preserve acceptance
-evidence but confer no new authorization.
+[Step 1.6](archive/task_step1.6/README.md), and
+[Step 1.8](archive/task_step1.8/README.md) preserve acceptance evidence,
+not new authorization.
