@@ -87,6 +87,8 @@ compatibility help form; use `-h` with ordinary short-option parsing.
 | `-o [-f FILE]` | Preflight the whole configured plan, confirm, then serially launch, register, place and finalize each desktop cohort. |
 | `-L DESKTOP PROGRAM MODE TARGET [over]` | One new managed window; omitted layer is `over`; explicit `over` works. `panel` and `under` are rejected. TARGET must still be supplied, including `""` for Dolphin home. There is no SLOT or geometry operand. |
 | `-l` | Read-only fixed-column managed inventory, including retained missing/uncertain records and full UUIDs. No executable plan is sourced. |
+| `-s` | Read-only `RegistryStatus` snapshot: counts, synchronization, Busy/uncertainty and capabilities. No remote-session health claim or plan sourcing. |
+| `-i MANAGED_ID` | Read-only `GetManaged` detail for exactly one canonical managed ID. Last-known observation is not current authenticated-window proof. UNKNOWN is distinct from broker unavailability. |
 | `-d MANAGED_ID` | Confirm graceful close of one positively verified window; retain its record, placement history and original reservation. Takes a managed ID, not raw UUID. |
 | `-x` | Confirm a fixed registered-set progressive sweep: retire positively absent records and verified graceful closes; retain failed/unresolved entries. This closes applications and releases verified reservations. |
 | `-S [-f FILE]` | Save the complete eligible managed arrangement as a new private timestamped snapshot. Current config controls history depth; FILE does not select windows. No partial selection. |
@@ -99,8 +101,9 @@ compatibility help form; use `-h` with ordinary short-option parsing.
 | `test-launch CLASS D X Y W H -- PROGRAM [ARG ...]` | Development-only launch/placement probe. Not the production recipe interface; it does not establish an ordinary managed registration. It starts a process. |
 | `test-multi-launch` | Development-only four-local-Konsole managed test. It opens windows; do not treat it as an innocuous status command. No operands. |
 
-`-s` and `-i` are recognized but **not integrated** and return failure. `-a`,
-`-D` and other unimplemented options are not supported. There is no automatic
+`-s` and `-i` use the existing read-only broker APIs; neither starts a
+broker, sources a launch plan, selects a window or changes managed state.
+`-a`, `-D` and other unimplemented options are not supported. There is no automatic
 save before closing, durable arbitrary geometry recovery, continuous layout
 repair or concurrent remote launch queue.
 
@@ -166,7 +169,12 @@ separate from explicit layers and logical slots. `-L over` uses the graphical
 region and raises only its new exact window once, without reflowing, recascading
 or changing existing windows. A single `over` is not a fifth panel. Launching a group does not automatically
 switch the current desktop; preferred focus is considered only when the target
-desktop is displayed.
+desktop is displayed. Under the serialized Version 1 workflow, the
+preferred window may receive temporary verified focus during initial
+layout, but an eligible original launch Konsole is restored to keyboard
+focus after the command finishes. This is intentional even for an `-o`
+`panel`/`over` group. Blocking viewer authentication occurs on the
+launching desktop, not by navigating among target desktops.
 
 Logical slots reserve identity, not screen rectangles. `-o` derives per-desktop
 slots in recipe order; `-L` asks the registry for a safe unused slot, including
@@ -318,6 +326,26 @@ rejects arbitrary added Bash. It then performs normal preflight, confirmation,
 new identities, placement and initial layout. Current reservations still block it.
 `-d` and `-x` never erase or advance last-good snapshots.
 
+### Control-window activation at invocation completion
+
+Before executing a mission, the CLI asks the resident to capture KWin's
+currently active window UUID. This is the defined control window, not proof
+that the invoking process owns it. After ordinary successful or unsuccessful
+completion, it asks KWin to reactivate that same window once, if still live,
+not minimized, on the displayed desktop (or all desktops), and not already
+active. Normal KWin activation may raise the control window; this is deliberate
+and follows the mission's verified placement/stacking. No desktop switch,
+geometry change or permanent keep-above rule is requested.
+
+This shared behavior applies to diagnostics as well as launches and closures;
+diagnostic data queries remain non-mutating, but CLI completion can restore
+activation. A closed controller cannot be restored. Capture/restore unavailability
+never changes the mission return code; existing signal-exit/cleanup paths remain
+unchanged. Focus reports `requested`, not proof of keyboard-input delivery.
+There is no input monitoring, later-user-activity veto, xdotool dependency or
+restoration retry. An info-verbosity message reports completion when a context
+was captured.
+
 ## Part B — Standalone KWinBridge D-Bus reference
 
 ### Addresses, introspection and safe queries
@@ -403,47 +431,62 @@ transaction payloads are further described immediately after the table.
 
 | Method | Input → output signature | Kind | Inputs and results | Authentication/state; standalone use |
 | --- | --- | --- | --- | --- |
-| `PrepareManagedClose` | `s` → `s` | F | JSON protocol 1: scope one/all, managed_id (empty for all), settings; optional terminal hints. Returns fixed preview/targets/exclusions/request ID. | Same-user ProcessFD caller, synchronized source, native KWin owner/UUID proof, no competing work. Preview only; use CLI. [source](../libexec/joetoo-kwind#L175) |
-| `CommitManagedClose` | `s` → `s` | F | Preview request_id. Returns accepted/terminal redacted close JSON. | Original live prepared caller unique name only, unexpired source/claim. Separate qdbus processes are not equivalent; use CLI confirmation. [source](../libexec/joetoo-kwind#L185) |
-| `ManagedCloseStatus` | `s` → `s` | Q | Retained close request_id → per-target actions/states/retired flags, retention booleans and overall state; unknown/evicted is explicit. | Safe later-console query. No close authority; broker-lifetime bounded history. [source](../libexec/joetoo-kwind#L190) |
-| `BeginSdlRegistration` | `s` → `s` | F | JSON protocol 1: desktop,slot,bounds; optional profile,intent. Returns request_id, marker/profile/bounds and registration status. | Original persistent owner is authenticated with ProcessFD/UID; arm before direct child. Caller/child/source/backend evidence mandatory; use worker. [source](../libexec/joetoo-kwind#L258) |
-| `BindSdlRegistration` | `sih` → `s` | F | request_id,pid,log_fd: original owned child and private evidence FD → registration JSON. | Same original authenticated owner; direct-child/start/executable/environment/log-FD checks. Cannot replace with a pathname or PID-only call. [source](../libexec/joetoo-kwind#L403) |
-| `PollSdlRegistration` | `s` → `s` | F | request_id → pending/registered/failed/timeout/cancelled registration JSON, exact UUID only when proved. | Same original owner. Query can finalize registration; new standalone qdbus sender is not authorized. [source](../libexec/joetoo-kwind#L446) |
-| `CancelSdlRegistration` | `s` → `s` | F | request_id → terminal registration/cancellation JSON. | Same original owner; bounded pending cleanup. Not a general viewer-close operation. [source](../libexec/joetoo-kwind#L452) |
-| `SubmitSdlPlacement` | `s` → `s` | F | Confirmed JSON for managed_id/action/source/revision/intended destination/frame and timeout → request/result JSON. | Authenticated operator; original registered owner/child/exact UUID/source/reservation and exclusive placement checks. Use CLI/placement tool, not raw UUID. [source](../libexec/joetoo-kwind#L1008) |
-| `TakeSdlPlacement` | `s` → `s` | R | Resident source → owned exact-UUID placement claim JSON or empty. | Pinned authenticated KWin sender, matching source and pending transaction. Not standalone. [source](../libexec/joetoo-kwind#L1201) |
-| `PollSdlPlacement` | `s` → `s` | F | request_id → pending or terminal placement JSON with registration and remote_session=unverified. | Original placement operator authorization; not a general read-only cross-caller status API. [source](../libexec/joetoo-kwind#L1232) |
-| `CancelSdlPlacement` | `s` → `s` | F | request_id → failed/cancelled placement result. | Authorized placement owner only. Does not close or retire the registered viewer. [source](../libexec/joetoo-kwind#L1241) |
-| `Submit` | `iiiii` → `s` | F | desktop,x,y,width,height → placement request ID. | Legacy active-window move arm; exclusive state/geometry/source/recovery gates. No general caller ProcessFD pin. Use -m. [source](../libexec/joetoo-kwind#L1317) |
-| `SubmitMove` | `iiiiibbb` → `s` | F | desktop,x,y,width,height,preserve_desktop,preserve_position,preserve_size → request ID. | Optional active-window move; CLI supplies preserved-field flags and invokes matching shortcut. Not managed ownership or close authority. [source](../libexec/joetoo-kwind#L1322) |
-| `TakeMove` | `ss` → `s` | R | source,window_uuid → optional move claim JSON or empty. | Pending compatible request/source and shortcut-captured exact window; legacy claim validation, not a standalone UUID move API. [source](../libexec/joetoo-kwind#L1347) |
-| `Take` | `∅` → `s` | R | No arguments → generic pending move claim JSON or empty. | Resident/shortcut protocol, single pending request; not an observational query and not an operator selection interface. [source](../libexec/joetoo-kwind#L1410) |
-| `SubmitLaunch` | `siiiii` → `s` | F | app_class,desktop,x,y,width,height → legacy launch placement ID. | Legacy development class-correlated placement arm, Busy/geometry guards; does not itself create a managed registration. Use test-launch only deliberately. [source](../libexec/joetoo-kwind#L1415) |
-| `TakeLaunch` | `ss` → `s` | R | resource_class,desktop_file → compatible launch placement JSON or empty. | Resident-selected normal candidate, class/request/ownership checks; not enrollment by calling with a class. [source](../libexec/joetoo-kwind#L1420) |
-| `Complete` | `sss` → `∅` | R | request_id,result,detail; result OK/ERROR/VERIFY; VERIFY detail is exact-window JSON → no return. | Active claimed transaction; SDL requires pinned KWin sender and rejects bare OK. Legacy paths use their state/UUID/source checks. Assignment attempt is not geometry success. [source](../libexec/joetoo-kwind#L1562) |
-| `Status` | `s` → `s` | Q | placement request_id → plain UNKNOWN/PENDING/RUNNING/VERIFYING/OK/ERROR plus possible detail. | Safe query; advances common verification bookkeeping. Preserve text interpretation rather than jq-parsing blindly. [source](../libexec/joetoo-kwind#L1677) |
-| `SubmitManagedLaunch` | `siiiiii` → `s` | F | app_class,desktop,slot,x,y,width,height → JSON placement_request_id and registration_request_id. | Atomic pending slot/correlation/placement gates; original legacy API without sender pin. Arm only as part of the owned launch flow. [source](../libexec/joetoo-kwind#L1688) |
-| `SubmitManagedLaunchIntent` | `s` → `s` | F | JSON {intent,frame:[x,y,width,height]} → same two IDs as SubmitManagedLaunch. | Validated complete restore metadata plus original managed launch checks. Metadata never enrolls or selects a UUID; no additional destructive authority. [source](../libexec/joetoo-kwind#L1719) |
-| `ExportManagedSnapshot` | `∅` → `s` | Q | No arguments → generated canonical Bash snapshot text; does not publish a file. | Same-user ProcessFD operator, complete live placed metadata, authenticated/native identity and stable source. Safe own-terminal inspection when eligible; treat returned targets as private. [source](../libexec/joetoo-kwind#L1740) |
-| `SetManagedLaunchPid` | `si` → `∅` | F | registration request_id,pid → no return. | Existing active owned correlation intent and positive launched PID; legacy API is not ProcessFD-pinned. Cannot enroll a preexisting arbitrary window. [source](../libexec/joetoo-kwind#L1750) |
-| `PollManagedLaunch` | `s` → `s` | F | registration request_id → pending/registered/failed/timeout/ambiguous or UNKNOWN JSON. | Existing correlation state; can finalize enrollment only from retained complete positive evidence. Not interchangeable with SDL polling. [source](../libexec/joetoo-kwind#L1760) |
-| `SubmitInitialLayout` | `s` → `s` | F | JSON entries [{registration_request_id,layer}], optional focus_timeout_ms/focus_poll_interval_ms/single_raise → layout ID. | Placed live registered cohort, one desktop, synchronized source, Busy/UUID/frame checks. No caller-supplied raw UUID list; use common launcher. [source](../libexec/joetoo-kwind#L1780) |
-| `TakeInitialLayout` | `s` → `s` | R | source → frozen initial-layout claim JSON or empty. | Current pending cohort/source. Resident only; source is an ordering gate, not a transferable credential. [source](../libexec/joetoo-kwind#L1853) |
-| `CompleteInitialLayout` | `ss` → `∅` | R | request_id,payload JSON → no return. | Matching running source/cohort/order, geometry/stack/focus verification data and deadline; legacy callback not ProcessFD-pinned. Never forge completion. [source](../libexec/joetoo-kwind#L1866) |
-| `InitialLayoutStatus` | `s` → `s` | Q | layout request_id → state (PENDING/RUNNING/SUCCEEDED/FAILED/UNKNOWN) and retained result JSON. | Safe status query; no new layout submission. [source](../libexec/joetoo-kwind#L1939) |
-| `SubmitManagedViewerLaunch` | `s` → `s` | F | JSON desktop,slot,x,y,width,height plus validated VNC bounds; optional intent → registration/placement IDs. | Arms viewer-role observation before spawning; resident capability, slot and serialization guards. Not equivalent to generic PID-only enrollment. [source](../libexec/joetoo-kwind#L1954) |
-| `TakeManagedViewer` | `s` → `s` | R | source → pending native-XID-to-KWin-UUID viewer claim JSON or empty. | Existing owned VNC role evidence, synchronized source and claim state; not standalone. [source](../libexec/joetoo-kwind#L2047) |
-| `CompleteManagedViewer` | `s` → `s` | R | Matching claim/result JSON including matches of native xid and uuid → registration result JSON or empty. | Exact active claim, PID/role/window/history checks; title/class alone insufficient. Use resident resolution only. [source](../libexec/joetoo-kwind#L2058) |
-| `CancelManagedViewerLaunch` | `s` → `∅` | F | registration request_id → no return. | Existing viewer transaction; fail/expire observer and pending placement. Worker must separately prove owned process/tunnel cleanup; no standalone force-close meaning. [source](../libexec/joetoo-kwind#L2109) |
-| `BeginCorrelation` | `ss` → `s` | D | expected_class,title_token → diagnostic request ID. | Prelaunch synchronized baseline and serialization guard. Creates Busy state; does not grant management or close authority. [source](../libexec/joetoo-kwind#L2119) |
-| `SetCorrelationPid` | `si` → `∅` | D | diagnostic request_id,pid → no return. | Matching pending probe; launched PID is evidence, not adoption permission. [source](../libexec/joetoo-kwind#L2264) |
-| `PollCorrelation` | `s` → `s` | D | diagnostic request_id → PENDING/MATCHED/TIMEOUT/AMBIGUOUS/UNKNOWN evidence JSON. | Diagnostic history/settle logic only. Does not register and is not an extra SDL registration delay. [source](../libexec/joetoo-kwind#L2329) |
-| `ObserveWindow` | `s` → `∅` | R | JSON event,source,revision,window → no return. | Production recovery authenticates actual KWin sender/process; sequenced lifecycle facts only. Do not send synthetic events to a live broker. [source](../libexec/joetoo-kwind#L2465) |
-| `SyncInventory` | `s` → `∅` | R | JSON source,revision,windows and supported protocol capability fields → no return. | Production authenticated KWin sender/full validated inventory; source reload allowed only inside same proved compositor. Never standalone inventory injection. [source](../libexec/joetoo-kwind#L2562) |
-| `ListObserved` | `∅` → `s` | Q | No arguments → windows/events/changes/eviction and sync source/revision JSON. | Safe observational query. Contains captions and diagnostic facts; not managed authority or exhaustive durable history. [source](../libexec/joetoo-kwind#L2651) |
-| `ListManaged` | `∅` → `s` | Q | No arguments → {count,windows:[summaries]}. | Safe read-only managed query; invalid checkpoint is an error, not false empty success. Missing reservations remain visible. [source](../libexec/joetoo-kwind#L2681) |
-| `GetManaged` | `s` → `s` | Q | Managed ID or exact UUID → {state:FOUND,window:...} or {state:UNKNOWN}. | Safe lookup, including bounded last-known observation. No wildcard, command expression or adoption; unknown fields remain omitted. [source](../libexec/joetoo-kwind#L2692) |
-| `RegistryStatus` | `∅` → `s` | Q | No arguments → registry/presence/request counts, observation/recovery state, capabilities, active transaction and cleanup flags. | Safe diagnostic state. ready does not prove every individual record present or a remote session authenticated. [source](../libexec/joetoo-kwind#L2713) |
+| `ControlFocus` | `ss` → `s` | F | action (`capture` or `restore`), handle (empty for capture) → bounded JSON outcome/opaque capture handle. | Same-user CLI; best effort. Only the initially captured exact UUID may be restored. No close or registry authority. |
+| `TakeControlFocus` | `s` → `s` | R | resident source → one claimed pending step or empty. | Authenticated KWin sender, same session/source, unexpired request. Internal only. |
+| `CompleteControlFocus` | `ss` → `b` | R | request ID, JSON `{state,window_uuid}` → accepted Boolean. | Authenticated current KWin sender and claimed request; expired/wrong/replayed callbacks refused. Internal only. |
+| `PrepareManagedClose` | `s` → `s` | F | JSON protocol 1: scope one/all, managed_id (empty for all), settings; optional terminal hints. Returns fixed preview/targets/exclusions/request ID. | Same-user ProcessFD caller, synchronized source, native KWin owner/UUID proof, no competing work. Preview only; use CLI. [source](../libexec/joetoo-kwind#L298) |
+| `CommitManagedClose` | `s` → `s` | F | Preview request_id. Returns accepted/terminal redacted close JSON. | Original live prepared caller unique name only, unexpired source/claim. Separate qdbus processes are not equivalent; use CLI confirmation. [source](../libexec/joetoo-kwind#L308) |
+| `ManagedCloseStatus` | `s` → `s` | Q | Retained close request_id → per-target actions/states/retired flags, retention booleans and overall state; unknown/evicted is explicit. | Safe later-console query. No close authority; broker-lifetime bounded history. [source](../libexec/joetoo-kwind#L314) |
+| `BeginSdlRegistration` | `s` → `s` | F | JSON protocol 1: desktop,slot,bounds; optional profile,intent. Returns request_id, marker/profile/bounds and registration status. | Original persistent owner is authenticated with ProcessFD/UID; arm before direct child. Caller/child/source/backend evidence mandatory; use worker. [source](../libexec/joetoo-kwind#L381) |
+| `BindSdlRegistration` | `sih` → `s` | F | request_id,pid,log_fd: original owned child and private evidence FD → registration JSON. | Same original authenticated owner; direct-child/start/executable/environment/log-FD checks. Cannot replace with a pathname or PID-only call. [source](../libexec/joetoo-kwind#L527) |
+| `PollSdlRegistration` | `s` → `s` | F | request_id → pending/registered/failed/timeout/cancelled registration JSON, exact UUID only when proved. | Same original owner. Query can finalize registration; new standalone qdbus sender is not authorized. [source](../libexec/joetoo-kwind#L570) |
+| `CancelSdlRegistration` | `s` → `s` | F | request_id → terminal registration/cancellation JSON. | Same original owner; bounded pending cleanup. Not a general viewer-close operation. [source](../libexec/joetoo-kwind#L576) |
+| `SubmitSdlPlacement` | `s` → `s` | F | Confirmed JSON for managed_id/action/source/revision/intended destination/frame and timeout → request/result JSON. | Authenticated operator; original registered owner/child/exact UUID/source/reservation and exclusive placement checks. Use CLI/placement tool, not raw UUID. [source](../libexec/joetoo-kwind#L1131) |
+| `TakeSdlPlacement` | `s` → `s` | R | Resident source → owned exact-UUID placement claim JSON or empty. | Pinned authenticated KWin sender, matching source and pending transaction. Not standalone. [source](../libexec/joetoo-kwind#L1325) |
+| `PollSdlPlacement` | `s` → `s` | F | request_id → pending or terminal placement JSON with registration and remote_session=unverified. | Original placement operator authorization; not a general read-only cross-caller status API. [source](../libexec/joetoo-kwind#L1356) |
+| `CancelSdlPlacement` | `s` → `s` | F | request_id → failed/cancelled placement result. | Authorized placement owner only. Does not close or retire the registered viewer. [source](../libexec/joetoo-kwind#L1365) |
+| `Submit` | `iiiii` → `s` | F | desktop,x,y,width,height → placement request ID. | Legacy active-window move arm; exclusive state/geometry/source/recovery gates. No general caller ProcessFD pin. Use -m. [source](../libexec/joetoo-kwind#L1441) |
+| `SubmitMove` | `iiiiibbb` → `s` | F | desktop,x,y,width,height,preserve_desktop,preserve_position,preserve_size → request ID. | Optional active-window move; CLI supplies preserved-field flags and invokes matching shortcut. Not managed ownership or close authority. [source](../libexec/joetoo-kwind#L1446) |
+| `TakeMove` | `ss` → `s` | R | source,window_uuid → optional move claim JSON or empty. | Pending compatible request/source and shortcut-captured exact window; legacy claim validation, not a standalone UUID move API. [source](../libexec/joetoo-kwind#L1471) |
+| `Take` | `∅` → `s` | R | No arguments → generic pending move claim JSON or empty. | Resident/shortcut protocol, single pending request; not an observational query and not an operator selection interface. [source](../libexec/joetoo-kwind#L1534) |
+| `SubmitLaunch` | `siiiii` → `s` | F | app_class,desktop,x,y,width,height → legacy launch placement ID. | Legacy development class-correlated placement arm, Busy/geometry guards; does not itself create a managed registration. Use test-launch only deliberately. [source](../libexec/joetoo-kwind#L1539) |
+| `TakeLaunch` | `ss` → `s` | R | resource_class,desktop_file → compatible launch placement JSON or empty. | Resident-selected normal candidate, class/request/ownership checks; not enrollment by calling with a class. [source](../libexec/joetoo-kwind#L1544) |
+| `Complete` | `sss` → `∅` | R | request_id,result,detail; result OK/ERROR/VERIFY; VERIFY detail is exact-window JSON → no return. | Active claimed transaction; SDL requires pinned KWin sender and rejects bare OK. Legacy paths use their state/UUID/source checks. Assignment attempt is not geometry success. [source](../libexec/joetoo-kwind#L1686) |
+| `Status` | `s` → `s` | Q | placement request_id → plain UNKNOWN/PENDING/RUNNING/VERIFYING/OK/ERROR plus possible detail. | Safe query; advances common verification bookkeeping. Preserve text interpretation rather than jq-parsing blindly. [source](../libexec/joetoo-kwind#L1801) |
+| `SubmitManagedLaunch` | `siiiiii` → `s` | F | app_class,desktop,slot,x,y,width,height → JSON placement_request_id and registration_request_id. | Atomic pending slot/correlation/placement gates; original legacy API without sender pin. Arm only as part of the owned launch flow. [source](../libexec/joetoo-kwind#L1812) |
+| `SubmitManagedLaunchIntent` | `s` → `s` | F | JSON {intent,frame:[x,y,width,height]} → same two IDs as SubmitManagedLaunch. | Validated complete restore metadata plus original managed launch checks. Metadata never enrolls or selects a UUID; no additional destructive authority. [source](../libexec/joetoo-kwind#L1843) |
+| `ExportManagedSnapshot` | `∅` → `s` | Q | No arguments → generated canonical Bash snapshot text; does not publish a file. | Same-user ProcessFD operator, complete live placed metadata, authenticated/native identity and stable source. Safe own-terminal inspection when eligible; treat returned targets as private. [source](../libexec/joetoo-kwind#L1864) |
+| `SetManagedLaunchPid` | `si` → `∅` | F | registration request_id,pid → no return. | Existing active owned correlation intent and positive launched PID; legacy API is not ProcessFD-pinned. Cannot enroll a preexisting arbitrary window. [source](../libexec/joetoo-kwind#L1874) |
+| `PollManagedLaunch` | `s` → `s` | F | registration request_id → pending/registered/failed/timeout/ambiguous or UNKNOWN JSON. | Existing correlation state; can finalize enrollment only from retained complete positive evidence. Not interchangeable with SDL polling. [source](../libexec/joetoo-kwind#L1884) |
+| `SubmitInitialLayout` | `s` → `s` | F | JSON entries [{registration_request_id,layer}], optional focus_timeout_ms/focus_poll_interval_ms/single_raise → layout ID. | Placed live registered cohort, one desktop, synchronized source, Busy/UUID/frame checks. No caller-supplied raw UUID list; use common launcher. [source](../libexec/joetoo-kwind#L1904) |
+| `TakeInitialLayout` | `s` → `s` | R | source → frozen initial-layout claim JSON or empty. | Current pending cohort/source. Resident only; source is an ordering gate, not a transferable credential. [source](../libexec/joetoo-kwind#L1998) |
+| `CompleteInitialLayout` | `ss` → `∅` | R | request_id,payload JSON → no return. | Matching running source/cohort/order, geometry/stack/focus verification data and deadline; legacy callback not ProcessFD-pinned. Never forge completion. [source](../libexec/joetoo-kwind#L2013) |
+| `InitialLayoutStatus` | `s` → `s` | Q | layout request_id → state (PENDING/RUNNING/SUCCEEDED/FAILED/UNKNOWN) and retained result JSON. | Safe status query; no new layout submission. [source](../libexec/joetoo-kwind#L2161) |
+| `SubmitManagedViewerLaunch` | `s` → `s` | F | JSON desktop,slot,x,y,width,height plus validated VNC bounds; optional intent → registration/placement IDs. | Arms viewer-role observation before spawning; resident capability, slot and serialization guards. Not equivalent to generic PID-only enrollment. [source](../libexec/joetoo-kwind#L2179) |
+| `TakeManagedViewer` | `s` → `s` | R | source → pending native-XID-to-KWin-UUID viewer claim JSON or empty. | Existing owned VNC role evidence, synchronized source and claim state; not standalone. [source](../libexec/joetoo-kwind#L2272) |
+| `CompleteManagedViewer` | `s` → `s` | R | Matching claim/result JSON including matches of native xid and uuid → registration result JSON or empty. | Exact active claim, PID/role/window/history checks; title/class alone insufficient. Use resident resolution only. [source](../libexec/joetoo-kwind#L2283) |
+| `CancelManagedViewerLaunch` | `s` → `∅` | F | registration request_id → no return. | Existing viewer transaction; fail/expire observer and pending placement. Worker must separately prove owned process/tunnel cleanup; no standalone force-close meaning. [source](../libexec/joetoo-kwind#L2334) |
+| `BeginCorrelation` | `ss` → `s` | D | expected_class,title_token → diagnostic request ID. | Prelaunch synchronized baseline and serialization guard. Creates Busy state; does not grant management or close authority. [source](../libexec/joetoo-kwind#L2344) |
+| `SetCorrelationPid` | `si` → `∅` | D | diagnostic request_id,pid → no return. | Matching pending probe; launched PID is evidence, not adoption permission. [source](../libexec/joetoo-kwind#L2489) |
+| `PollCorrelation` | `s` → `s` | D | diagnostic request_id → PENDING/MATCHED/TIMEOUT/AMBIGUOUS/UNKNOWN evidence JSON. | Diagnostic history/settle logic only. Does not register and is not an extra SDL registration delay. [source](../libexec/joetoo-kwind#L2554) |
+| `ObserveWindow` | `s` → `∅` | R | JSON event,source,revision,window → no return. | Production recovery authenticates actual KWin sender/process; sequenced lifecycle facts only. Do not send synthetic events to a live broker. [source](../libexec/joetoo-kwind#L2690) |
+| `SyncInventory` | `s` → `∅` | R | JSON source,revision,windows and supported protocol capability fields → no return. | Production authenticated KWin sender/full validated inventory; source reload allowed only inside same proved compositor. Never standalone inventory injection. [source](../libexec/joetoo-kwind#L2787) |
+| `ListObserved` | `∅` → `s` | Q | No arguments → windows/events/changes/eviction and sync source/revision JSON. | Safe observational query. Contains captions and diagnostic facts; not managed authority or exhaustive durable history. [source](../libexec/joetoo-kwind#L2877) |
+| `ListManaged` | `∅` → `s` | Q | No arguments → {count,windows:[summaries]}. | Safe read-only managed query; invalid checkpoint is an error, not false empty success. Missing reservations remain visible. [source](../libexec/joetoo-kwind#L2907) |
+| `GetManaged` | `s` → `s` | Q | Managed ID or exact UUID → {state:FOUND,window:...} or {state:UNKNOWN}. | Safe lookup, including bounded last-known observation. No wildcard, command expression or adoption; unknown fields remain omitted. [source](../libexec/joetoo-kwind#L2918) |
+| `RegistryStatus` | `∅` → `s` | Q | No arguments → registry/presence/request counts, observation/recovery state, capabilities, active transaction and cleanup flags. | Safe diagnostic state. ready does not prove every individual record present or a remote session authenticated. [source](../libexec/joetoo-kwind#L2939) |
+
+Shared control-focus coordination is not a window-management authorization:
+`ControlFocus("capture", "")` returns `{state:"captured",handle}` only after
+resident capture. `ControlFocus("restore", handle)` consumes that opaque
+one-time context, never a caller-selected UUID. Missing/unavailable contexts
+return a nonfatal skipped outcome. Separate CLI calls can use the handle;
+no original sender connection must survive the mission. Callers must belong
+to the broker's user; resident claim/completion callbacks authenticate the
+actual KWin process/session and current resident source. Each exchange uses
+the existing bounded broker D-Bus timeout. Context storage is bounded by the
+existing retained-request capacity; old abandoned contexts can be evicted.
+They are not persisted or restored after broker/resident replacement.
 
 ### Structured transaction payloads and outcomes
 

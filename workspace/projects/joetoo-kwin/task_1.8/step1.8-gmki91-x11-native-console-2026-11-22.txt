@@ -1,0 +1,898 @@
+Script started on 2026-11-22 22:21:46-05:00 [TERM="xterm-256color" TTY="/dev/pts/1" COLUMNS="122" LINES="64"]
+
+[m[1m[35m         -/oyddmdhs+:.[m                 [m[1m[35mjoe[m@[1m[35mgmki91[m
+[1m[35m     -o[37mdNMMMMMMMMNNmhy+[35m-`[m              ----------
+[1m[35m   -y[37mNMMMMMMMMMMMNNNmmdhy[35m+-[m            [m[1m[35mOS[m: [mGentoo Linux x86_64
+[1m[35m `o[37mmMMMMMMMMMMMMNmdmmmmddhhy[35m/`[m         [m[1m[35mHost[m: [mNucBox M3 PLUS
+[1m[35m om[37mMMMMMMMMMMMN[35mhhyyyo[37mhmdddhhhd[35mo`[m       [m[1m[35mKernel[m: [mLinux 6.18.62-gentoo-dist-hardened-joetoo
+[1m[35m.y[37mdMMMMMMMMMMd[35mhs++so/s[37mmdddhhhhdm[35m+`[m     [m[1m[35mUptime[m: [m13 days, 9 hours, 59 mins
+[1m[35m oy[37mhdmNMMMMMMMN[35mdyooy[37mdmddddhhhhyhN[35md.[m    [m[1m[35mPackages[m: [m1791 (emerge)
+[1m[35m  :o[37myhhdNNMMMMMMMNNNmmdddhhhhhyym[35mMh[m    [m[1m[35mShell[m: [mbash 5.3.20
+[1m[35m    .:[37m+sydNMMMMMNNNmmmdddhhhhhhmM[35mmy[m    [m[1m[35mDisplay (SMB2330H)[m: [m1920x1080 in 7", 60 Hz [External]
+[1m[35m       /m[37mMMMMMMNNNmmmdddhhhhhmMNh[35ms:[m    [m[1m[35mDesktop Environment[m: [mKDE Plasma 6.7.6
+[1m[35m    `o[37mNMMMMMMMNNNmmmddddhhdmMNhs[35m+`[m     [m[1m[35mWindow Manager[m: [mKWin (X11)
+[1m[35m  `s[37mNMMMMMMMMNNNmmmdddddmNMmhs[35m/.[m       [m[1m[35mWM Theme[m: [mBreeze
+[1m[35m /N[37mMMMMMMMMNNNNmmmdddmNMNdso[35m:`[m         [m[1m[35mTheme[m: [moxygen (Oxygen) [Qt], Breeze [GTK2/3]
+[1m[35m+M[37mMMMMMMNNNNNmmmmdmNMNdso[35m/-[m            [m[1m[35mIcons[m: [moxygen [Qt], oxygen [GTK2/3/4]
+[1m[35myM[37mMNNNNNNNmmmmmNNMmhs+/[35m-`[m              [m[1m[35mFont[m: [mNoto Sans (11pt) [Qt], Noto Sans (11pt) [GTK2/3/4]
+[1m[35m/h[37mMMNNNNNNNNMNdhs++/[35m-`[m                 [m[1m[35mCursor[m: [mOxygen_Yellow (24px)
+[1m[35m`/[37mohdmmddhys+++/:[35m.`[m                    [m[1m[35mTerminal[m: [mkonsole 26.4.3
+[1m[35m  `-//////:--.[m                         [m[1m[35mTerminal Font[m: [mHack (8pt)
+                                       [m[1m[35mCPU[m: [m12th Gen Intel(R) Core(TM) i9-12900HK (12+8) @ 5.00 GHz
+                                       [m[1m[35mGPU[m: [mIntel Iris Xe Graphics @ 1.45 GHz [Integrated]
+                                       [m[1m[35mMemory[m: [m7.93 GiB / 31.09 GiB ([32m25%[m)
+                                       [m[1m[35mSwap[m: [m0 B / 5.00 GiB ([32m0%[m)
+                                       [m[1m[35mDisk (/)[m: [m177.85 MiB / 9.75 GiB ([32m2%[m) - ext4
+                                       [m[1m[35mDisk (/home)[m: [m288.59 GiB / 491.08 GiB ([93m59%[m) - ext4
+                                       [m[1m[35mDisk (/opt)[m: [m4.89 GiB / 8.78 GiB ([93m56%[m) - ext4
+                                       [m[1m[35mDisk (/srv)[m: [m319.45 GiB / 809.99 GiB ([32m39%[m) - ext4
+                                       [m[1m[35mDisk (/tmp)[m: [m75.41 MiB / 53.84 GiB ([32m0%[m) - ext4
+                                       [m[1m[35mDisk (/usr)[m: [m31.99 GiB / 235.17 GiB ([32m14%[m) - ext4
+                                       [m[1m[35mDisk (/var)[m: [m72.46 GiB / 97.87 GiB ([93m74%[m) - ext4
+                                       [m[1m[35mLocal IP (eth0)[m: [m192.168.62.137/24
+                                       [m[1m[35mLocale[m: [men_US.UTF-8
+                                       
+                                       [m[40m   [41m   [42m   [43m   [44m   [45m   [46m   [47m   [m
+                                       [100m   [101m   [102m   [103m   [104m   [105m   [106m   [107m   [m
+[m
+GPG_TTY=/dev/pts/27
+LANG=en_US.UTF-8
+LC_COLLATE=C
+LC_CTYPE=en_US.UTF-8
+XDG_CONFIG_DIRS=/home/joe/.config/kdedefaults:/etc/xdg
+XDG_CURRENT_DESKTOP=KDE
+XDG_DATA_DIRS=/usr/local/share:/usr/share
+XDG_MENU_PREFIX=plasma-
+XDG_RUNTIME_DIR=/run/user/1000
+XDG_SEAT=seat0
+XDG_SESSION_CLASS=user
+XDG_SESSION_ID=3
+XDG_SESSION_TYPE=tty
+XDG_VTNR=1
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7mbus=org.joetoo.KWinBridge[27m
+[7mpath=/org/joetoo/KWinBridge[27m[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m bus=org.joetoo.KWinBridge
+path=/org/joetoo/KWinBridge
+[?2004l]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7m./joetoo-kwin -s[27m
+[7m./joetoo-kwin -l[27m[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m ./joetoo-kwin -s
+./joetoo-kwin -l
+[?2004lBroker registry status (snapshot; not remote connection health)
+State: No reported Busy/uncertain flags
+Managed windows: 0 (present=0, missing=0, uncertain=0)
+Launch requests: 0 (pending=0, running=0, succeeded=0, failed=0, timeout=0, ambiguous=0)
+Observation: synchronized; observed=25; revision=59
+Placement transaction: IDLE
+Recovery: ready
+Capabilities: managed_close=1, snapshot=1, viewer=1, initial_layout=1, single_raise=1
+No managed windows (no retained managed reservations).
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7mqdbus6 "$bus" "$path" "$bus.RegistryStatus" | jq .[27m
+[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m qdbus6 "$bus" "$path" "$bus.RegistryStatus" | jq .
+[A
+[?2004l[1;39m{[0m
+  [1;34m"initial_layout_active"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+  [1;34m"initial_layout_protocol"[0m[1;39m:[0m [0;39m1[0m[1;39m,[0m
+  [1;34m"managed_close_active"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+  [1;34m"managed_close_protocol"[0m[1;39m:[0m [0;39m1[0m[1;39m,[0m
+  [1;34m"managed_count"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+  [1;34m"observation"[0m[1;39m:[0m [1;39m{[0m
+    [1;34m"observed_count"[0m[1;39m:[0m [0;39m25[0m[1;39m,[0m
+    [1;34m"revision"[0m[1;39m:[0m [0;39m59[0m[1;39m,[0m
+    [1;34m"source"[0m[1;39m:[0m [0;32m"1795403565845-otsor062yl7"[0m[1;39m,[0m
+    [1;34m"synchronized"[0m[1;39m:[0m [0;39mtrue[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;34m"placement_transaction"[0m[1;39m:[0m [1;39m{[0m
+    [1;34m"id"[0m[1;39m:[0m [0;90mnull[0m[1;39m,[0m
+    [1;34m"state"[0m[1;39m:[0m [0;32m"IDLE"[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;34m"presence_counts"[0m[1;39m:[0m [1;39m{[0m
+    [1;34m"missing"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"present"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"uncertain"[0m[1;39m:[0m [0;39m0[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;34m"recovery"[0m[1;39m:[0m [0;32m"ready"[0m[1;39m,[0m
+  [1;34m"recovery_snapshot_protocol"[0m[1;39m:[0m [0;39m1[0m[1;39m,[0m
+  [1;34m"request_count"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+  [1;34m"request_counts"[0m[1;39m:[0m [1;39m{[0m
+    [1;34m"ambiguous"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"failed"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"pending"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"running"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"succeeded"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"timeout"[0m[1;39m:[0m [0;39m0[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;34m"single_lower_protocol"[0m[1;39m:[0m [0;39m1[0m[1;39m,[0m
+  [1;34m"single_raise_protocol"[0m[1;39m:[0m [0;39m1[0m[1;39m,[0m
+  [1;34m"viewer_cleanup_uncertain"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+  [1;34m"viewer_protocol"[0m[1;39m:[0m [0;39m1[0m
+[1;39m}[0m
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7mxprop -root \[27m
+[7m    _NET_CURRENT_DESKTOP \[27m
+[7m    _NET_ACTIVE_WINDOW \[27m
+[7m    _NET_NUMBER_OF_DESKTOPS[27m[A[A[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m xprop -root \
+    _NET_CURRENT_DESKTOP \
+    _NET_ACTIVE_WINDOW \
+    _NET_NUMBER_OF_DESKTOPS
+[?2004l_NET_CURRENT_DESKTOP(CARDINAL) = 0
+_NET_ACTIVE_WINDOW(WINDOW): window id # 0x4400008
+_NET_NUMBER_OF_DESKTOPS(CARDINAL) = 20
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7mxprop -root _NET_CLIENT_LIST_STACKING[27m
+[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m xprop -root _NET_CLIENT_LIST_STACKING
+[A
+[?2004l_NET_CLIENT_LIST_STACKING(WINDOW): window id # 0x240139a, 0x3e00007, 0x5e00008, 0x7000008, 0x7a00008, 0x7200008, 0x7400008, 0x6400008, 0x6600008, 0x6a00008, 0x6000008, 0x5c00008, 0x6c00008, 0x6800008, 0x6200008, 0x6e00008, 0x7600008, 0x7800008, 0x8a00057, 0x8e00059, 0x9400011, 0x9600057, 0x9a00008, 0x4800008, 0x4400008, 0x4a00004, 0x24013c9
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7mqdbus6 "$bus" "$path" "$bus.ListObserved" |[27m
+[7m    jq '[.windows[] |[27m
+[7m        {uuid, resource_class, desktops, on_all_desktops, geometry}]'[27m
+[A[A[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m qdbus6 "$bus" "$path" "$bus.ListObserved" |
+    jq '[.windows[] |
+        {uuid, resource_class, desktops, on_all_desktops, geometry}]'
+[A
+[?2004l[1;39m[[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"95388f3d-e96f-4930-a5e3-5255ec846c17"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"xwaylandvideobridge"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m1[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m36[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m64[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m928[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m522[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"de5c54ce-344e-4a8a-9601-a8ce9e860f0f"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m4[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m954[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m891[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m514[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m45[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"cb0fdd97-5d14-4a85-9840-1821d71ec0ee"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m7[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m19[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"cbb6de58-4ecc-49b8-bd9d-7a2f7bc14568"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m8[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m1157[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"2ecd5b91-0b51-48ee-acaf-de9ddd79656e"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m7[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m588[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"f8accc49-b46e-46c2-9bfa-e57c4d68c06d"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m7[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m1157[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"5560a585-1488-4289-b536-43da3eeaed7e"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m4[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m19[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"e9b898ed-815c-4cbd-8a9d-82d92c6a8f39"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m4[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m588[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"e487a293-7879-471e-9542-030e81788c64"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m6[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m19[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"aa9f0a97-b92d-4d94-a6d2-87e21a4f0e88"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m5[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m588[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"273ff6f3-0f05-49e4-9f4f-801d14696db2"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m5[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m19[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"dae2e3dd-d984-4a95-b41c-f1c9efe25985"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m6[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m588[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"371b4c2e-3f27-4c91-81c4-43038466d7a3"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m4[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m1157[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"118c75e1-1c10-47dd-bac2-2d8e557a7497"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m5[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m1157[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"ae8c578a-9bcf-4e9d-9ed4-277503a1de83"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m6[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m1157[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"7ca94dfe-a3ee-4486-9741-51906e6d1e3a"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m8[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m19[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"49738b7f-5191-4460-b2f9-91a5f12e6394"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m8[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m531[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m588[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m54[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"18fe8078-b499-43b3-a0d3-1dffee49347c"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"com.freerdp.client.sdl3"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m11[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m972[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m1804[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m12[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m0[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"74180d81-1185-4f78-a603-1a466eabf9fc"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"com.freerdp.client.sdl3"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m11[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m972[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m1804[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m96[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m32[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"c4171abf-f999-466f-9bf2-de59e710f209"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"spectacle"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m11[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m606[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m880[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m520[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m219[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"3128f3e6-343b-4759-a2a2-c4f3024308ed"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"com.freerdp.client.sdl3"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m11[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m972[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m1804[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m96[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m32[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"6e1d8848-8dc6-4f33-9a0c-13201c7888f8"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m1[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m954[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m891[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m37[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m62[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"3112de42-9a92-4cfa-9498-1c143a011c21"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"Google-chrome"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m1[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m978[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m832[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m197[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m18[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"06d49a58-9959-442a-9371-ea3d8381536e"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m2[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m918[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m1670[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m100[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m68[0m
+    [1;39m}[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;39m{[0m
+    [1;34m"uuid"[0m[1;39m:[0m [0;32m"a3d3724f-c991-464f-b820-f7f01facba04"[0m[1;39m,[0m
+    [1;34m"resource_class"[0m[1;39m:[0m [0;32m"konsole"[0m[1;39m,[0m
+    [1;34m"desktops"[0m[1;39m:[0m [1;39m[[0m
+      [0;39m1[0m
+    [1;39m][0m[1;39m,[0m
+    [1;34m"on_all_desktops"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+    [1;34m"geometry"[0m[1;39m:[0m [1;39m{[0m
+      [1;34m"height"[0m[1;39m:[0m [0;39m954[0m[1;39m,[0m
+      [1;34m"width"[0m[1;39m:[0m [0;39m891[0m[1;39m,[0m
+      [1;34m"x"[0m[1;39m:[0m [0;39m1029[0m[1;39m,[0m
+      [1;34m"y"[0m[1;39m:[0m [0;39m28[0m
+    [1;39m}[0m
+  [1;39m}[0m
+[1;39m][0m
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7m./joetoo-kwin -L 1 konsole local btop under[27m
+[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m ./joetoo-kwin -L 1 konsole local btop under[1P[1@2
+[?2004l ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+ ⚠️ Unmanaged window may obscure desktop [2] slot [1]
+[33;1m---[ [31;1mjoetoo-kwin-1.0.17 [0m[36;1m(configuration) [33;1m]---------------------------------------------------------------------------------[0m
+[32;1m * [0m[36;1mPN .............: [34;1m[ [0mjoetoo-kwin [34;1m][0m
+[32;1m * [0m[36;1mBUILD ..........: [34;1m[ [0m1.0.17 [34;1m][0m
+[32;1m * [0m[36;1mconfig .........: [34;1m[ [0m/etc/joetoo-kwin/joetoo-kwin.conf [34;1m][0m
+[32;1m * [0m[36;1mscreen_width ...: [34;1m[ [0m1920 [34;1m][0m
+[32;1m * [0m[36;1mscreen_height ..: [34;1m[ [0m1080 [34;1m][0m
+ ✨ LAUNCH PLAN: [1] windows; confirmation required
+ ✨ Execution desktop groups: [2]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1920x1080] (not autodetected); terminal width budget: [87%]
+[32;1m * [0m[36;1mDesktop  Slot  Program  Mode   Target  Layer  X   Y   Width  Height[0m
+[32;1m * [0m[32;1m2        1     konsole  local  btop    under  96  32  1804   972[0m
+ ✨ KWin desktops: current [20], required [2]; existing desktop capacity is adequate
+
+
+[1A[s[u                                                                                                                          [u ✨ [33;1mDo you want to continue?[0m [37;1m[Y/n]:[0m y
+ ✨ Affirmative response from user; continuing
+ ⚠️ Unmanaged window may obscure desktop [2] slot [1]
+ ✨ [20261122-22:26:08] Launching desktop [2] slot [1]
+ ✨ Armed managed launch [fb0e7629dba7419ba67d0905a5fb0f94], placement [bcbaf1f8ec6045a7871f6af6ca5ce8ed]
+ ✨ Launched Konsole operation; launch-process PID [986195] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-001] UUID [586887a9-e206-4d52-a28c-88795b012659]
+ ✨ OK launch: Konsole (pid=986195) before=[1] (125,63) 1670x918 after=[2] (96,32) 1804x972 tiled=false fullscreen=false
+ ✨ Initializing desktop [2] stack/focus; geometry remains separately verified
+ ✨ Desktop [2] initial stacking/focus result: ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+ ✨ Entries: completed [1], failed [0], skipped [0]; incomplete desktop cohorts [0]
+ ✨ Configured layout: [1/1] windows completed ... ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7m# Confirm the launch interactively.[27m
+
+[7m./joetoo-kwin -l[27m
+[7m./joetoo-kwin -s[27m
+
+[7mxprop -root \[27m
+[7m    _NET_CURRENT_DESKTOP \[27m
+[7m    _NET_ACTIVE_WINDOW \[27m
+[7m    _NET_CLIENT_LIST_STACKING[27m[A[A[A[A[A[A[A[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m # Confirm the launch interactively.
+
+./joetoo-kwin -l
+./joetoo-kwin -s
+
+xprop -root \
+    _NET_CURRENT_DESKTOP \
+    _NET_ACTIVE_WINDOW \
+    _NET_CLIENT_LIST_STACKING
+[?2004lMANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     2        1     present   succeeded  586887a9-e206-4d52-a28c-88795b012659
+Broker registry status (snapshot; not remote connection health)
+State: No reported Busy/uncertain flags
+Managed windows: 1 (present=1, missing=0, uncertain=0)
+Launch requests: 1 (pending=0, running=0, succeeded=1, failed=0, timeout=0, ambiguous=0)
+Observation: synchronized; observed=26; revision=65
+Placement transaction: OK
+Recovery: ready
+Capabilities: managed_close=1, snapshot=1, viewer=1, initial_layout=1, single_raise=1
+_NET_CURRENT_DESKTOP(CARDINAL) = 0
+_NET_ACTIVE_WINDOW(WINDOW): window id # 0x4400008
+_NET_CLIENT_LIST_STACKING(WINDOW): window id # 0x240139a, 0x3e00007, 0x5e00008, 0x7000008, 0x7a00008, 0x7200008, 0x7400008, 0x6400008, 0x6600008, 0x6a00008, 0x6000008, 0x5c00008, 0x6c00008, 0x6800008, 0x6200008, 0x6e00008, 0x7600008, 0x7800008, 0x8a00057, 0x8e00059, 0x9600057, 0x4800008, 0x4400008, 0xac00008, 0x9a00008, 0x9400036, 0x4a00004, 0x24013c9
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m ./joetoo-kwin -i win-001
+[?2004lManaged window information (broker record; not remote connection health)
+MANAGED_ID: win-001
+WINDOW_UUID: 586887a9-e206-4d52-a28c-88795b012659
+DESKTOP: 2
+SLOT: 1
+PRESENCE: present
+PLACEMENT: succeeded
+OBSERVATION: last-known (not independently verified live)
+PID: 986195
+RESOURCE_CLASS: konsole
+LAST_KNOWN_FRAME: 96 32 1804 972
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m echo "step t[K3 requires a desk[K[K[K[K[Kn ordinary window already placed on desktop  3 so [K[K[K[K, so I will launch one"
+[?2004lstep 3 requires an ordinary window already placed on desktop 3, so I will launch one
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m echo "step 3 requires an ordinary window already placed on desktop 3, so I will launch one"[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [42P./joetoo-kwin -i win-001
+[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Cxprop -root     _NET_CURRENT_DESKTOP     _NET_ACTIVE_WINDOW     _NET_CLIENT_LIST_STACKING[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m ./joetoo-kwin -s[K
+[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Cl# Confirm the launch interactively../joetoo-kwin -L 2 konsole local btop under[1P[1@3
+[?2004l ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+[33;1m---[ [31;1mjoetoo-kwin-1.0.17 [0m[36;1m(configuration) [33;1m]---------------------------------------------------------------------------------[0m
+[32;1m * [0m[36;1mPN .............: [34;1m[ [0mjoetoo-kwin [34;1m][0m
+[32;1m * [0m[36;1mBUILD ..........: [34;1m[ [0m1.0.17 [34;1m][0m
+[32;1m * [0m[36;1mconfig .........: [34;1m[ [0m/etc/joetoo-kwin/joetoo-kwin.conf [34;1m][0m
+[32;1m * [0m[36;1mscreen_width ...: [34;1m[ [0m1920 [34;1m][0m
+[32;1m * [0m[36;1mscreen_height ..: [34;1m[ [0m1080 [34;1m][0m
+ ✨ LAUNCH PLAN: [1] windows; confirmation required
+ ✨ Execution desktop groups: [3]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1920x1080] (not autodetected); terminal width budget: [87%]
+[32;1m * [0m[36;1mDesktop  Slot  Program  Mode   Target  Layer  X   Y   Width  Height[0m
+[32;1m * [0m[32;1m3        1     konsole  local  btop    under  96  32  1804   972[0m
+ ✨ KWin desktops: current [20], required [3]; existing desktop capacity is adequate
+
+
+[1A[s[u                                                                                                                          [u ✨ [33;1mDo you want to continue?[0m [37;1m[Y/n]:[0m y
+ ✨ Affirmative response from user; continuing
+ ✨ [20261122-22:33:08] Launching desktop [3] slot [1]
+ ✨ Armed managed launch [9876f3e0f58c4f30922c2fbb415cf1f5], placement [c63d692472284fb4a5ae70e373c73c0f]
+ ✨ Launched Konsole operation; launch-process PID [997396] (interactive Bash PID is reported inside the terminal)
+ ✨ Registered [win-002] UUID [a8bbca7e-13b5-4693-949f-deabb5a12d38]
+ ✨ OK launch: Konsole (pid=997396) before=[1] (58,36) 1804x972 after=[3] (96,32) 1804x972 tiled=false fullscreen=false
+ ✨ Initializing desktop [3] stack/focus; geometry remains separately verified
+ ✨ Desktop [3] initial stacking/focus result: ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+ ✨ Entries: completed [1], failed [0], skipped [0]; incomplete desktop cohorts [0]
+ ✨ Configured layout: [1/1] windows completed ... ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m echo "now instead of launching another konsle[K[Kole, I will try step 3  with vnc"
+[?2004lnow instead of launching another konsole, I will try step 3 with vnc
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7m./joetoo-kwin -L 5 vncviewer ssh ssh://joe@x401/display/2 under[27m[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C./joetoo-kwin -L 5 vncviewer ssh ssh://joe@x401/display/2 under[1P[1@3
+[?2004l ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+[33;1m---[ [31;1mjoetoo-kwin-1.0.17 [0m[36;1m(configuration) [33;1m]---------------------------------------------------------------------------------[0m
+[32;1m * [0m[36;1mPN .............: [34;1m[ [0mjoetoo-kwin [34;1m][0m
+[32;1m * [0m[36;1mBUILD ..........: [34;1m[ [0m1.0.17 [34;1m][0m
+[32;1m * [0m[36;1mconfig .........: [34;1m[ [0m/etc/joetoo-kwin/joetoo-kwin.conf [34;1m][0m
+[32;1m * [0m[36;1mscreen_width ...: [34;1m[ [0m1920 [34;1m][0m
+[32;1m * [0m[36;1mscreen_height ..: [34;1m[ [0m1080 [34;1m][0m
+ ✨ LAUNCH PLAN: [1] windows; confirmation required
+ ✨ Execution desktop groups: [3]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1920x1080] (not autodetected); terminal width budget: [87%]
+[32;1m * [0m[36;1mDesktop  Slot  Program    Mode  Target                    Layer  X   Y   Width  Height[0m
+[32;1m * [0m[32;1m3        2     vncviewer  ssh   ssh://joe@x401/display/2  under  96  32  1804   972[0m
+ ✨ KWin desktops: current [20], required [3]; existing desktop capacity is adequate
+
+
+[1A[s[u                                                                                                                          [u ✨ [33;1mDo you want to continue?[0m [37;1m[Y/n]:[0m y
+ ✨ Affirmative response from user; continuing
+ ✨ [20261122-22:34:19] Launching desktop [3] slot [2]
+ ✨ [20261122-22:34:19] Starting TigerVNC over dedicated SSH; desktop readiness may wait for VNC authentication
+ ✨ TigerVNC managed desktop launch result: ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+ ✨ Initializing desktop [3] stack/focus; geometry remains separately verified
+ ✨ Desktop [3] initial stacking/focus result: ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+ ✨ Entries: completed [1], failed [0], skipped [0]; incomplete desktop cohorts [0]
+ ✨ Configured layout: [1/1] windows completed ... ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m 
+[7m# Confirm the launch interactively.[27m
+
+[7mecho "=== AFTER INACTIVE-DESKTOP LOWER ==="[27m
+
+[7mxprop -root \[27m
+[7m    _NET_CURRENT_DESKTOP \[27m
+[7m    _NET_ACTIVE_WINDOW[27m
+
+[7mxprop -root _NET_CLIENT_LIST_STACKING[27m
+
+[7m./joetoo-kwin -l[27m
+[7m./joetoo-kwin -s[27m[A[A[A[A[A[A[A[A[A[A[A# Confirm the launch interactively.
+
+echo "=== AFTER INACTIVE-DESKTOP LOWER ==="
+
+xprop -root \
+    _NET_CURRENT_DESKTOP \
+    _NET_ACTIVE_WINDOW
+
+xprop -root _NET_CLIENT_LIST_STACKING
+
+./joetoo-kwin -l
+./joetoo-kwin -s
+[?2004l=== AFTER INACTIVE-DESKTOP LOWER ===
+_NET_CURRENT_DESKTOP(CARDINAL) = 0
+_NET_ACTIVE_WINDOW(WINDOW): window id # 0x4400008
+_NET_CLIENT_LIST_STACKING(WINDOW): window id # 0x240139a, 0x3e00007, 0x5e00008, 0x7000008, 0x7a00008, 0x7200008, 0x7400008, 0x6400008, 0x6600008, 0x6a00008, 0x6000008, 0x5c00008, 0x6c00008, 0x6800008, 0x6200008, 0x6e00008, 0x7600008, 0x7800008, 0x8a00057, 0x8e00059, 0x9600057, 0x4800008, 0xac00008, 0x9a00008, 0x4400008, 0xb200027, 0xae00008, 0x940007e, 0x4a00004, 0x24013c9
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     2        1     present   succeeded  586887a9-e206-4d52-a28c-88795b012659
+win-002     3        1     present   succeeded  a8bbca7e-13b5-4693-949f-deabb5a12d38
+win-003     3        2     present   succeeded  abbebec6-31da-419d-8609-ddd4cc3258fa
+Broker registry status (snapshot; not remote connection health)
+State: No reported Busy/uncertain flags
+Managed windows: 3 (present=3, missing=0, uncertain=0)
+Launch requests: 3 (pending=0, running=0, succeeded=3, failed=0, timeout=0, ambiguous=0)
+Observation: synchronized; observed=28; revision=107
+Placement transaction: OK
+Recovery: ready
+Capabilities: managed_close=1, snapshot=1, viewer=1, initial_layout=1, single_raise=1
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m echo "for step 4, I will laaunch [K[K[K[K[K[Kunch a [K freerdp over on dest[Kktop 3"
+[?2004lfor step 4, I will launch a freerdp over on desktop 3
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7m./joetoo-kwin -L 3 sdl-freerdp rdp rdp://joe@opi6plus01 over[27m
+[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m ./joetoo-kwin -L 3 sdl-freerdp rdp rdp://joe@opi6plus01 over
+[A
+[?2004l ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+ ⚠️ Unmanaged window may obscure desktop [3] slot [3]
+[33;1m---[ [31;1mjoetoo-kwin-1.0.17 [0m[36;1m(configuration) [33;1m]---------------------------------------------------------------------------------[0m
+[32;1m * [0m[36;1mPN .............: [34;1m[ [0mjoetoo-kwin [34;1m][0m
+[32;1m * [0m[36;1mBUILD ..........: [34;1m[ [0m1.0.17 [34;1m][0m
+[32;1m * [0m[36;1mconfig .........: [34;1m[ [0m/etc/joetoo-kwin/joetoo-kwin.conf [34;1m][0m
+[32;1m * [0m[36;1mscreen_width ...: [34;1m[ [0m1920 [34;1m][0m
+[32;1m * [0m[36;1mscreen_height ..: [34;1m[ [0m1080 [34;1m][0m
+ ✨ LAUNCH PLAN: [1] windows; confirmation required
+ ✨ Execution desktop groups: [3]; preserve entry order within each group
+ ✨ Exposure is a frame-rectangle prediction; compositor visibility and decoration hit targets require native validation
+ ✨ The sourced trusted Bash configuration may have side effects.
+ ✨ Configured display: [1920x1080] (not autodetected); terminal width budget: [87%]
+[32;1m * [0m[36;1mDesktop  Slot  Program      Mode  Target                Layer  X   Y   Width  Height[0m
+[32;1m * [0m[32;1m3        3     sdl-freerdp  rdp   rdp://joe@opi6plus01  over   96  32  1804   972[0m
+ ✨ KWin desktops: current [20], required [3]; existing desktop capacity is adequate
+
+
+[1A[s[u                                                                                                                          [u ✨ [33;1mDo you want to continue?[0m [37;1m[Y/n]:[0m y
+ ✨ Affirmative response from user; continuing
+ ⚠️ Unmanaged window may obscure desktop [3] slot [3]
+ ✨ [20261122-22:38:36] Launching desktop [3] slot [3]
+ ✨ [20261122-22:38:36] Starting owned SDL RDP viewer; remote authentication remains unverified
+ ✨ Initializing desktop [3] stack/focus; geometry remains separately verified
+ ✨ Desktop [3] initial stacking/focus result: ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+ ✨ Entries: completed [1], failed [0], skipped [0]; incomplete desktop cohorts [0]
+ ✨ Configured layout: [1/1] windows completed ... ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7m# Omitted layer means over.[27m
+
+[7m./joetoo-kwin -l[27m
+[7m./joetoo-kwin -s[27m
+
+[7mxprop -root _NET_CLIENT_LIST_STACKING[27m[A[A[A[A[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m # Omitted layer means over.
+
+./joetoo-kwin -l
+./joetoo-kwin -s
+
+xprop -root _NET_CLIENT_LIST_STACKING
+[?2004lMANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     2        1     present   succeeded  586887a9-e206-4d52-a28c-88795b012659
+win-002     3        1     present   succeeded  a8bbca7e-13b5-4693-949f-deabb5a12d38
+win-003     3        2     present   succeeded  abbebec6-31da-419d-8609-ddd4cc3258fa
+win-004     3        3     present   succeeded  b76db766-5697-4b13-a064-24e9dc1a4948
+Broker registry status (snapshot; not remote connection health)
+State: No reported Busy/uncertain flags
+Managed windows: 4 (present=4, missing=0, uncertain=0)
+Launch requests: 4 (pending=0, running=0, succeeded=4, failed=0, timeout=0, ambiguous=0)
+Observation: synchronized; observed=29; revision=126
+Placement transaction: OK
+Recovery: ready
+Capabilities: managed_close=1, snapshot=1, viewer=1, initial_layout=1, single_raise=1
+_NET_CLIENT_LIST_STACKING(WINDOW): window id # 0x240139a, 0x3e00007, 0x5e00008, 0x7000008, 0x7a00008, 0x7200008, 0x7400008, 0x6400008, 0x6600008, 0x6a00008, 0x6000008, 0x5c00008, 0x6c00008, 0x6800008, 0x6200008, 0x6e00008, 0x7600008, 0x7800008, 0x8a00057, 0x8e00059, 0x9600057, 0x4800008, 0xac00008, 0x9a00008, 0xb200027, 0xae00008, 0xb000057, 0x9400096, 0x4a00004, 0x4400008, 0x24013c9
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m echo "[7mExercise fail-closed validation without launching[27m
+[7mThese tests should reject invalid requests before confirmation or window creation[27m[AExercise fail-closed validation without launching
+These tests should reject invalid requests before confirmation or window creation"[A[18Pxprop -root _NET_CLIENT_LIST_STACKING
+[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Cecho "Exercise fail-closed validation without launching
+These tests should reject invalid requests before confirmation or window creation"
+[?2004lExercise fail-closed validation without launching
+These tests should reject invalid requests before confirmation or window creation
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7mecho "=== BEFORE REFUSAL TEST ==="[27m
+[7m./joetoo-kwin -l[27m
+
+[7m# Unsupported single-window panel policy.[27m
+[7m./joetoo-kwin -L 1 konsole local btop panel[27m
+
+[7m# Nonexistent local command.[27m
+[7m./joetoo-kwin -L 1 konsole local __joetoo_test_absent__ under[27m
+
+[7mecho "=== AFTER REFUSAL TEST ==="[27m
+[7m./joetoo-kwin -l[27m
+[7m./joetoo-kwin -s[27m
+
+[7m# End of commands[27m[A[A[A[A[A[A[A[A[A[A[A[A[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m echo "=== BEFORE REFUSAL TEST ==="
+./joetoo-kwin -l
+
+# Unsupported single-window panel policy.
+./joetoo-kwin -L 1 konsole local btop panel
+
+# Nonexistent local command.
+./joetoo-kwin -L 1 konsole local __joetoo_test_absent__ under
+
+echo "=== AFTER REFUSAL TEST ==="
+./joetoo-kwin -l
+./joetoo-kwin -s
+
+[1P# End of command[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[A[A
+[?2004l=== BEFORE REFUSAL TEST ===
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     2        1     present   succeeded  586887a9-e206-4d52-a28c-88795b012659
+win-002     3        1     present   succeeded  a8bbca7e-13b5-4693-949f-deabb5a12d38
+win-003     3        2     present   succeeded  abbebec6-31da-419d-8609-ddd4cc3258fa
+win-004     3        3     present   succeeded  b76db766-5697-4b13-a064-24e9dc1a4948
+ 💥 joetoo-kwin: -L: layer panel is not implemented yet
+ ✨ Configured recipes include dolphin|sftp|sftp://[USER@]HOST[:PORT][/ABSOLUTE/PATH][|LAYER]; inspect authentication/listing in Dolphin
+ ✨ SDL RDP recipe: sdl-freerdp|rdp|rdp://USER@HOST[:PORT][|LAYER]; local placement is independent of remote login
+ ✨ TigerVNC recipe: vncviewer|ssh|ssh://[USER@]HOST[:SSH_PORT]/display/N (or /port/P); both forwarded endpoints use loopback
+ ✨ Usage: joetoo-kwin [-v|-q ...] -c [-f CONFIG]  (dry run; trusted Bash config)
+ ✨        CONFIG: XDG user configuration, then /etc/joetoo-kwin/joetoo-kwin.conf; set screen_width/screen_height explicitly
+ ✨        User file: ${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf (relative XDG values ignored)
+ ✨ Usage: joetoo-kwin [-f CONFIG] -m [DESKTOP] l|r
+ ✨        joetoo-kwin -m DESKTOP | DESKTOP X Y | [DESKTOP] X Y WIDTH HEIGHT
+ ✨        joetoo-kwin move DESKTOP X Y WIDTH HEIGHT  (compatibility)
+ ✨        joetoo-kwin test-launch CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG ...]
+ ✨        joetoo-kwin test-multi-launch  (TEST ONLY: register 4 local Konsoles)
+ ✨        joetoo-kwin -h
+ ✨        joetoo-kwin -o [-f CONFIG] (confirm and initialize configured desktop groups)
+ ✨        joetoo-kwin [-f CONFIG] -L DESKTOP PROGRAM MODE TARGET [over|under] (one managed window; omitted layer is over)
+ ✨        -L panel is not implemented; under is one-shot, not persistent keep-below
+ ✨        joetoo-kwin [-v|-q ...] -l (read-only managed inventory, including missing reservations)
+ ✨        joetoo-kwin [-v|-q ...] -s (read-only broker registry status)
+ ✨        joetoo-kwin [-v|-q ...] -i MANAGED_ID (read-only details of one managed record)
+ ✨        joetoo-kwin [-f CONFIG] -d MANAGED_ID (confirmed graceful close; record/slot retained)
+ ✨        joetoo-kwin [-f CONFIG] -x (confirmed progressive clean sweep; verified registrations/slots retired)
+ ✨        joetoo-kwin [-f CONFIG] -S (save timestamped managed recipes/policy; not manual geometry)
+ ✨        joetoo-kwin -r (validate, confirm and launch new instances from last-good recipes)
+ ✨ Validating configured launch intent ...
+ ✨ Validating configured launch intent result: ([32;1mcompleted[0m)[115C[34;1m[ [0m✅️ [34;1m][0m
+ 💥 joetoo-kwin: local target must be an available executable basename
+=== AFTER REFUSAL TEST ===
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     2        1     present   succeeded  586887a9-e206-4d52-a28c-88795b012659
+win-002     3        1     present   succeeded  a8bbca7e-13b5-4693-949f-deabb5a12d38
+win-003     3        2     present   succeeded  abbebec6-31da-419d-8609-ddd4cc3258fa
+win-004     3        3     present   succeeded  b76db766-5697-4b13-a064-24e9dc1a4948
+Broker registry status (snapshot; not remote connection health)
+State: No reported Busy/uncertain flags
+Managed windows: 4 (present=4, missing=0, uncertain=0)
+Launch requests: 4 (pending=0, running=0, succeeded=4, failed=0, timeout=0, ambiguous=0)
+Observation: synchronized; observed=29; revision=126
+Placement transaction: OK
+Recovery: ready
+Capabilities: managed_close=1, snapshot=1, viewer=1, initial_layout=1, single_raise=1
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m echo "recording [7mfinal evidence and exit the transcript[27mfinal evidence and exit the transcript"
+[?2004lrecording final evidence and exit the transcript
+]0;joe@gmki91 joetoo-kwin[?2004h[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m [7mecho "=== FINAL MANAGED INVENTORY ==="[27m
+
+[7m./joetoo-kwin -l[27m
+
+[7mecho "=== FINAL BROKER STATE ==="[27m
+
+[7m./joetoo-kwin -s[27m
+
+[7mqdbus6 "$bus" "$path" "$bus.RegistryStatus" | jq .[27m
+
+[7mecho "=== FINAL X11 SESSION ==="[27m
+
+[7mxprop -root \[27m
+[7m    _NET_CURRENT_DESKTOP \[27m
+[7m    _NET_ACTIVE_WINDOW \[27m
+[7m    _NET_CLIENT_LIST_STACKING[27m
+
+[7m# Finish the script transcript.[27m
+[7mexit[27m
+
+[7m# End of commands[27m[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[A[01;32mjoe@gmki91[01;34m ~/joetoo-ai/workspace/projects/joetoo-kwin $[00m echo "=== FINAL MANAGED INVENTORY ==="
+
+./joetoo-kwin -l
+
+echo "=== FINAL BROKER STATE ==="
+
+./joetoo-kwin -s
+
+qdbus6 "$bus" "$path" "$bus.RegistryStatus" | jq .
+
+echo "=== FINAL X11 SESSION ==="
+
+xprop -root \
+    _NET_CURRENT_DESKTOP \
+    _NET_ACTIVE_WINDOW \
+    _NET_CLIENT_LIST_STACKING
+
+# Finish the script transcript.
+exit
+
+[1P# End of command[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[K[A[A
+[?2004l=== FINAL MANAGED INVENTORY ===
+MANAGED_ID  DESKTOP  SLOT  PRESENCE  PLACEMENT  WINDOW_UUID
+win-001     2        1     present   succeeded  586887a9-e206-4d52-a28c-88795b012659
+win-002     3        1     present   succeeded  a8bbca7e-13b5-4693-949f-deabb5a12d38
+win-003     3        2     present   succeeded  abbebec6-31da-419d-8609-ddd4cc3258fa
+win-004     3        3     present   succeeded  b76db766-5697-4b13-a064-24e9dc1a4948
+=== FINAL BROKER STATE ===
+Broker registry status (snapshot; not remote connection health)
+State: No reported Busy/uncertain flags
+Managed windows: 4 (present=4, missing=0, uncertain=0)
+Launch requests: 4 (pending=0, running=0, succeeded=4, failed=0, timeout=0, ambiguous=0)
+Observation: synchronized; observed=29; revision=126
+Placement transaction: OK
+Recovery: ready
+Capabilities: managed_close=1, snapshot=1, viewer=1, initial_layout=1, single_raise=1
+[1;39m{[0m
+  [1;34m"initial_layout_active"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+  [1;34m"initial_layout_protocol"[0m[1;39m:[0m [0;39m1[0m[1;39m,[0m
+  [1;34m"managed_close_active"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+  [1;34m"managed_close_protocol"[0m[1;39m:[0m [0;39m1[0m[1;39m,[0m
+  [1;34m"managed_count"[0m[1;39m:[0m [0;39m4[0m[1;39m,[0m
+  [1;34m"observation"[0m[1;39m:[0m [1;39m{[0m
+    [1;34m"observed_count"[0m[1;39m:[0m [0;39m29[0m[1;39m,[0m
+    [1;34m"revision"[0m[1;39m:[0m [0;39m126[0m[1;39m,[0m
+    [1;34m"source"[0m[1;39m:[0m [0;32m"1795403565845-otsor062yl7"[0m[1;39m,[0m
+    [1;34m"synchronized"[0m[1;39m:[0m [0;39mtrue[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;34m"placement_transaction"[0m[1;39m:[0m [1;39m{[0m
+    [1;34m"id"[0m[1;39m:[0m [0;32m"db28c221e5bf45d3b43f843bbf06ffeb"[0m[1;39m,[0m
+    [1;34m"state"[0m[1;39m:[0m [0;32m"OK"[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;34m"presence_counts"[0m[1;39m:[0m [1;39m{[0m
+    [1;34m"missing"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"present"[0m[1;39m:[0m [0;39m4[0m[1;39m,[0m
+    [1;34m"uncertain"[0m[1;39m:[0m [0;39m0[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;34m"recovery"[0m[1;39m:[0m [0;32m"ready"[0m[1;39m,[0m
+  [1;34m"recovery_snapshot_protocol"[0m[1;39m:[0m [0;39m1[0m[1;39m,[0m
+  [1;34m"request_count"[0m[1;39m:[0m [0;39m4[0m[1;39m,[0m
+  [1;34m"request_counts"[0m[1;39m:[0m [1;39m{[0m
+    [1;34m"ambiguous"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"failed"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"pending"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"running"[0m[1;39m:[0m [0;39m0[0m[1;39m,[0m
+    [1;34m"succeeded"[0m[1;39m:[0m [0;39m4[0m[1;39m,[0m
+    [1;34m"timeout"[0m[1;39m:[0m [0;39m0[0m
+  [1;39m}[0m[1;39m,[0m
+  [1;34m"single_lower_protocol"[0m[1;39m:[0m [0;39m1[0m[1;39m,[0m
+  [1;34m"single_raise_protocol"[0m[1;39m:[0m [0;39m1[0m[1;39m,[0m
+  [1;34m"viewer_cleanup_uncertain"[0m[1;39m:[0m [0;39mfalse[0m[1;39m,[0m
+  [1;34m"viewer_protocol"[0m[1;39m:[0m [0;39m1[0m
+[1;39m}[0m
+=== FINAL X11 SESSION ===
+_NET_CURRENT_DESKTOP(CARDINAL) = 0
+_NET_ACTIVE_WINDOW(WINDOW): window id # 0x4400008
+_NET_CLIENT_LIST_STACKING(WINDOW): window id # 0x240139a, 0x3e00007, 0x5e00008, 0x7000008, 0x7a00008, 0x7200008, 0x7400008, 0x6400008, 0x6600008, 0x6a00008, 0x6000008, 0x5c00008, 0x6c00008, 0x6800008, 0x6200008, 0x6e00008, 0x7600008, 0x7800008, 0x8a00057, 0x8e00059, 0x9600057, 0x4800008, 0xac00008, 0x9a00008, 0xb200027, 0xae00008, 0xb000057, 0x9400096, 0x4400008, 0x4a00004, 0x24013c9
+exit
+
+Script done on 2026-11-22 22:42:48-05:00 [COMMAND_EXIT_CODE="0"]

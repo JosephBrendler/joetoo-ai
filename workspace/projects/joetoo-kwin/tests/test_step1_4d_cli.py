@@ -55,11 +55,19 @@ class TestMultiLaunchFixtureTests(TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(len(calls), 4)
 
-    def test_fixture_keeps_ordinary_open_flag_unimplemented(self):
+    def test_fixture_remains_separate_from_configured_open(self):
         source = CLIENT.read_text()
+
+        # Both the historical test fixture and configured launch remain available.
         self.assertIn('    test-multi-launch)', source)
+        self.assertIn('        test_multi_launch ;;', source)
         self.assertIn('    -o) action="open"', source)
-        self.assertIn('not yet integrated', source)
-        fixture = source[source.index('test_multi_launch() {'):source.index('#-----[ main script ]')]
+        self.assertIn('        open_plan ;;', source)
+
+        # The fixture still uses managed positive registration, not legacy adoption.
+        start = source.index('test_multi_launch() {')
+        end = source.index('\n}\n', start) + 2
+        fixture = source[start:end]
+
         self.assertIn('launch_managed_window', fixture)
         self.assertNotIn('RegisterWindow', fixture)

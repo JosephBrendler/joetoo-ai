@@ -22,6 +22,8 @@ bus=org.joetoo.KWinBridge
 path=/org/joetoo/KWinBridge
 kbus=org.kde.KWin
 kpath=/org/kde/KWin
+cbus=org.joetoo.KWinCloseNative
+cpath=/org/joetoo/KWinCloseNative
 tempdir=/var/tmp
 
 # ShellCheck thinks varlist is unused, but it is in script_header_joetoo
@@ -69,6 +71,60 @@ rc-service -U joetoo-kwind start >/dev/null 2>&1
 result="$?"
 right_status "$result" "$notice"
 
+#-----[ Ensure native KWin managed-close effect is available ]--------------------------------------
+# The broker starts/reuses the joetoo-bridge JavaScript resident, but it does
+# not load this separate native effect. Do not unload/reload an active effect:
+# it belongs to the KWin session lifecycle, not the broker lifecycle.
+
+close_effect=joetoo_managed_close
+
+dbus_owner() {
+    qdbus6 org.freedesktop.DBus /org/freedesktop/DBus \
+        org.freedesktop.DBus.GetNameOwner "$1" 2>/dev/null
+}
+
+j_msg "-${notice}" -p "Checking native KWin effect [${close_effect}]"
+
+kwin_owner=$(dbus_owner "$kbus") || kwin_owner=''
+close_owner=$(dbus_owner "$cbus") || close_owner=''
+
+if [[ -z $kwin_owner ]]; then
+    j_msg "-${notice}" -p "WARNING: KWin D-Bus owner unavailable; managed close disabled"
+
+elif [[ $close_owner == "$kwin_owner" ]]; then
+    j_msg "-${notice}" -p "Native managed-close effect already available"
+
+else
+    supported=$(qdbus6 "$kbus" /Effects \
+        org.kde.kwin.Effects.isEffectSupported "$close_effect" 2>/dev/null) || supported=''
+
+    loaded=$(qdbus6 "$kbus" /Effects \
+        org.kde.kwin.Effects.isEffectLoaded "$close_effect" 2>/dev/null) || loaded=''
+
+    if [[ $supported == true && $loaded == false ]]; then
+        j_msg "-${notice}" -p "Loading native KWin effect [${close_effect}]"
+        load_result=$(qdbus6 "$kbus" /Effects \
+            org.kde.kwin.Effects.loadEffect "$close_effect" 2>/dev/null) || load_result=''
+        [[ $load_result == true ]] || \
+            j_msg "-${notice}" -p "WARNING: Native effect load request failed"
+
+    elif [[ $supported != true ]]; then
+        j_msg "-${notice}" -p "WARNING: Native effect unavailable or unsupported"
+
+    else
+        j_msg "-${notice}" -p "WARNING: Native effect loaded but D-Bus service unavailable"
+    fi
+
+    # Check the actual registered service, not merely loadEffect's return value.
+    close_owner=$(dbus_owner "$cbus") || close_owner=''
+
+    if [[ $close_owner == "$kwin_owner" ]]; then
+        j_msg "-${notice}" -p "Native managed-close effect available and owned by KWin"
+    else
+        j_msg "-${notice}" -p "WARNING: Native managed-close service not owned by KWin"
+    fi
+fi
+
 if [ $# -eq 0 ]; then
     answer=""
     yn_prompt "${BYon}Do you want to run python and javascript unit tests?${Boff}"
@@ -104,8 +160,37 @@ j_msg "-${notice}" -p -n "Checks done; result:"
 handle_result "$result" "" "" "$notice"
 
 separator "${PN}-${BUILD}" "(available methods)"
+
+# OpenRC service startup may complete before the broker registers its
+# poll up to 100 times, sleeping 50 ms between attempts
+j_msg "-${notice}" -p -n "Waiting for joetoo KWinBridge D-Bus readiness"
+dbus_result=1
+# wait up to five seconds
+for (( attempt=1; attempt<=100; attempt++ )); do
+    if qdbus6 "$bus" "$path" >/dev/null 2>&1; then dbus_result=0; break; fi
+    milli_sleep 50
+done
+right_status "$dbus_result" "$notice" || \
+    j_msg "-${warn}" -p "Broker D-Bus object unavailable after readiness timeout"
+
 j_msg "-${notice}" -p "Running \"dbus introspection\" with: ${BBon}qdbus6 ${BMon}\$bus \$path${Boff}"
 qdbus6 "$bus" "$path" | sed 's|^|    |'
+result=$?
+j_msg "-${notice}" -p -n "dbus introspection done; result:"
+handle_result "$result" "" "" "$notice"
+
+j_msg "-${notice}" -p -n "Waiting for joetoo KWinCloseNative D-Bus readiness"
+dbus_result=1
+# poll up to 100 times, sleeping 50 ms between attempts
+for (( attempt=1; attempt<=100; attempt++ )); do
+    if qdbus6 "$cbus" "$cpath" >/dev/null 2>&1; then dbus_result=0; break; fi
+    milli_sleep 50
+done
+right_status "$dbus_result" "$notice" || \
+    j_msg "-${warn}" -p "Native KWinCloseNative D-Bus object unavailable after readiness timeout"
+
+j_msg "-${notice}" -p "Running \"dbus introspection\" with: ${BBon}qdbus6 ${BMon}\$cbus \$cpath${Boff}"
+qdbus6 "$cbus" "$cpath" | sed 's|^|    |'
 result=$?
 j_msg "-${notice}" -p -n "dbus introspection done; result:"
 handle_result "$result" "" "" "$notice"
@@ -118,10 +203,12 @@ j_msg "-${notice}" -mp ""
 j_msg "-${notice}" -p "Make these abbreviation assignments to facilitate use of these methods"
 j_msg "-${notice}" -mp "bus=\"$bus\";  path=\"$path\""
 j_msg "-${notice}" -mp "kbus=\"$kbus\";  kpath=\"$kpath\""
+j_msg "-${notice}" -mp "cbus=\"$cbus\";  cpath=\"$cpath\""
 j_msg "-${notice}" -mp ""
 j_msg "-${notice}" -p "Use these to list all interface/methods for each service"
 j_msg "-${notice}" -mp "qdbus6 \$bus \$path"
 j_msg "-${notice}" -mp "qdbus6 \$kbus \$kpath"
+j_msg "-${notice}" -mp "qdbus6 \$cbus \$cpath"
 j_msg "-${notice}" -mp ""
 j_msg "-${notice}" -p "Use these for more focused queries in the joetoo KWinBridge service"
 j_msg "-${notice}" -mp "qdbus6 \$bus \$path \$bus.ListManaged"

@@ -254,6 +254,23 @@ performed to realize focus. After initialization, KWin and the user control
 raising, movement, resizing, focus and desktop assignment without continuous
 layout restoration.
 
+**Version 1 mission-completion control focus (maintainer decision,
+2026-11-23):** The preferred `panel`/`over` focus chosen for configured
+initial layout is a temporary, verified layout outcome, not the operator's
+final focus destination. Launch operations are serialized; blocking
+VNC/RDP authentication occurs on the launch desktop. At normal CLI
+mission completion, an eligible original control Konsole is restored
+to usable keyboard focus, including following configured `-o`, with
+no automatic move to a target layout desktop. This supersedes the
+earlier proposed preference-preservation requirement. The request
+is best-effort and must not change the original mission return code
+or select a new arbitrary window. The current implementation has
+no independent veto for user activation of another window during
+a pending mission; such activation may be superseded. Do not
+claim that case is protected or tested. More complex cross-desktop
+navigation/parallel-launch focus policy belongs to future Version 2
+design, not the Version 1 acceptance contract.
+
 ### Logical association, duplicate protection and actual state
 
 Positive registration preserves original intended `(desktop, slot)` in the
@@ -483,85 +500,55 @@ Step 1.7 decisions are not Version 2 deferrals.
 
 ## 9. CLI contract (accepted behavior and proposed Step 1.8 completion)
 
-| Invocation | Intended action |
+| Invocation | Acceptance status and Intended action |
 | --- | --- |
-| `-c [-f CONFIG]` | Validate config and display a colorized dry-run plan without launching |
-| `-o [-f CONFIG]` | Confirm then launch and positively register/position managed windows |
-| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | **Currently accepted:** `over` only (also the default), with verified one-shot raise and no existing-window reflow. **New Step 1.8:** add one-shot `under`; keep `panel` deferred to Version 2. |
-| `-m l\|r` | Two-panel active-window geometry on current desktop |
-| `-m DESKTOP` | Change active window's desktop, preserve geometry |
-| `-m DESKTOP l\|r` | Two-panel placement on specified desktop |
-| `-m DESKTOP X Y` | Change desktop/position and preserve size |
-| `-m X Y WIDTH HEIGHT` | Change position/size and preserve desktop |
-| `-m DESKTOP X Y WIDTH HEIGHT` | Specify desktop, position and size |
+| `-c [-f CONFIG]` | **Accepted 1.5a:** Validate config and display a colorized dry-run plan without launching |
+| `-f FILE` | **Accepted 1.5a:** Explicit configuration precedence, no implicit symlink edits |
+| `-o [-f CONFIG]` | **Accepted 1.5c:** Confirm then launch and positively register/position managed windows |
+| `-L DESKTOP PROGRAM MODE TARGET [LAYER]` | `over` accepted in 1.5d; `under` implemented and native-validated in Step 1.8 (acceptance pending); `panel` unsupported; no live-desktop reflow |
+| `-m l`, `-m r` | **Accepted 1.5b:** Two-panel active-window geometry on current desktop |
+| `-m DESKTOP` | **Accepted 1.5b:** Change active window's desktop, preserve geometry |
+| `-m DESKTOP l (or r)` | **Accepted 1.5b:** Two-panel placement on specified desktop |
+| `-m DESKTOP X Y` | **Accepted 1.5b:** Change desktop/position and preserve size |
+| `-m X Y WIDTH HEIGHT` | **Accepted 1.5b:** Change position/size and preserve desktop |
+| `-m DESKTOP X Y WIDTH HEIGHT` | **Accepted 1.5b:** Specify desktop, position and size |
 | `-x` | **Accepted 1.6:** confirmed fixed-set progressive retirement of authenticated absences and verified graceful closes; retain failed/unresolved entries |
 | `-d MANAGED_ID` | **Accepted 1.6:** confirmed graceful close of one authenticated managed window; record/slot retained |
-| `-l` | List broker-managed windows read-only, one record per fixed-width table row, including stable managed ID, desktop/slot, presence, placement and UUID (Step 1.5d) |
-| `-i MANAGED_ID` | **Planned new Step 1.8:** read-only, strictly validated detail for one broker-managed ID using existing `GetManaged`; report UNKNOWN and broker unavailability distinctly. |
-| `-s` | **Planned new Step 1.8:** read-only broker/registry status using existing `RegistryStatus`; no claims of remote-session health. |
+| `-l` | **Accepted Step 1.7:** List broker-managed windows read-only, one record per fixed-width table row, including stable managed ID, desktop/slot, presence, placement and UUID (Step 1.5d) |
+| `-i MANAGED_ID` | Step 1.8 implemented/native-validated read-only detail for one managed record (acceptance pending) |
+| `-s` | Step 1.8 implemented/native-validated read-only broker status (acceptance pending) |
 | `-S` | **Accepted Step 1.7:** export a complete verified managed arrangement as private last-good launch intent with timestamped history; refuse incomplete saves |
 | `-r` | **Accepted Step 1.7:** preflight and confirm restore of saved recipes as **new** managed instances, never adopting old UUIDs or PIDs |
-| `-f FILE` | Explicit configuration precedence, no implicit symlink edits |
-| `-v`, `-q` | Adjust verbosity using established joetoo CLI conventions |
+| `-v`, `-q` | **Accepted 1.5a:** Adjust verbosity using established joetoo CLI conventions |
 
-**Step 1.5d CLI decisions (maintainer, revised 2026-11-11).** The `-L` operands
-are the same logical fields as one `-o` recipe, but supplied as **separate
-positional arguments**, not a single pipe-delimited argument:
-`DESKTOP PROGRAM MODE TARGET [LAYER]`. **Only `over` is implemented for `-L`**:
-an omitted LAYER defaults to `over`; explicit `over` is supported; explicit
-`panel` or `under` must be rejected before launch with a helpful diagnostic
-such as `-L: layer 'panel' is not implemented yet; use 'over' or omit LAYER`.
-This paragraph records **the accepted Step 1.5d scope**, not the proposed
-new Step 1.8 work. Crucially, `-o` retains its accepted `under`/`panel`/`over`
-layers and implicit `panel` default.
+**Step 1.5d CLI decisions, refined in Step 1.8.** `-L` uses the same
+logical fields as one `-o` recipe, supplied as **separate positional
+arguments**: `DESKTOP PROGRAM MODE TARGET [LAYER]`. An omitted layer
+still defaults to `over`; both explicit `over` and the Step 1.8 one-shot
+`under` are implemented and native-validated on X11/Wayland. Only `panel`
+remains unsupported for `-L`, with refusal before launch. Configured `-o`
+retains its `under`/`panel`/`over` classifications and implicit `panel`
+default. Step 1.8 formal acceptance/merge is recorded separately.
 
 `-L` launches **one** new window, using the existing program/mode/target
 validators, graphical-region geometry, confirmation, broker reservation,
 positive exact-UUID registration, placement and cleanup machinery. It chooses
 an unused logical slot without modifying any existing or retained reservation;
 there is no sixth SLOT operand. It places the new window on its requested
-desktop and performs a bounded, verified **one-shot raise** so it appears above
-existing windows, without a permanent keep-above rule. It must not change the
-geometry, ownership or identity of existing managed **or unmanaged** windows,
-and must not perform live-desktop panel reflow, peer recascading or a new
-application-independent managed-ID geometry transaction. Before launching or
-contacting a remote endpoint, report the specific invalid field/requirement
-(desktop/program/mode/target/layer), safely redacting sensitive input.
-Preserve already-accepted `-o` behavior and fail-closed Busy/source/identity
-requirements. If a one-shot raise cannot be positively targeted and verified
-on both KWin backends, report the constraint instead of adopting a different
-window or weakening ownership.
+desktop with **one-shot verified stacking**: `over` raises only the new exact
+UUID; `under` lowers it beneath participating normal-layer peers, or raises
+eligible peers in preserved order when the target desktop is inactive.
+Neither creates persistent KeepAbove/KeepBelow. Protected/hidden/non-normal
+peers do not define the `under` participation order. Existing peer geometry,
+ownership and UUID identity are preserved; no live panel reflow or recascading
+is permitted. Validate the operation before application/network side effects,
+redact sensitive input, and fail closed if identity, source, placement or
+stacking readback cannot be verified. Do not silently substitute `over` for
+an unsupported `under` attempt.
 
-Live reflow beyond accepted `-L` behavior remains deferred; see
-[Version 2 Considerations](#12-version-2-considerations) and archived Step 1.5
-evidence. The proposed new Step 1.8 adds only the narrowly bounded `under`
-behavior below, not a general layout-reset capability.
-
-**New Step 1.8 — CLI completion, pending implementation and acceptance.**
-The two read-only operations must expose existing broker interfaces without
-inventing new state: `-s` consumes `RegistryStatus()`, differentiating service
-unavailable, malformed/inconsistent response, and reported Busy/uncertainty;
-`-i MANAGED_ID` consumes `GetManaged(identifier)` but admits only a syntactically
-valid managed ID at the public CLI, does not adopt a raw UUID, and labels any
-historical observation as last-known rather than necessarily live. Both must
-be bounded, safe for a disconnected broker, and free of launch/close/selection
-side effects. Follow established `j_msg` and announce–act–report conventions.
-
-For `-L ... under`, continue using the existing confirmation, validated recipe,
-positive registration, geometry, identity, slot allocation and launch machinery.
-Add one **verified, one-shot lower** of only the newly registered UUID below
-eligible existing normal windows on its destination desktop, subject to native
-KWin X11/Wayland API and backend-capability proof. Do not move, resize, adopt,
-activate or restack peers deliberately; no permanent `keepBelow`, policy
-reflow, or repeated policing of a user's future stacking changes. A focus or
-client activation that defeats the intended final order must not be reported
-as success. If the compositor cannot safely provide and verify the requested
-operation, return an explicit failure without substituting a title/class match
-or silently switching to `over`. `-L` omitted layer must still mean `over`.
-`-L ... panel` remains explicitly unsupported in Version 1 because adding a
-participant to an already occupied panel allocation may require new geometry,
-peer movement and retained-slot policy. This revised Step 1.8 is **not yet
-accepted or implemented**; existing Step 1.5d acceptance remains unchanged.
+Live reflow (needed to `panel` an additional window) beyond accepted `-L` behavior is deferred; see
+[Version 2 Considerations](#12-version-2-considerations) and the archived
+Step 1.5 task evidence for the earlier investigation.
 
 The `-l` command displays the broker's **managed** inventory read-only as
 aligned, fixed-width columns, **one row per managed record**. At minimum
@@ -608,26 +595,24 @@ identifies a product objective; it is **not** independent permission for an
 AI agent to edit code, deploy, connect to remote hosts, or merge. Later
 accepted decisions refine older scope outlines without rewriting history.
 
-### Version 1 — Initial implementation
-
 | Gate | Deliverable | Acceptance / status |
 | --- | --- | --- |
-| **1.1–1.4d** | Architecture, OpenRC user service, resident KWin observation, UUID correlation, managed registry/queries, multiwindow placement | Completed; see project README and Step 1.4 closure |
-| **1.5a** | Configuration precedence, shared planner and colorized `-c` | Accepted |
-| **1.5b** | Interactive `-m` forms and independent omitted-value preservation | Accepted on X11 and Wayland |
-| **1.5c.1** | `-o` preflight, plan, confirmation and invalid-plan refusal | Accepted |
-| **1.5c.2** | Sequential managed launches, positive UUID registration, geometry and duplicate-slot safety | Accepted |
-| **1.5c.3** | Original local Bash, `ssh_wrapper` and unavailable SSH placeholders | Accepted |
-| **1.5c.4** | Desktop capacity, Dolphin local launches, XDG discovery, application-independent `under/panel/over`, grouped launches, bounded initial stack/focus | Accepted, merged; native X11/Wayland closure evidence in Step 1.5 task |
-| **1.5c.5a** | Dolphin SFTP integration | Accepted and closed; managed X11/Wayland launches and remote browsing demonstrated; optional post-confirmation NSS/TCP advisories remain non-enforcing diagnostics |
-| **1.5c.5b** | TigerVNC viewer over authenticated SSH | Accepted and retained as a peer-level managed graphical remote-access option; native X11 and Wayland/XWayland identity, placement, SSH tunnel and teardown demonstrated |
-| **1.5c.5c** | Comparative RDP feasibility and decision | **Closed:** affirmative feasibility accepted; SDL3 FreeRDP selected for first RDP implementation, not as a preferred/default client |
-| **1.5c.5d** | Managed SDL FreeRDP under configured `-o` | **ACCEPTED, CLOSED AND MERGED (2026-11-11, PR #29)**: exact UUID/placement/lifecycle on native X11/Wayland, layered configuration, bounded clean-failure continuation, strict `/sec:nla /cert:deny` defaults, successful trusted GDM connection and automatic invalid-certificate refusal with verified cleanup; see final Increment 5 evidence |
-| **1.5d** | Implement `-L` one-recipe single-window launch (`over` only; no reflow), retain read-only `-l` inventory; run integrated native X11/Wayland regression | **ACCEPTED, CLOSED AND MERGED (2026-11-12, PR #30)**: `-l` implemented; `-L` implemented under simplified scope, preserving field-specific validation, safe logical-slot reservation, exact-UUID placement, one-shot raise, existing-window geometry and accepted `-o` semantics |
-| **1.6** | Managed `-d`, `-x` | **ACCEPTED AND MERGED** (2026-11-18, [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32), `a6999e2`); [archived evidence](archive/task_step1.6/README.md) on Wayland/XWayland and native X11 |
-| **1.7 (includes former 1.8)** | Private same-session checkpoint/reconciliation **plus** durable `.conf` last-good snapshot, `-S`, `-r` | **ACCEPTED AND MERGED** (2026-11-19, [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33), `df118da`); [archived Wayland/X11 evidence](archive/task_step1.7/README.md) |
-| **1.8 (new CLI completion)** | Read-only `-s` broker status, `-i MANAGED_ID` detail, and verified `-L ... under` (no peer reflow); `-L ... panel` explicitly deferred | **PROPOSED / NOT IMPLEMENTED:** bounded development and native X11/Wayland acceptance after maintainer creates task branch; new use of the step number, distinct from the *former* Step 1.8 folded into accepted 1.7 |
-| **1.9** | Source stabilization, complete human maintainability-comment review, curated transfer/`tarup`, Gentoo ebuild and install/upgrade QA | **IN PROGRESS, NOW PAUSED** until new Step 1.8 is accepted. Source MANIFEST, staging script, paired configuration docs and release README are drafted/committed in `joetoo-ai` at `24cd67f`; path integration, final audit, tarup and package QA remain. See [Step 1.9 HANDOFF](task_1.9/HANDOFF.md). |
+| **1.1–1.4d** | Architecture, OpenRC user service, resident KWin observation, UUID correlation, managed registry/queries, multiwindow placement | **ACCEPTED, CLOSED AND MERGED (through 2026-10-28, PRs [#19](https://github.com/JosephBrendler/joetoo-ai/pull/19)–[#22](https://github.com/JosephBrendler/joetoo-ai/pull/22))**; native X11/Wayland validation and [Step 1.4 closure](archive/step1.4/HANDOFF.md). Earlier Steps 1.1–1.3 are included in the accepted baseline. |
+| **1.5a** | Configuration precedence, shared planner, colorized `-c`, initial `-f`, `-v` and `-q` | **ACCEPTED, CLOSED AND MERGED (2026-10-29, [PR #23](https://github.com/JosephBrendler/joetoo-ai/pull/23))**; grouped/repeated verbosity modifiers and CLI parsing foundation established. |
+| **1.5b** | All six interactive `-m` forms, independent preservation of omitted desktop/position/size values, shared left/right geometry | **ACCEPTED, CLOSED AND MERGED (2026-10-29, [PR #24](https://github.com/JosephBrendler/joetoo-ai/pull/24))**; all six forms verified on native X11 and Wayland, including preservation of the legacy five-integer form and native `-v`/`-q` behavior; [acceptance evidence](archive/task_step1.5/step1.5b-native-validation.md). |
+| **1.5c.1** | Configured `-o` preflight, validated launch plan, confirmation and invalid-plan refusal | **ACCEPTED, CLOSED AND MERGED (2026-10-31, [PR #25](https://github.com/JosephBrendler/joetoo-ai/pull/25))**; first configured-launch increment. |
+| **1.5c.2** | Sequential managed launches, positive UUID registration, geometry and duplicate-slot safety | **ACCEPTED, CLOSED AND MERGED (2026-10-31, [PR #25](https://github.com/JosephBrendler/joetoo-ai/pull/25))**; confirmed registration and placement with retained identity safeguards. |
+| **1.5c.3** | Original local Bash, `ssh_wrapper` and unavailable-SSH placeholders | **ACCEPTED, CLOSED AND MERGED (2026-10-31, [PR #25](https://github.com/JosephBrendler/joetoo-ai/pull/25))**; original interactive-shell behavior and transport/placement separation preserved. |
+| **1.5c.4** | Desktop capacity, Dolphin local launches, XDG discovery, application-independent `under/panel/over`, grouped launches, bounded initial stack/focus | **ACCEPTED, CLOSED AND MERGED (2026-11-01, [PR #26](https://github.com/JosephBrendler/joetoo-ai/pull/26))**; native X11/Wayland closure; [acceptance evidence](archive/task_step1.5/step1.5c4-native-acceptance.md). |
+| **1.5c.5a** | Dolphin SFTP integration | **ACCEPTED, CLOSED AND MERGED (2026-11-02 merge, [PR #27](https://github.com/JosephBrendler/joetoo-ai/pull/27))**; managed X11/Wayland SFTP launches and remote browsing demonstrated; optional NSS/TCP advisories remain non-enforcing diagnostics. |
+| **1.5c.5b** | TigerVNC viewer over authenticated SSH | **ACCEPTED, CLOSED AND MERGED (2026-11-02 merge, [PR #27](https://github.com/JosephBrendler/joetoo-ai/pull/27))**; native X11 and Wayland/XWayland viewer identity, placement, owned SSH tunnel and teardown verified. |
+| **1.5c.5c** | Comparative RDP feasibility and implementation decision | **ACCEPTED, CLOSED AND MERGED (2026-11-05, [PR #28](https://github.com/JosephBrendler/joetoo-ai/pull/28))**; affirmative feasibility; SDL3 FreeRDP selected as the first RDP implementation, not as the preferred/default client. |
+| **1.5c.5d** | Managed SDL FreeRDP under configured `-o`; layered configuration and profile selection | **ACCEPTED, CLOSED AND MERGED (2026-11-11, [PR #29](https://github.com/JosephBrendler/joetoo-ai/pull/29))**; exact UUID/placement/lifecycle on native X11/Wayland, layered configuration, bounded clean-failure continuation, strict `/sec:nla /cert:deny` defaults, successful trusted GDM connection and invalid-certificate refusal with verified cleanup; [final acceptance evidence](archive/task_step1.5/step1.5c5d-increment5-final-native-acceptance-2026-11-11.md). |
+| **1.5d** | Single-recipe `-L` launch (`over` only, no reflow), read-only `-l` inventory and integrated native regression | **ACCEPTED, CLOSED AND MERGED (2026-11-12, [PR #30](https://github.com/JosephBrendler/joetoo-ai/pull/30))**; safe unused-slot reservation, exact-UUID placement, verified one-shot raise, existing-window preservation and accepted `-o` semantics; [native acceptance evidence](archive/task_step1.5/step1.5d-native-acceptance-2026-11-12.md). |
+| **1.6** | Managed `-d MANAGED_ID` and `-x` graceful close/retirement | **ACCEPTED, CLOSED AND MERGED (2026-11-18, [PR #32](https://github.com/JosephBrendler/joetoo-ai/pull/32), `a6999e2`)**; authenticated close, progressive retirement, retained failed/unresolved records and no force killing; [archived X11/Wayland evidence](archive/task_step1.6/README.md). |
+| **1.7 (includes former 1.8)** | Private same-session checkpoint/reconciliation plus durable `.conf` last-good snapshot, `-S` and `-r` | **ACCEPTED, CLOSED AND MERGED (2026-11-19, [PR #33](https://github.com/JosephBrendler/joetoo-ai/pull/33), `df118da`)**; verified recovery, private snapshot/history and fresh-instance restore; [archived X11/Wayland evidence](archive/task_step1.7/README.md). |
+| **1.8 (new CLI completion)** | Read-only `-s` broker status, `-i MANAGED_ID` detail and verified one-shot `-L ... under`; `-L ... panel` remains Version 2 | **ACTIVE — NOT YET IMPLEMENTED OR ACCEPTED (2026-11-21)**; distinct from the former Step 1.8 absorbed into Step 1.7. Requires bounded implementation, regressions and native X11/Wayland acceptance; [active HANDOFF](task_1.8/HANDOFF.md). |
+| **1.9** | Source stabilization, human maintainability-comment review, curated source transfer, `tarup`, Gentoo ebuild and installation/upgrade QA | **IN PROGRESS — PAUSED PENDING STEP 1.8 ACCEPTANCE (2026-11-21)**; source `MANIFEST`, staging utility, configuration READMEs/examples and release README prepared in `joetoo-ai`. Packaged-path integration, final source audit, archive creation and package QA remain; [Step 1.9 HANDOFF](task_1.9/HANDOFF.md). |
 
 ### Accepted remote-resource contract (Step 1.5; historical detail archived)
 
@@ -704,13 +689,12 @@ version 1 work, **not** deferred to Version 2.
    each client's distinct role-identity and SSH/TLS/transport policies and
    avoid a speculative generic plugin framework. Keep version 1's accepted
    serial behavior unless a measured need warrants change.
-3. **Managed live-layout reflow and `-L panel`:** The new Version 1 Step 1.8
-   proposes `-L under` as **only a one-shot lower of its new verified window**;
-   that narrow operation is not authority to rearrange other managed or
-   unmanaged windows. `-L panel`, panel-participant insertion, peer reflow,
-   and any live reset-to-intended-layout capability remain Version 2 work.
-   Do not equate an initial configured `-o` layer with permission to change
-   existing users' window geometries or reservations.
+3. **Managed live-layout reflow:** `-L` intentionally supports only `over` and `under`;
+   panel live placement and rebalancing/reordering existing managed
+   *and unmanaged* windows are deferred. Do not equate an initial configured
+   `-o` layer with authority to rearrange windows later. A future explicit
+   reset-to-intended-layout action requires separate user intent and rules for
+   changed geometry/slots.
 4. **Broader managed applications:** assess additional GUI/terminal clients
    individually, not from installed status alone. Reported on `gmki91` in
    November 2026: QTerminal 2.4.0; Krusader 2.9.0; FileZilla 3.70.6;
@@ -731,21 +715,34 @@ version 1 work, **not** deferred to Version 2.
 7. **Non-KWin backends:** possible separate evaluation of shared Bash
    planning for LXQt/GNOME, without promising KWin-specific identity/movement
    support or version 1 portability.
+8. **User focus changes during a mission (accepted Version 1 limitation):**
+   An operator may activate another window while a launch is in progress.
+   Managed launch/stacking actions normally use verified window UUIDs and
+   guard focus-sensitive stages; active-window commands such as `-m` instead
+   select whichever window is active when captured. An intervening click may
+   change such a command's target, interrupt a guarded layout step, or be
+   overridden by final restoration of the originating Konsole's focus.
+   The maintainer accepts this limitation for Version 1 (2026-11-23).
+   Consider stronger activity-aware coordination in Version 2 if needed.
 
 ### Open Version 2 decisions (maintainer)
 
 - Which live reflow operations, monitor/work-area/scaling policies, and
   clickable-exposure guarantees would actually provide value beyond the
   accepted one-shot layout?
+- What additional client support (if any) should be added to rdp (e.g. krdc, remmina)
+  and vnc (e.g. remmina, ...)
 - What new authorization and selection rules would allow reset-to-intended
   layout or per-window retirement without disturbing unrelated windows?
+- Is it feasible and desirable to implement a click-to-identify window?
+  (and maybe add this newly discovered unmanaged window to managed?)
 - Is out-of-order human authentication materially limiting current RDP/VNC
   usage, and what evidence justifies adding concurrency or common lifecycle
   abstractions?
 - Which additional graphical applications are worth first-class managed
   launch support, and what exact positive identity and credential policy can
   each demonstrate on both KWin backends?
-- Is non-KWin shell planning valuable enough to justify a separately scoped
+- Is non-KWin shell planning (e.g. Gnome, LXQt) valuable enough to justify a separately scoped
   effort, or should version 2 stay focused on KWin?
 
 Version 2 decisions should be taken from concrete usage and evidence,

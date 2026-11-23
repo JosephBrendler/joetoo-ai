@@ -68,6 +68,8 @@ Do not infer a final ebuild `LICENSE` field from this example. The maintained `j
 - Keep `DEPEND`, `BDEPEND`, `RDEPEND`, `REQUIRED_USE`, `IUSE`, version/ABI relationships and keywording explicit and accurate. Do not copy `joetoolkit`'s blanket `BDEPEND="${RDEPEND}"` without assessing build-vs-runtime needs for native components.
 - Validate metadata, manifest, `${D}`/`${ED}` installed-file tree, executable modes, native plugin paths, license payload and no HOME writes before maintainer-run `emerge` and native smoke tests. No service, KWin effect, profile or viewer is auto-enabled or started by a package hook.
 
+**Mandatory Step 1.9 release gate: installed-image completeness and isolation.** Before accepting the first ebuild, compare its actual `${ED}` file tree against the source-to-destination contract in Section 2, including every required private runtime helper (for enabled features), its location, ownership, file type and mode. Reject missing or unexpected dependency files, not merely absent main executables. Validate broker sibling imports and CLI Bash/Python helper resolution with an isolated installed-tree fixture that excludes the `joetoo-ai` checkout and developer `PYTHONPATH`; explicitly exercise a `dolphin/sftp` restore intent so omission of `joetoo_kwin_sftp_target.py` is caught. Verify the selected KWin native effect(s), X11 protocol helper, service and config paths, docs/licensing and absence of installer writes into HOME. Only after installed-image checks pass should the maintainer run native X11/Wayland smoke tests from installed entry points. Neither the POC installer's `--check` nor source-tree unit tests satisfy this production gate.
+
 Illustrative **structural** fragment (not a complete, ready-to-merge ebuild):
 
 ```bash

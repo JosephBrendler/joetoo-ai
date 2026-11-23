@@ -415,6 +415,9 @@ function reportExistingWindows() {
         source: observerSource, revision: ++observerRevision, windows: snapshots, move_protocol: 1,
         viewer_protocol: typeof workspace.getClient === "function" ? 1 : 0,
         single_raise_protocol: typeof workspace.raiseWindow === "function" && workspace.stackingOrder ? 1 : 0,
+        single_lower_protocol: typeof workspace.slotWindowLower === "function" &&
+            typeof workspace.raiseWindow === "function" && workspace.stackingOrder &&
+            typeof workspace.activeWindow !== "undefined" ? 1 : 0,
         initial_layout_protocol: typeof workspace.raiseWindow === "function" && workspace.stackingOrder &&
             workspace.currentDesktop && Number.isInteger(Number(workspace.currentDesktop.x11DesktopNumber)) &&
             typeof workspace.activeWindow !== "undefined" ? 1 : 0
@@ -495,6 +498,10 @@ function initialLayoutFromBroker() {
         if (!payload) return;
         let r;
         try { r = JSON.parse(payload); } catch (err) { return; }
+        if (r.single_lower === true) {
+            singleLowerFromBroker(r, beforeActiveId, beforeDesktopId, beforeDesktopNumber, started);
+            return;
+        }
         const result = {source: observerSource, order: [], focus_attempted: false,
                         before_active_uuid: beforeActiveId,
                         active_uuid: layoutUUID(workspace.activeWindow),
@@ -694,4 +701,295 @@ function initialLayoutFromBroker() {
         } catch (err) { finish(String(err), "interrupted"); }
     });
 }
+// Step 1.8: one-shot lower of an already positively registered UUID.
+// The scripting API has no lowerWindow(window). Its lower slot only acts on
+// the active window. On an inactive desktop, raise only PARTICIPATING normal-
+// layer peers in their existing order; never raise protected or hidden helpers.
+// Keep full raw normal-window evidence, including protected windows, for review.
+// Neither path installs a persistent keep-below rule.
+function singleLowerFromBroker(r, beforeActiveId, beforeDesktopId, beforeDesktopNumber, started) {
+    function uuid(win) {
+        const raw = windowUUID(win);
+        return raw.replace(/^\{([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\}$/i, "$1").toLowerCase();
+    }
+    const result = {source: observerSource, order: r.order.slice(), focus_attempted: false,
+        before_active_uuid: beforeActiveId, active_uuid: uuid(workspace.activeWindow),
+        current_desktop: beforeDesktopNumber, geometry_unchanged: false,
+        lower_invoked: false, lower_settled: false, lower_peers_intact: false,
+        lower_before: [], lower_order: [], lower_participants_before: [],
+        lower_participants_order: [], lower_exclusions: []};
+    let done = false, timer = null, stable = 0, activationStarted = null, pending = false;
+    let baseline = null, target = null;
+    const targetId = r.entries.length === 1 ? r.entries[0].uuid : "";
+    const targetDesktop = r.entries.length === 1 ? r.entries[0].desktop : -1;
+    const connections = [];
+    function connect(signal, callback) {
+        if (!signal || typeof signal.connect !== "function" || typeof signal.disconnect !== "function") return false;
+        signal.connect(callback); connections.push([signal, callback]); return true;
+    }
+    function stop() {
+        if (timer) timer.stop();
+        for (const pair of connections) {
+            try { pair[0].disconnect(pair[1]); } catch (_) { /* KWin QObject may have vanished. */ }
+        }
+        connections.length = 0;
+        if (timer && typeof timer.deleteLater === "function") timer.deleteLater();
+        timer = null;
+    }
+    function current() {
+        return Number(workspace.currentDesktop && workspace.currentDesktop.x11DesktopNumber);
+    }
+    function guard() {
+        if (r.source !== observerSource) return "Resident source changed";
+        if (!Number.isFinite(r.remaining_ms) || Date.now() - started >= r.remaining_ms)
+            return "Initial-layout lower lease expired";
+        if (String(workspace.currentDesktop && workspace.currentDesktop.id) !== beforeDesktopId ||
+            current() !== beforeDesktopNumber) return "Desktop changed during one-shot lower";
+        if (r.entries.length !== 1 || r.order.length !== 1 || r.order[0] !== targetId ||
+            r.entries[0].layer !== "under" || !targetId) return "Invalid single-lower cohort";
+        return "";
+    }
+    function eligible() {
+        return workspace.stackingOrder.filter(w => !w.deleted && w.normalWindow &&
+            (w.onAllDesktops || (w.desktops || []).some(d => Number(d.x11DesktopNumber) === targetDesktop)));
+    }
+    // In KWin 6.7.6, BelowLayer=1 and NormalLayer=2. A normalWindow
+    // can nevertheless be invisible or kept below (e.g. xwaylandvideobridge).
+    // Do not use class/title or skipTaskbar as a participation shortcut.
+    // All required properties are public Q_PROPERTY values on KWin Window.
+    function exclusion(w) {
+        if (typeof w.minimized !== "boolean" || typeof w.hidden !== "boolean" ||
+            typeof w.keepAbove !== "boolean" || typeof w.keepBelow !== "boolean" ||
+            !Number.isInteger(w.layer) || typeof w.opacity !== "number" ||
+            !Number.isFinite(w.opacity) || w.opacity < 0 || w.opacity > 1)
+            throw new Error("Single-lower peer visibility/layer evidence unavailable");
+        if (w.minimized) return "minimized";
+        if (w.hidden) return "hidden";
+        if (w.keepBelow || w.layer === 1) return "below_layer";
+        if (w.keepAbove || w.layer === 3) return "above_layer";
+        if (w.layer !== 2) return "other_layer";
+        if (w.opacity === 0) return "transparent";
+        return null;
+    }
+    function details(w) {
+        const g = w.frameGeometry;
+        return {id: uuid(w), frame: [g.x, g.y, g.width, g.height],
+            desktops: (w.desktops || []).map(d => Number(d.x11DesktopNumber)),
+            all: Boolean(w.onAllDesktops), above: Boolean(w.keepAbove), below: Boolean(w.keepBelow),
+            minimized: w.minimized, hidden: w.hidden, layer: w.layer, opacity: w.opacity,
+            exclusion: exclusion(w)};
+    }
+    function capture() { return eligible().map(details); }
+    function participating(rows) { return rows.filter(row => row.exclusion === null).map(row => row.id); }
+    function excluded(rows) { return rows.filter(row => row.exclusion !== null).map(row =>
+        ({uuid: row.id, reason: row.exclusion})); }
+    function unchanged() {
+        const final = capture();
+        const before = baseline;
+        if (!before || final.length !== before.length) return false;
+        const start = new Map(before.map(x => [x.id, x]));
+        return start.size === before.length && final.every(x =>
+            start.has(x.id) && JSON.stringify(x) === JSON.stringify(start.get(x.id)));
+    }
+    function checkTarget() {
+        const windows = workspace.stackingOrder.filter(w => uuid(w) === targetId);
+        if (windows.length !== 1 || !windows[0].normalWindow || windows[0].deleted)
+            throw new Error("Original single-lower UUID unavailable or non-normal");
+        const w = windows[0], e = r.entries[0], g = w.frameGeometry;
+        if (w.fullScreen || w.keepAbove || w.keepBelow || w.tile != null || w.maximizeMode !== 0 ||
+            exclusion(w) !== null)
+            throw new Error("Single-lower target has an incompatible stacking/window mode");
+        if ((w.desktops || []).length !== 1 || Number(w.desktops[0].x11DesktopNumber) !== targetDesktop ||
+            w.onAllDesktops || ["x", "y", "width", "height"].some(k => g[k] !== e.geometry[k]))
+            throw new Error("Single-lower original UUID changed desktop or frame");
+        return w;
+    }
+    function finish(error) {
+        if (done) return;
+        done = true;
+        stop();
+        try {
+            const problem = guard(); if (problem && !error) error = problem;
+            result.active_uuid = uuid(workspace.activeWindow);
+            result.current_desktop = current();
+            const final = capture();
+            result.lower_order = final.map(row => row.id); // Physical order, including protected surfaces.
+            result.lower_participants_order = participating(final);
+            result.geometry_unchanged = unchanged();
+            result.lower_peers_intact = result.geometry_unchanged;
+            result.lower_settled = !error;
+            result.focus_elapsed_ms = activationStarted == null ? 0 : Math.max(0, Date.now() - activationStarted);
+            const beforePeers = result.lower_before.filter(id => id !== targetId);
+            const finalPeers = result.lower_order.filter(id => id !== targetId);
+            if (!error && (!result.geometry_unchanged ||
+                result.lower_participants_order[0] !== targetId ||
+                JSON.stringify(result.lower_exclusions) !== JSON.stringify(excluded(final)) ||
+                JSON.stringify(beforePeers) !== JSON.stringify(finalPeers) ||
+                JSON.stringify(result.lower_participants_before.filter(id => id !== targetId)) !==
+                    JSON.stringify(result.lower_participants_order.filter(id => id !== targetId))))
+                error = "Single-lower participating stack, peer order or geometry failed verification";
+            if (!error && beforeDesktopNumber !== targetDesktop && result.active_uuid !== beforeActiveId)
+                error = "Inactive-desktop lower changed active window";
+        } catch (e) { error = error || String(e); }
+        if (error) result.error = error;
+        callDBus(BRIDGE, PATH, BRIDGE, "CompleteInitialLayout", r.id, JSON.stringify(result));
+    }
+    function settle() {
+        if (done) return;
+        const problem = guard(); if (problem) { finish(problem); return; }
+        try { checkTarget(); } catch (e) { finish(String(e)); return; }
+        // The readback is deliberately delayed, to catch focus-driven restacks.
+        finish("");
+    }
+    function startSettle() {
+        // One timer is reused: disconnect focus polling before observing the
+        // final stack, or its callback could invoke a second lower.
+        try { timer.timeout.disconnect(poll); } catch (_) { /* No pending focus hook. */ }
+        const index = connections.findIndex(pair => pair[0] === timer.timeout && pair[1] === poll);
+        if (index !== -1) connections.splice(index, 1);
+        timer.timeout.connect(settle);
+        connections.push([timer.timeout, settle]);
+        timer.start(r.lower_settle_ms);
+    }
+    function lease(callback) {
+        if (pending || done) return;
+        pending = true;
+        callDBus(BRIDGE, PATH, BRIDGE, "InitialLayoutStatus", r.id, function(payload) {
+            pending = false;
+            if (done) return;
+            let response;
+            try { response = JSON.parse(payload); } catch (_) { finish("Initial-layout lower lease unavailable"); return; }
+            if (response.id !== r.id || response.state !== "RUNNING") {
+                finish("Initial-layout lower lease no longer running"); return;
+            }
+            const problem = guard(); if (problem) { finish(problem); return; }
+            callback();
+        });
+    }
+    function applyActiveLower() {
+        try {
+            if (uuid(workspace.activeWindow) !== targetId) {
+                finish("Active UUID changed before lower slot"); return;
+            }
+            checkTarget();
+            result.lower_verified_active_uuid = targetId;
+            result.pre_lower_order = eligible().map(uuid);
+            workspace.slotWindowLower(); // One exact active-window lower, never by class/title.
+            result.lower_invoked = true;
+            result.lower_method = "active_slot";
+            startSettle();
+        } catch (e) { finish(String(e)); }
+    }
+    function poll() {
+        if (done) return;
+        try {
+            const problem = guard(); if (problem) { finish(problem); return; }
+            checkTarget();
+            const active = uuid(workspace.activeWindow);
+            if (active !== targetId && active !== beforeActiveId) {
+                finish("Competing activation before lower (not reclaimed)"); return;
+            }
+            stable = active === targetId ? stable + 1 : 0;
+            if (stable >= 2) { lease(applyActiveLower); return; }
+            if (Date.now() - activationStarted >= r.focus_timeout_ms) {
+                finish("Single-lower activation did not settle before timeout"); return;
+            }
+            timer.start(r.focus_poll_interval_ms);
+        } catch (e) { finish(String(e)); }
+    }
+    try {
+        const problem = guard(); if (problem) throw new Error(problem);
+        if (uuid(workspace.activeWindow) !== beforeActiveId)
+            throw new Error("User focus changed before single-lower claim");
+        if (typeof workspace.slotWindowLower !== "function" || typeof workspace.raiseWindow !== "function" ||
+            typeof QTimer !== "function") throw new Error("KWin single-lower capability unavailable");
+        if (!Number.isInteger(r.lower_settle_ms) || r.lower_settle_ms < 100 || r.lower_settle_ms > 1000 ||
+            !Number.isInteger(r.focus_timeout_ms) || !Number.isInteger(r.focus_poll_interval_ms) ||
+            r.focus_timeout_ms < 1 || r.focus_timeout_ms > 2000 ||
+            r.focus_poll_interval_ms < 1 || r.focus_poll_interval_ms > Math.min(250, r.focus_timeout_ms))
+            throw new Error("Invalid single-lower timing");
+        target = checkTarget();
+        baseline = capture(); result.lower_before = baseline.map(x => x.id);
+        result.lower_participants_before = participating(baseline);
+        result.lower_exclusions = excluded(baseline);
+        if (baseline.filter(x => x.id === targetId).length !== 1 ||
+            result.lower_participants_before.filter(id => id === targetId).length !== 1 ||
+            baseline.length !== new Set(result.lower_before).size)
+            throw new Error("Single-lower target/peer UUID or participation evidence inconsistent");
+        timer = new QTimer(); timer.singleShot = true;
+        lease(function() {
+            if (beforeDesktopNumber !== targetDesktop) {
+                // No desktop switch or focus stealing. Deliberately raises peers;
+                // resulting relative peer order and all frames are verified.
+                try {
+                    checkTarget();
+                    if (!unchanged()) throw new Error("Single-lower peer properties changed before restack");
+                    const participantIds = new Set(result.lower_participants_before);
+                    const peers = eligible().filter(w =>
+                        participantIds.has(uuid(w)) && uuid(w) !== targetId);
+                    result.lower_method = result.lower_participants_before[0] === targetId ?
+                        "already_lowest" : "raise_peers";
+                    if (result.lower_method === "raise_peers") {
+                        for (const peer of peers) workspace.raiseWindow(peer);
+                    }
+                    startSettle();
+                } catch (e) { finish(String(e)); }
+                return;
+            }
+            activationStarted = Date.now(); result.focus_attempted = true;
+            if (!connect(timer.timeout, poll)) { finish("Single-lower timer unavailable"); return; }
+            workspace.activeWindow = target; // Exactly one request for original UUID.
+            poll();
+        });
+    } catch (e) { finish(String(e)); }
+}
 registerShortcut("joetoo_bridge_initial_layout", "Joetoo initial cohort layout", "", initialLayoutFromBroker);
+
+// Shared CLI completion, deliberately separate from verified layout algorithms.
+// The initial active window is the operator-designated control context; it is
+// neither adopted into the registry nor granted destructive authority.
+function controlFocusFromBroker() {
+    // Match the existing layout UUID convention: Qt QUuid String() includes
+    // braces, while broker-owned UUIDs are canonical lower-case strings.
+    const uuid = win => windowUUID(win).replace(/^\{([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\}$/i, "$1").toLowerCase();
+    const started = Date.now();
+    const initial = workspace.activeWindow;
+    callDBus(BRIDGE, PATH, BRIDGE, "TakeControlFocus", observerSource, function(payload) {
+        if (!payload) return;
+        let request;
+        try {
+            request = JSON.parse(payload);
+            if (request.source !== observerSource || !Number.isFinite(request.remaining_ms) ||
+                Date.now() - started < 0 || Date.now() - started >= request.remaining_ms) return;
+            let state, id = request.window_uuid;
+            if (request.action === "capture") {
+                id = initial && !initial.deleted ? (uuid(initial) || null) : null;
+                state = id ? "captured" : "no_active_window";
+            } else if (request.action === "restore") {
+                const matches = workspace.windowList().filter(w => uuid(w) === id && !w.deleted);
+                const target = matches.length === 1 ? matches[0] : null;
+                if (!target) state = "missing";
+                else if (target.minimized) state = "minimized";
+                else if (!target.onAllDesktops && (!workspace.currentDesktop ||
+                    !Number.isInteger(Number(workspace.currentDesktop.x11DesktopNumber)) ||
+                    Number(workspace.currentDesktop.x11DesktopNumber) < 1 ||
+                    !(target.desktops || []).some(d => Number(d.x11DesktopNumber) ===
+                        Number(workspace.currentDesktop.x11DesktopNumber)))) state = "off_desktop";
+                else if (uuid(workspace.activeWindow) === id) state = "already_active";
+                else {
+                    // One ordinary KWin activation; raising the control window
+                    // is intentional. Never change desktop or repair the stack.
+                    workspace.activeWindow = target;
+                    state = "requested";
+                }
+            } else return;
+            callDBus(BRIDGE, PATH, BRIDGE, "CompleteControlFocus", request.id,
+                     JSON.stringify({state: state, window_uuid: id}));
+        } catch (_) {
+            if (request && request.action === "restore")
+                callDBus(BRIDGE, PATH, BRIDGE, "CompleteControlFocus", request.id,
+                    JSON.stringify({state: "unavailable", window_uuid: request.window_uuid}));
+        }
+    });
+}
+registerShortcut("joetoo_bridge_control_focus", "Joetoo control-window focus", "", controlFocusFromBroker);

@@ -8,14 +8,18 @@ const implementation = source.slice(source.indexOf('function initialLayoutFromBr
 function harness(layers, current=3, nativeIds=false) {
     const desktop = {x11DesktopNumber:3};
     const windows = layers.map((layer,i) => ({internalId:nativeIds ?
-        'abcdef00-0000-4000-8000-'+String(i+1).padStart(12,'0') : 'w'+i, layer, normalWindow:true, deleted:false, tile:null,
+        'abcdef00-0000-4000-8000-'+String(i+1).padStart(12,'0') : 'w'+i, normalWindow:true, deleted:false, tile:null,
         maximizeMode:0, fullScreen:false, keepAbove:false, keepBelow:false, desktops:[desktop], onAllDesktops:false,
+        minimized:false,hidden:false,opacity:1,layer:2,
         frameGeometry:{x:i*100,y:0,width:100,height:100}}));
     const unrelated = {internalId:'unrelated'};
     const workspace = {activeWindow:unrelated, currentDesktop:current===3?desktop:{x11DesktopNumber:current},
         stackingOrder:[unrelated,...windows],
-        raiseWindow(w) {this.stackingOrder=this.stackingOrder.filter(x=>x!==w).concat(w);}};
-    const entries = windows.map(w => ({uuid:w.internalId,layer:w.layer,desktop:3,
+        raiseWindow(w) {this.stackingOrder=this.stackingOrder.filter(x=>x!==w).concat(w);},
+        slotWindowLower(){const w=this.activeWindow;const peers=this.stackingOrder.filter(x=>x!==w);
+            const protectedCount=peers.filter(x=>x.keepBelow || x.layer===1).length;
+            peers.splice(protectedCount,0,w);this.stackingOrder=peers;}};
+    const entries = windows.map((w,i) => ({uuid:w.internalId,layer:layers[i],desktop:3,
         geometry:{...w.frameGeometry},desktops:[3],on_all_desktops:false}));
     const order = ['under','panel','over'].flatMap(l=>entries.filter(e=>e.layer===l).map(e=>e.uuid));
     const preferred = [...entries].reverse().find(e=>e.layer==='over') || [...entries].reverse().find(e=>e.layer==='panel');
@@ -247,6 +251,97 @@ test('effective observation timing and the remaining transaction lease both boun
     assert.match(short.result.error,/expired/);assert.equal(short.activationRequests,1);short.assertClean();
 });
 
+
+test('single under active window is identity-bound and restores peer order',()=>{
+    const h=harness(['under']);const peer={internalId:'previous',normalWindow:true,deleted:false,
+        desktops:h.windows[0].desktops,onAllDesktops:false,keepAbove:false,keepBelow:false,
+        minimized:false,hidden:false,opacity:1,layer:2,
+        frameGeometry:{x:15,y:25,width:200,height:100}};
+    h.workspace.stackingOrder=[peer,h.windows[0]];
+    h.context.initialLayoutFromBroker();
+    h.reply({single_lower:true,lower_settle_ms:300});
+    // First and second verified active observations, then lease check.
+    h.advance(25);h.advance(300);
+    assert.equal(h.result.lower_method,'active_slot');
+    assert.equal(h.result.lower_invoked,true);
+    assert.equal(h.result.lower_order[0],'w0');
+    assert.equal(h.result.lower_peers_intact,true);
+    assert.equal(h.result.error,undefined);
+    h.assertClean();
+});
+
+test('single under inactive desktop uses peer raises, without activation',()=>{
+    const h=harness(['under'],1);const peer={internalId:'previous',normalWindow:true,deleted:false,
+        desktops:h.windows[0].desktops,onAllDesktops:false,keepAbove:false,keepBelow:false,
+        minimized:false,hidden:false,opacity:1,layer:2,
+        frameGeometry:{x:15,y:25,width:200,height:100}};
+    h.workspace.stackingOrder=[peer,h.windows[0]];
+    h.context.initialLayoutFromBroker();h.reply({single_lower:true,lower_settle_ms:300});
+    h.advance(300);
+    assert.equal(h.result.lower_method,'raise_peers');
+    assert.equal(h.activationRequests,0);
+    assert.equal(h.result.lower_order[0],'w0');
+    assert.equal(h.result.active_uuid,'unrelated');
+    assert.equal(h.result.error,undefined);h.assertClean();
+});
+
+test('single lower ignores protected BelowLayer and preserves full stack evidence',()=>{
+    const h=harness(['under']);const d=h.windows[0].desktops;
+    const bridge={internalId:'bridge',normalWindow:true,deleted:false,desktops:d,
+        onAllDesktops:false,keepAbove:false,keepBelow:true,minimized:false,hidden:false,
+        opacity:0,layer:1,frameGeometry:{x:928,y:522,width:64,height:36}};
+    const peer={internalId:'peer',normalWindow:true,deleted:false,desktops:d,
+        onAllDesktops:false,keepAbove:false,keepBelow:false,minimized:false,hidden:false,
+        opacity:1,layer:2,frameGeometry:{x:20,y:20,width:200,height:100}};
+    h.workspace.stackingOrder=[bridge,peer,h.windows[0]];
+    h.context.initialLayoutFromBroker();h.reply({single_lower:true,lower_settle_ms:300});
+    h.advance(25);h.advance(300);
+    assert.equal(h.result.error,undefined);
+    assert.deepEqual(h.result.lower_order,['bridge','w0','peer']);
+    assert.deepEqual(h.result.lower_participants_order,['w0','peer']);
+    assert.equal(h.result.lower_exclusions.length,1);
+    assert.equal(h.result.lower_exclusions[0].reason,'below_layer');
+    h.assertClean();
+});
+
+test('inactive single lower never raises protected, minimized or hidden peers',()=>{
+    const h=harness(['under'],1);const d=h.windows[0].desktops;
+    function peer(id,states={}){return {internalId:id,normalWindow:true,deleted:false,
+        desktops:d,onAllDesktops:false,keepAbove:false,keepBelow:false,minimized:false,
+        hidden:false,opacity:1,layer:2,frameGeometry:{x:20,y:20,width:200,height:100},...states};}
+    const bridge=peer('bridge',{layer:1,keepBelow:true,opacity:0});
+    const minimized=peer('min',{minimized:true});
+    const hidden=peer('hidden',{hidden:true});
+    const ordinary=peer('ordinary');
+    h.workspace.stackingOrder=[bridge,minimized,hidden,ordinary,h.windows[0]];
+    const raised=[];const original=h.workspace.raiseWindow;
+    h.workspace.raiseWindow=function(w){raised.push(w.internalId);original.call(this,w);};
+    h.context.initialLayoutFromBroker();h.reply({single_lower:true,lower_settle_ms:300});
+    h.advance(300);
+    assert.deepEqual(raised,['ordinary']);
+    assert.equal(h.result.error,undefined);
+    assert.deepEqual(h.result.lower_participants_order,['w0','ordinary']);
+    assert.equal(h.result.lower_exclusions.length,3);
+    h.assertClean();
+});
+
+test('a skipTaskbar visible normal peer still participates',()=>{
+    const h=harness(['under']);const d=h.windows[0].desktops;
+    const peer={internalId:'skip',normalWindow:true,deleted:false,desktops:d,
+        onAllDesktops:false,keepAbove:false,keepBelow:false,minimized:false,hidden:false,
+        skipTaskbar:true,opacity:1,layer:2,frameGeometry:{x:10,y:10,width:120,height:100}};
+    h.workspace.stackingOrder=[peer,h.windows[0]];
+    h.context.initialLayoutFromBroker();h.reply({single_lower:true,lower_settle_ms:300});
+    h.advance(25);h.advance(300);
+    assert.equal(h.result.error,undefined);
+    assert.deepEqual(h.result.lower_participants_order,['w0','skip']);
+});
+
+test('single lower fails closed on unavailable layer evidence',()=>{
+    const h=harness(['under']);h.windows[0].layer=undefined;
+    h.context.initialLayoutFromBroker();h.reply({single_lower:true,lower_settle_ms:300});
+    assert.match(h.result.error,/visibility\/layer evidence unavailable/);
+});
 
 test('single over raises only the owned UUID above earlier normal windows without moving peers',()=>{
     const h=harness(['over']);

@@ -42,7 +42,7 @@ class PlannerHarness:
                     'PATH': str(self.folder) + os.pathsep + os.environ['PATH']}
         for program in ('qdbus6', 'konsole', 'ssh', 'ssh_wrapper', 'vncviewer', 'btop'):
             spy = self.folder / program
-            spy.write_text('#!/bin/sh\nprintf "%s\\n" "$0 $*" >> "$TRACE"\nexit 99\n')
+            spy.write_text('#!/bin/sh\n# Optional shared focus coordination is unavailable in planner-only fixtures.\n[ "$3" != org.joetoo.KWinBridge.ControlFocus ] || exit 1\nprintf "%s\\n" "$0 $*" >> "$TRACE"\nexit 99\n')
             spy.chmod(0o755)
         # UI spies verify stage order and effective varlist without depending on
         # terminal width, emoji availability or an installed joetoo header.
@@ -110,7 +110,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
 
     def test_config_overrides_defaults_then_cli_overrides_config(self):
         self.write_config(extra='terminal_width_percent=80\nterminal_gap_percent=4\nverbosity=6')
-        self.client.write_text(self.client.read_text() + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
+        self.client.write_text(self.client.read_text().replace('exit "$mission_rc"', 'printf "TEST_VERBOSITY=%s\\n" "$verbosity"\nexit "$mission_rc"'))
         output = self.plan('-q')
         self.assertIn('TEST_VERBOSITY=5', output)
         self.assertNotIn('terminal_width_percent=', output)
@@ -118,7 +118,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
                          [['19', '54', '730', '918'], ['825', '54', '730', '918']])
 
     def test_common_option_order_and_clusters(self):
-        self.client.write_text(self.client.read_text() + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
+        self.client.write_text(self.client.read_text().replace('exit "$mission_rc"', 'printf "TEST_VERBOSITY=%s\\n" "$verbosity"\nexit "$mission_rc"'))
         output = self.run_cli('-vq', '-f', str(self.config), '-c')
         self.assertIn('TEST_VERBOSITY=5', output)
         self.assertIn('TEST_VERBOSITY=7', self.plan('-vv'))
@@ -127,7 +127,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
         self.plan('--')
 
     def test_verbosity_clamps_and_interactive_floor(self):
-        self.client.write_text(self.client.read_text() + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
+        self.client.write_text(self.client.read_text().replace('exit "$mission_rc"', 'printf "TEST_VERBOSITY=%s\\n" "$verbosity"\nexit "$mission_rc"'))
         self.assertIn('TEST_VERBOSITY=7', self.plan('-vvvvvv'))
         self.assertIn('TEST_VERBOSITY=0', self.plan('-qqqqqqqq'))
         self.env['INTERACTIVE'] = '0'
@@ -309,13 +309,13 @@ class InstalledHeaderPlannerTests(PlannerHarness, unittest.TestCase):
             # The real header suppresses ordinary output at low verbosity;
             # append a test-only state probe to the disposable client.
             original = self.client.read_text()
-            self.client.write_text(original + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
+            self.client.write_text(original.replace('exit "$mission_rc"', 'printf "TEST_VERBOSITY=%s\\n" "$verbosity"\nexit "$mission_rc"'))
             try:
                 self.assertIn(f'TEST_VERBOSITY={expected}', self.plan(*flags))
             finally:
                 self.client.write_text(original)
         self.env['INTERACTIVE'] = '0'
-        self.client.write_text(original + '\nprintf "TEST_VERBOSITY=%s\\n" "$verbosity"\n')
+        self.client.write_text(original.replace('exit "$mission_rc"', 'printf "TEST_VERBOSITY=%s\\n" "$verbosity"\nexit "$mission_rc"'))
         self.assertIn('TEST_VERBOSITY=5', self.plan('-qqqqqqqq'))
 
     def test_validator_diagnostic_does_not_interrupt_open_status_line(self):

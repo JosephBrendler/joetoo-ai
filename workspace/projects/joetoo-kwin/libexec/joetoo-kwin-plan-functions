@@ -27,6 +27,7 @@ plan_defaults() {
     min_window_exposure_px=32
     initial_focus_timeout_ms=500
     initial_focus_poll_interval_ms=25
+    single_lower_settle_ms=300
     sftp_capability_timeout_ms=2000
     vnc_ssh_start_timeout_ms=10000
     vnc_viewer_ready_timeout_ms=300000
@@ -182,6 +183,10 @@ validate_plan() {
         (( initial_focus_timeout_ms > 2000 || initial_focus_poll_interval_ms > 250 ||
            initial_focus_poll_interval_ms > initial_focus_timeout_ms )); then
         plan_error 'invalid initial focus timing: timeout 1..2000 ms; interval 1..250 ms and <= timeout'; return 2
+    fi
+    if [[ ! $single_lower_settle_ms =~ ^[1-9][0-9]{0,3}$ ]] ||
+        (( single_lower_settle_ms < 100 || single_lower_settle_ms > 1000 )); then
+        plan_error 'single_lower_settle_ms must be 100..1000 ms'; return 2
     fi
     if [[ ! $dt_win_limit =~ ^[1-9][0-9]{0,2}$ || ! $min_window_exposure_px =~ ^[1-9][0-9]{0,4}$ ]] ||
         (( dt_win_limit > 256 || min_window_exposure_px > 32768 )); then

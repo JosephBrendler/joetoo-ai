@@ -14,6 +14,7 @@ class MoveTests(PlannerHarness, unittest.TestCase):
             '#-----[ main script ]', '''
 qdbus6() {
     case $3 in
+        *.ControlFocus) return 1 ;;
         *.SubmitMove|*.Submit)
             printf 'CALL:%s\\n' "$*" >> "$TRACE"
             if [[ ${REJECT_MOVE:-} == yes ]]; then

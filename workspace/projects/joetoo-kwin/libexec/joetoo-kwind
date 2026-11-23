@@ -143,6 +143,7 @@ class Broker(dbus.service.Object):
         self.initial_layout = None
         self.initial_layout_protocol = 0
         self.single_raise_protocol = 0
+        self.single_lower_protocol = 0
         self.viewer_protocol = 0
         self.move_protocol = 0  # Advertised by the synchronized resident, not inferred.
         # Step 1.3b diagnostic-only: one pending correlation probe. This is
@@ -160,6 +161,137 @@ class Broker(dbus.service.Object):
         self._sdl_placement = None
         self._sdl_traces = []  # Diagnostic snapshots only; never transaction authority.
         self._managed_close = CloseRuntime(self, GLib, dbus)
+        # Activation contexts are ephemeral, bounded and unrelated to management
+        # or destructive authority. No sender connection must survive a mission.
+        self._control_contexts = {}
+        self._control_pending = None
+
+    def _control_daemon(self):
+        return dbus.Interface(self.connection.get_object('org.freedesktop.DBus',
+                              '/org/freedesktop/DBus', introspect=False), 'org.freedesktop.DBus')
+
+    def _control_authenticate(self, sender):
+        # Reuse the authenticated KWin/session identity; observerSource alone
+        # is ordering metadata, never authorization for a resident callback.
+        if self._recovery is None:
+            raise PermissionError('authenticated resident unavailable')
+        self._recovery.authenticate(sender)
+        return str(sender)
+
+    def _control_finish(self, job, result):
+        if self._control_pending is not job:
+            return
+        self._control_pending = None
+        if job.get('timer') is not None:
+            GLib.source_remove(job['timer'])
+        job['reply'](json.dumps(result))
+
+    @dbus.service.method(IFACE, in_signature="ss", out_signature="s",
+                         sender_keyword="sender", async_callbacks=("reply", "error"))
+    def ControlFocus(self, action, handle, sender=None, reply=None, error=None):
+        """Capture current active UUID or consume its one-time restore handle."""
+        try:
+            from joetoo_kwin_managed_close import DEFAULTS
+            timeout = DEFAULTS['managed_close_dbus_timeout_ms'] / 1000
+            daemon = self._control_daemon()
+            if int(daemon.GetConnectionUnixUser(sender, timeout=timeout)) != os.geteuid():
+                raise PermissionError('foreign caller')
+            if action not in ('capture', 'restore') or (action == 'capture' and handle):
+                raise ValueError('invalid control request')
+            context = None
+            if action == 'restore':
+                context = self._control_contexts.pop(str(handle), None)
+                if context is None:
+                    return reply(json.dumps(dict(state='skipped', reason='unknown_context')))
+            if self._control_pending is not None:
+                return reply(json.dumps(dict(state='skipped', reason='coordination_busy')))
+            owner = str(daemon.GetNameOwner('org.kde.KWin', timeout=timeout))
+            self._control_authenticate(owner)
+            if not self.observation_synced or (context and
+                    (context['owner'] != owner or context['source'] != self.observation_source)):
+                raise ValueError('resident changed or unavailable')
+            job = dict(id=uuid.uuid4().hex, action=str(action), owner=owner,
+                       source=self.observation_source, context=context, reply=reply,
+                       deadline=time.monotonic() + timeout, claimed=False, stage='dispatch_pending')
+            self._control_pending = job
+            def expired():
+                self._control_finish(job, dict(state='skipped', reason='coordination_timeout', stage=job['stage']))
+                return False
+            job['timer'] = GLib.timeout_add(DEFAULTS['managed_close_dbus_timeout_ms'], expired)
+            accel = dbus.Interface(self.connection.get_object('org.kde.kglobalaccel',
+                                   '/component/kwin', introspect=False), 'org.kde.kglobalaccel.Component')
+            def dispatched(*unused):
+                if self._control_pending is job and not job['claimed']:
+                    job['stage'] = 'shortcut_returned'
+            accel.invokeShortcut('joetoo_bridge_control_focus',
+                reply_handler=dispatched,
+                error_handler=lambda *unused: self._control_finish(job,
+                    dict(state='skipped', reason='resident_unavailable')), timeout=timeout)
+        except Exception:
+            if self._control_pending is not None and self._control_pending.get('reply') is reply:
+                self._control_finish(self._control_pending, dict(state='skipped', reason='unavailable'))
+            else:
+                reply(json.dumps(dict(state='skipped', reason='unavailable')))
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s", sender_keyword="sender")
+    def TakeControlFocus(self, source, sender=None):
+        """Only the authenticated resident can claim a pending activation step."""
+        try:
+            owner = self._control_authenticate(sender)
+            job = self._control_pending
+            if (not job or job['claimed'] or time.monotonic() >= job['deadline']
+                    or owner != job['owner'] or source != job['source']
+                    or source != self.observation_source or not self.observation_synced):
+                return ''
+            job['claimed'] = True
+            job['stage'] = 'claim_accepted'
+            return json.dumps(dict(id=job['id'], action=job['action'], source=job['source'],
+                remaining_ms=max(0, int((job['deadline'] - time.monotonic()) * 1000)),
+                window_uuid=job['context']['uuid'] if job['context'] else None))
+        except Exception:
+            return ''
+
+    @dbus.service.method(IFACE, in_signature="ss", out_signature="b", sender_keyword="sender")
+    def CompleteControlFocus(self, request_id, payload, sender=None):
+        """A late/replayed callback cannot revive or retarget a completed step."""
+        try:
+            owner = self._control_authenticate(sender)
+            job = self._control_pending
+            if (not job or job['id'] != request_id or not job['claimed']
+                    or owner != job['owner'] or time.monotonic() >= job['deadline']
+                    or self.observation_source != job['source'] or not self.observation_synced
+                    or len(payload) > 1024):
+                return False
+            job['stage'] = 'completion_rejected'
+            data = json.loads(payload)
+            if not isinstance(data, dict) or set(data) != {'state', 'window_uuid'}:
+                return False
+            identifier = data['window_uuid']
+            if identifier is not None:
+                # Qt exposes QUuid with braces; normalize just as the existing
+                # observation/placement protocols do, rather than timing out.
+                identifier = str(uuid.UUID(identifier))
+            state = data['state']
+            if job['action'] == 'capture':
+                if state == 'captured' and identifier:
+                    handle = secrets.token_hex(32)
+                    while len(self._control_contexts) >= self.registry._completed_limit:
+                        self._control_contexts.pop(next(iter(self._control_contexts)))
+                    self._control_contexts[handle] = dict(uuid=identifier, owner=owner, source=job['source'])
+                    result = dict(state='captured', handle=handle)
+                elif state == 'no_active_window' and identifier is None:
+                    result = dict(state='skipped', reason=state)
+                else:
+                    return False
+            else:
+                if identifier != job['context']['uuid'] or state not in (
+                        'requested', 'already_active', 'missing', 'off_desktop', 'minimized', 'unavailable'):
+                    return False
+                result = dict(state=state)
+            self._control_finish(job, result)
+            return True
+        except Exception:
+            return False
 
     def _close_guard(self):
         if self._recovery is not None:
@@ -1795,14 +1927,27 @@ class Broker(dbus.service.Object):
             if len(payload) > 65536:
                 raise ValueError("layout payload too large")
             message = json.loads(payload)
-            if (not {"entries"} <= set(message) <= {"entries", "focus_timeout_ms", "focus_poll_interval_ms", "single_raise"}
-                    or not 1 <= len(message["entries"]) <= 256):
+            if (not isinstance(message, dict)
+                    or not {"entries"} <= set(message) <= {"entries", "focus_timeout_ms", "focus_poll_interval_ms", "single_raise", "single_lower", "lower_settle_ms"}
+                    or not isinstance(message["entries"], list) or not 1 <= len(message["entries"]) <= 256):
                 raise ValueError("invalid cohort")
             single_raise = message.get("single_raise", False)
             if "single_raise" in message and (single_raise is not True or self.single_raise_protocol != 1):
                 raise ValueError("single-window raise capability unavailable or invalid")
             if single_raise and (len(message["entries"]) != 1 or message["entries"][0].get("layer") != "over"):
                 raise ValueError("single-window raise requires exactly one over registration")
+            single_lower = message.get("single_lower", False)
+            if "single_lower" in message and (single_lower is not True or self.single_lower_protocol != 1):
+                raise ValueError("single-window lower capability unavailable or invalid")
+            if single_lower and (single_raise or len(message["entries"]) != 1
+                                 or not isinstance(message["entries"][0], dict)
+                                 or message["entries"][0].get("layer") != "under"):
+                raise ValueError("single-window lower requires exactly one under registration")
+            if "lower_settle_ms" in message and not single_lower:
+                raise ValueError("lower settling only applies to single-window under")
+            lower_settle = message.get("lower_settle_ms", 300)
+            if single_lower and (type(lower_settle) is not int or not 100 <= lower_settle <= 1000):
+                raise ValueError("invalid lower settlement time")
             # Defaults retain old callers; new launchers convey effective user
             # configuration explicitly. Never assume daemon environment values.
             focus_timeout = message.get("focus_timeout_ms", 500)
@@ -1840,6 +1985,14 @@ class Broker(dbus.service.Object):
                                    source=self.observation_source, deadline=time.monotonic() + 10,
                                    focus_timeout_ms=focus_timeout, focus_poll_interval_ms=focus_interval,
                                    geometry="placed", stacking="pending", focus="pending", detail="")
+        if single_lower:
+            self.initial_layout["single_lower"] = True
+            self.initial_layout["lower_settle_ms"] = lower_settle
+            desktop = entries[0]["desktop"]
+            self.initial_layout["lower_peers"] = {
+                key: deepcopy({name: value[name] for name in ("geometry", "desktops", "on_all_desktops")})
+                for key, value in self.observed_windows.items() if key != entries[0]["uuid"]
+                and (value["on_all_desktops"] or desktop in value["desktops"])}
         if single_raise:
             self.initial_layout["single_raise"] = True
             desktop = entries[0]["desktop"]
@@ -1860,7 +2013,9 @@ class Broker(dbus.service.Object):
         return json.dumps({key: r[key] for key in ("id", "entries", "order", "preferred_uuid", "source",
                                                  "focus_timeout_ms", "focus_poll_interval_ms")} |
                           {"remaining_ms": max(0, int((r["deadline"] - time.monotonic()) * 1000))} |
-                          ({"single_raise": True} if r.get("single_raise") else {}))
+                          ({"single_raise": True} if r.get("single_raise") else {}) |
+                          ({"single_lower": True, "lower_settle_ms": r["lower_settle_ms"]}
+                           if r.get("single_lower") else {}))
 
     @dbus.service.method(IFACE, in_signature="ss", out_signature="")
     def CompleteInitialLayout(self, request_id, payload):
@@ -1891,6 +2046,59 @@ class Broker(dbus.service.Object):
                             and observed.get("on_all_desktops") == e["on_all_desktops"]
                             for e, observed in observations)
             stack_ok = result.get("order") == r["order"] and result.get("geometry_unchanged") is True and unchanged
+            if r.get("single_lower"):
+                target = r["order"][0]
+                desktop = r["entries"][0]["desktop"]
+                expected = {key for key, value in self.observed_windows.items()
+                            if value["on_all_desktops"] or desktop in value["desktops"]}
+                before, after = result.get("lower_before"), result.get("lower_order")
+                pb = result.get("lower_participants_before")
+                pa = result.get("lower_participants_order")
+                excluded = result.get("lower_exclusions")
+                allowed_reasons = {"minimized", "hidden", "below_layer", "above_layer",
+                                   "other_layer", "transparent"}
+                valid_lists = (type(before) is list and type(after) is list and
+                    type(pb) is list and type(pa) is list and type(excluded) is list and
+                    all(type(x) is str for x in before + after + pb + pa) and
+                    all(type(x) is dict and set(x) == {"uuid", "reason"} and
+                        type(x["uuid"]) is str and type(x["reason"]) is str and
+                        x["reason"] in allowed_reasons for x in excluded))
+                valid_orders = False
+                if valid_lists:
+                    excluded_ids = [x["uuid"] for x in excluded]
+                    participants = set(pb)
+                    valid_orders = (
+                        len(before) == len(set(before)) and len(after) == len(set(after)) and
+                        len(pb) == len(participants) and len(pa) == len(set(pa)) and
+                        len(excluded_ids) == len(set(excluded_ids)) and
+                        set(before) == expected and set(after) == expected and
+                        set(pb) == set(pa) and set(excluded_ids).isdisjoint(participants) and
+                        participants | set(excluded_ids) == expected and
+                        target in participants and bool(pa) and pa[0] == target and
+                        pb == [x for x in before if x in participants] and
+                        pa == [x for x in after if x in participants] and
+                        excluded_ids == [x for x in before if x not in participants] and
+                        # Protected KWin layers are not participating peers,
+                        # but they still have a physical side of the target.
+                        # A BelowLayer surface (e.g. video bridge) must
+                        # remain physically below the lowered target.
+                        all((item["reason"] != "below_layer" or
+                             after.index(item["uuid"]) < after.index(target)) and
+                            (item["reason"] != "above_layer" or
+                             after.index(item["uuid"]) > after.index(target))
+                            for item in excluded)
+                    )
+                peers_unchanged = all(self.observed_windows.get(key) is not None and
+                    all(self.observed_windows[key][name] == value for name, value in snapshot.items())
+                    for key, snapshot in r["lower_peers"].items())
+                lower_ok = (valid_orders and [x for x in before if x != target] ==
+                            [x for x in after if x != target] and
+                            [x for x in pb if x != target] == [x for x in pa if x != target] and
+                            peers_unchanged and result.get("lower_peers_intact") is True and
+                            result.get("lower_settled") is True)
+                if not lower_ok and not result.get("error"):
+                    result["error"] = "One-shot lower/participating peer stack did not verify"
+                stack_ok = stack_ok and lower_ok
             if r.get("single_raise"):
                 # Resident evidence must cover the full normal-window stack on this
                 # desktop, not the vacuous ordering of a one-element cohort.
@@ -1909,7 +2117,22 @@ class Broker(dbus.service.Object):
                     result["error"] = "Single-window raise or existing-peer geometry did not verify"
 
             visible = (r["preferred_uuid"] is not None and result.get("current_desktop") == r["entries"][0]["desktop"])
-            if r["preferred_uuid"] is None:
+            if r.get("single_lower"):
+                target = r["order"][0]
+                current = result.get("current_desktop")
+                if current == r["entries"][0]["desktop"]:
+                    focus_ok = (result.get("focus_attempted") is True and
+                                result.get("lower_verified_active_uuid") == target and
+                                result.get("lower_method") == "active_slot" and
+                                result.get("lower_invoked") is True)
+                    focus = "verified before lower" if focus_ok else "failed"
+                else:
+                    focus_ok = (result.get("focus_attempted") is False and
+                                result.get("active_uuid") == result.get("before_active_uuid") and
+                                result.get("lower_method") in ("raise_peers", "already_lowest") and
+                                result.get("lower_invoked") is False)
+                    focus = "inactive desktop; no activation" if focus_ok else "failed"
+            elif r["preferred_uuid"] is None:
                 focus_ok = result.get("focus_attempted") is False and result.get("active_uuid") == result.get("before_active_uuid")
                 focus = "no automatic target" if focus_ok else "failed"
             elif not visible:
@@ -1931,7 +2154,14 @@ class Broker(dbus.service.Object):
                      focus_elapsed_ms=result.get("focus_elapsed_ms"),
                      initial_active_uuid=result.get("initial_active_uuid"),
                      focus_attempted=result.get("focus_attempted"), observed_order=result.get("order", []),
-                     before_active_uuid=result.get("before_active_uuid"), current_desktop=result.get("current_desktop"))
+                     before_active_uuid=result.get("before_active_uuid"), current_desktop=result.get("current_desktop"),
+                     lower_method=result.get("lower_method"), lower_invoked=result.get("lower_invoked"),
+                     lower_before=result.get("lower_before"), lower_order=result.get("lower_order"),
+                     lower_participants_before=result.get("lower_participants_before"),
+                     lower_participants_order=result.get("lower_participants_order"),
+                     lower_exclusions=result.get("lower_exclusions"),
+                     lower_peers_intact=result.get("lower_peers_intact"),
+                     lower_settled=result.get("lower_settled"))
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             raise dbus.DBusException("Invalid initial-layout completion", name=IFACE + ".BadArguments") from exc
 
@@ -1945,7 +2175,10 @@ class Broker(dbus.service.Object):
                                                        "preferred_uuid", "observed_active_uuid", "focus_attempted", "order",
                                                        "observed_order", "before_active_uuid", "current_desktop",
                                                        "focus_observation", "focus_elapsed_ms", "initial_active_uuid",
-                                                       "focus_timeout_ms", "focus_poll_interval_ms")} |
+                                                       "focus_timeout_ms", "focus_poll_interval_ms",
+                                                       "lower_method", "lower_invoked", "lower_before", "lower_order",
+                                                       "lower_participants_before", "lower_participants_order",
+                                                       "lower_exclusions", "lower_peers_intact", "lower_settled")} |
                           {"entries": [{k: e[k] for k in ("uuid", "layer", "desktop")} for e in r["entries"]]})
 
     # TigerVNC only: a deferred, role-qualified launch. Generic launch/correlation
@@ -2611,6 +2844,7 @@ class Broker(dbus.service.Object):
         self.observation_synced = True
         self.initial_layout_protocol = (1 if type(message.get("initial_layout_protocol")) is int and message.get("initial_layout_protocol") == 1 else 0)
         self.single_raise_protocol = (1 if type(message.get("single_raise_protocol")) is int and message.get("single_raise_protocol") == 1 else 0)
+        self.single_lower_protocol = (1 if type(message.get("single_lower_protocol")) is int and message.get("single_lower_protocol") == 1 else 0)
         self.viewer_protocol = (1 if type(message.get("viewer_protocol")) is int and message.get("viewer_protocol") == 1 else 0)
         self.move_protocol = move_protocol
         # Do not invent "removed" events for entries absent in the snapshot:
@@ -2733,6 +2967,7 @@ class Broker(dbus.service.Object):
             "viewer_cleanup_uncertain": bool(self._managed_correlation and self._managed_correlation.get("observer_cleanup_uncertain")),
             "initial_layout_protocol": self.initial_layout_protocol,
             "single_raise_protocol": self.single_raise_protocol,
+            "single_lower_protocol": self.single_lower_protocol,
             "initial_layout_active": self._initial_layout_active(),
             "managed_count": len(self.registry.managed_windows),
             "presence_counts": presence,

@@ -181,8 +181,13 @@ launch_preflight() {
     jq -e '.initial_layout_protocol == 1 and .initial_layout_active == false' <<< "$_lp_status" >/dev/null || {
         plan_error 'compatible initial-layout resident/broker required, or initial layout Busy'; return 1; }
     if [[ ${_op_single:-} ]]; then
-        jq -e '.single_raise_protocol == 1' <<< "$_lp_status" >/dev/null || {
-            plan_error '-L: compatible single-window raise broker/resident required'; return 2; }
+        if [[ ${planned_layer[0]} == under ]]; then
+            jq -e '.single_lower_protocol == 1' <<< "$_lp_status" >/dev/null || {
+                plan_error '-L: compatible single-window lower broker/resident required'; return 2; }
+        else
+            jq -e '.single_raise_protocol == 1' <<< "$_lp_status" >/dev/null || {
+                plan_error '-L: compatible single-window raise broker/resident required'; return 2; }
+        fi
     fi
     _lp_managed=$(qdbus6 "$bus" "$path" "$iface.ListManaged") || return 1
     jq -e '.windows | type == "array" and all(.[]; (.intended.desktop | type == "number")
@@ -348,9 +353,11 @@ open_plan() {
       done
       if (( ${#_op_entries[@]} > 0 )); then
         _op_payload=$(printf '%s\n' "${_op_entries[@]}" | jq -sc \
-            --argjson timeout "$initial_focus_timeout_ms" --argjson interval "$initial_focus_poll_interval_ms" --arg single "$_op_single" \
+            --argjson timeout "$initial_focus_timeout_ms" --argjson interval "$initial_focus_poll_interval_ms" \
+            --argjson settle "$single_lower_settle_ms" --arg single "$_op_single" --arg layer "${planned_layer[0]}" \
             '{entries:.,focus_timeout_ms:$timeout,focus_poll_interval_ms:$interval} +
-             (if $single == "single" then {single_raise:true} else {} end)') || return 1
+             (if $single == "single" and $layer == "under" then {single_lower:true,lower_settle_ms:$settle}
+              elif $single == "single" then {single_raise:true} else {} end)') || return 1
         _op_layout=$(qdbus6 "$bus" "$path" "$iface.SubmitInitialLayout" "$_op_payload") || return 1
         qdbus6 org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut joetoo_bridge_initial_layout >/dev/null || return 1
         _op_state=""

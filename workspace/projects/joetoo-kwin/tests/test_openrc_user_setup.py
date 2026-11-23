@@ -135,6 +135,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.managed_close = self.home / ".local/libexec/joetoo_kwin_managed_close.py"
         self.persistence = self.home / ".local/libexec/joetoo_kwin_persistence.py"
         self.recovery = self.home / ".local/libexec/joetoo_kwin_recovery.py"
+        self.sftp_target = self.home / ".local/libexec/joetoo_kwin_sftp_target.py"
         self.vnc_modules = [self.home / '.local/libexec' / name for name in
                             ('joetoo_kwin_vnc_identity.py', 'joetoo_kwin_vnc_target.py',
                              'joetoo_kwin_vnc_launch.py')]
@@ -149,7 +150,9 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertEqual(self.daemon.read_bytes(), (ROOT / 'libexec/joetoo-kwind').read_bytes())
         self.assertEqual(self.override.read_bytes(), (ROOT / 'poc-user-conf.d/joetoo-kwind').read_bytes())
         self.assertEqual(self.conf.read_text(), 'rc_env_allow="DBUS_SESSION_BUS_ADDRESS JOETOO_KWIND_EXEC DISPLAY XAUTHORITY"\n')
-        self.assertIn('Installed fourteen user-owned', p.stdout)
+        self.assertIn('Installed fifteen user-owned', p.stdout)
+        self.assertEqual(self.sftp_target.read_bytes(), (ROOT / 'libexec' / self.sftp_target.name).read_bytes())
+        self.assertEqual(self.sftp_target.stat().st_mode & 0o777, 0o644)
         self.assertEqual(self.rdp_module.read_bytes(), (ROOT / 'libexec' / self.rdp_module.name).read_bytes())
         self.assertEqual(self.rdp_module.stat().st_mode & 0o777, 0o644)
         self.assertEqual(self.rdp_module.stat().st_uid, os.geteuid())
@@ -160,6 +163,44 @@ class InstallerIntegrationTests(unittest.TestCase):
         self.assertEqual(self.run_tool(CONFIG_TOOL, "--check").returncode, 0)
         self.assertEqual(self.run_tool(INSTALL_TOOL, "--install").returncode, 1)
 
+    def test_sftp_target_installed_broker_can_validate_restore_intent(self):
+        install = self.run_tool(INSTALL_TOOL, '--install')
+        self.assertEqual(install.returncode, 0, install.stdout + install.stderr)
+        # -I excludes user/site and PYTHONPATH: only installed libexec is supplied.
+        # This reproduces the broker import, rather than importing from ROOT.
+        program = '''
+import sys
+sys.path.insert(0, sys.argv[1])
+from joetoo_kwin_persistence import SETTING_NAMES, intent
+settings = dict.fromkeys(SETTING_NAMES, '1000')
+settings.update(rdp_windowing_backend='auto', rdp_x11_renderer='auto',
+                rdp_security_protocol='nla', rdp_certificate_policy='strict',
+                RDP_SMART_SIZING='0', sftp_advisory_enabled='0')
+request = dict(desktop=2, slot=1, program='dolphin', mode='sftp',
+               target='sftp://joe@example.org/home/joe/', layer='under',
+               settings=settings)
+assert intent(request)['target'] == request['target']
+'''
+        result = subprocess.run(
+            [sys.executable, '-I', '-c', program, str(self.home / '.local/libexec')],
+            cwd=self.home, env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_sftp_target_check_update_and_archival(self):
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
+        original = self.sftp_target.read_bytes()
+        self.sftp_target.unlink()
+        check = self.run_tool(INSTALL_TOOL, '--check')
+        self.assertEqual(check.returncode, 1)
+        self.assertIn('Missing or outdated: ' + str(self.sftp_target), check.stdout)
+        self.sftp_target.write_bytes(b'# previous SFTP parser\n')
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 1)
+        update = self.run_tool(INSTALL_TOOL, '--update')
+        self.assertEqual(update.returncode, 0, update.stdout + update.stderr)
+        self.assertEqual(self.sftp_target.read_bytes(), original)
+        saved, = self.archived('sftp_target', self.sftp_target.name)
+        self.assertEqual(saved.read_bytes(), b'# previous SFTP parser\n')
+        self.assertEqual(self.run_tool(INSTALL_TOOL, '--check').returncode, 0)
 
     def test_vnc_missing_or_outdated_modules_fail_nonmutating_check(self):
         self.assertEqual(self.run_tool(INSTALL_TOOL, '--install').returncode, 0)
@@ -244,6 +285,7 @@ class InstallerIntegrationTests(unittest.TestCase):
             'managed_close': (self.managed_close, 0o644),
             'persistence': (self.persistence, 0o644),
             'recovery': (self.recovery, 0o644),
+            'sftp_target': (self.sftp_target, 0o644),
             'registry': (self.daemon.with_name('joetoo_kwin_registry.py'), 0o644),
             'resident': (self.home / '.local/share/joetoo-kwin/joetoo-kwin-resident.js', 0o644),
             'cli': (self.home / '.local/bin/joetoo-kwin', 0o755),
@@ -330,6 +372,7 @@ class InstallerIntegrationTests(unittest.TestCase):
             'managed_close': self.managed_close,
             'persistence': self.persistence,
             'recovery': self.recovery,
+            'sftp_target': self.sftp_target,
             'registry': self.daemon.with_name('joetoo_kwin_registry.py'),
             'resident': self.home / '.local/share/joetoo-kwin/joetoo-kwin-resident.js',
             'cli': self.home / '.local/bin/joetoo-kwin',
@@ -623,7 +666,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         result = self.run_tool(INSTALL_TOOL, '--preview-legacy-backups')
         self.assertEqual(result.returncode, 0, result.stderr)
         records = [json.loads(line) for line in result.stdout.splitlines()]
-        self.assertEqual(len(records), 14)
+        self.assertEqual(len(records), 15)
         daemon = next(r for r in records if r['component'] == 'daemon')
         self.assertEqual(sorted(v['copies'] for v in daemon['versions']), [1, 2])
         self.assertEqual({p for v in daemon['versions'] for p in v['paths']}, set(map(str, files)))
@@ -830,7 +873,7 @@ class InstallerIntegrationTests(unittest.TestCase):
         for _ in range(2):
             result = self.run_tool(INSTALL_TOOL, '--update')
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn('Installed fourteen user-owned', result.stdout)
+            self.assertIn('Installed fifteen user-owned', result.stdout)
             self.assertEqual(self.rdp_module.read_bytes(), (ROOT / 'libexec' / self.rdp_module.name).read_bytes())
             self.assertEqual(self.rdp_module.stat().st_mode & 0o7777, 0o644)
             self.assertEqual(self.rdp_module.stat().st_uid, os.geteuid())

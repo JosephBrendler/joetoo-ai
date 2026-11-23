@@ -171,6 +171,93 @@ class InitialLayoutBrokerTests(queries.ReadOnlyManagedQueryTests):
         state=self.complete(rid,raise_order=[self.uuids[1],self.uuids[0]])
         self.assertEqual(state['state'],'SUCCEEDED')
 
+    def test_single_lower_requires_capability_and_one_under_identity(self):
+        payload = dict(entries=[dict(registration_request_id=self.ids[0], layer='under')],
+                       single_lower=True,lower_settle_ms=300)
+        with self.assertRaises(self.module.dbus.DBusException):
+            self.broker.SubmitInitialLayout(json.dumps(payload))
+        self.broker.single_lower_protocol = 1
+        for change in (dict(single_lower=False),dict(single_lower=True,single_raise=True),
+                       dict(lower_settle_ms=99),dict(lower_settle_ms='300'),
+                       dict(entries=[dict(registration_request_id=self.ids[0],layer='over')])):
+            with self.assertRaises(self.module.dbus.DBusException):
+                self.broker.SubmitInitialLayout(json.dumps(dict(payload, **change)))
+        rid = self.broker.SubmitInitialLayout(json.dumps(payload))
+        claim = json.loads(self.broker.TakeInitialLayout(queries.SOURCE))
+        self.assertEqual(claim['lower_settle_ms'], 300)
+        self.assertTrue(claim['single_lower'])
+        state = self.complete(rid,focus_attempted=True,active_uuid=self.uuids[1],
+            lower_before=[self.uuids[1],self.uuids[0]],
+            lower_order=[self.uuids[0],self.uuids[1]],
+            lower_participants_before=[self.uuids[1],self.uuids[0]],
+            lower_participants_order=[self.uuids[0],self.uuids[1]],lower_exclusions=[],
+            lower_method='active_slot',
+            lower_verified_active_uuid=self.uuids[0],lower_invoked=True,
+            lower_peers_intact=True,lower_settled=True)
+        self.assertEqual(state['state'],'SUCCEEDED')
+        self.assertEqual(state['focus'],'verified before lower')
+
+    def test_single_lower_rejects_false_stack_or_foreign_peer(self):
+        self.broker.single_lower_protocol=1
+        for bad in (dict(lower_order=[self.uuids[1],self.uuids[0]]),
+                    dict(lower_before=[self.uuids[0]]),
+                    dict(lower_peers_intact=False),
+                    dict(lower_verified_active_uuid=self.uuids[1])):
+            rid=self.submit(('under',),single_lower=True,lower_settle_ms=300)
+            self.broker.TakeInitialLayout(queries.SOURCE)
+            evidence=dict(focus_attempted=True,lower_invoked=True,lower_method='active_slot',
+                lower_verified_active_uuid=self.uuids[0],
+                lower_before=[self.uuids[1],self.uuids[0]],
+                lower_order=[self.uuids[0],self.uuids[1]],
+                lower_participants_before=[self.uuids[1],self.uuids[0]],
+                lower_participants_order=[self.uuids[0],self.uuids[1]],lower_exclusions=[],
+                lower_peers_intact=True,lower_settled=True)
+            evidence.update(bad)
+            self.assertEqual(self.complete(rid,**evidence)['state'],'FAILED')
+
+    def test_single_lower_inactive_desktop_requires_no_activation(self):
+        self.broker.single_lower_protocol=1
+        rid=self.submit(('under',),single_lower=True,lower_settle_ms=300)
+        self.broker.TakeInitialLayout(queries.SOURCE)
+        state=self.complete(rid,current_desktop=1,focus_attempted=False,
+            before_active_uuid='unrelated',active_uuid='unrelated',
+            lower_invoked=False,lower_method='raise_peers',
+            lower_before=[self.uuids[1],self.uuids[0]],
+            lower_order=[self.uuids[0],self.uuids[1]],
+            lower_participants_before=[self.uuids[1],self.uuids[0]],
+            lower_participants_order=[self.uuids[0],self.uuids[1]],lower_exclusions=[],
+            lower_peers_intact=True,lower_settled=True)
+        self.assertEqual(state['state'],'SUCCEEDED')
+        self.assertIn('inactive desktop',state['focus'])
+
+    def test_single_lower_verifies_excluded_protected_surface_and_partition(self):
+        self.broker.single_lower_protocol = 1
+        # The raw compositor window is retained in observer state, even though
+        # it is not a participating ordinary peer. KWin resident supplies the
+        # typed protected classification; broker validates the full partition.
+        bridge = 'aafa04ff-44dd-4000-8000-000000000001'
+        self.broker.observed_windows[bridge] = dict(self.broker.observed_windows[self.uuids[1]])
+        self.broker.observed_windows[bridge]['uuid'] = bridge
+        raw_before = [bridge, self.uuids[1], self.uuids[0]]
+        raw_after = [bridge, self.uuids[0], self.uuids[1]]
+        valid = dict(focus_attempted=True, lower_invoked=True, lower_method='active_slot',
+            lower_verified_active_uuid=self.uuids[0], lower_before=raw_before,
+            lower_order=raw_after, lower_participants_before=[self.uuids[1], self.uuids[0]],
+            lower_participants_order=[self.uuids[0], self.uuids[1]],
+            lower_exclusions=[dict(uuid=bridge, reason='below_layer')],
+            lower_peers_intact=True, lower_settled=True)
+        rid = self.submit(('under',), single_lower=True, lower_settle_ms=300)
+        self.broker.TakeInitialLayout(queries.SOURCE)
+        self.assertEqual(self.complete(rid, **valid)['state'], 'SUCCEEDED')
+        for faulty in (dict(lower_exclusions=[]),
+                       dict(lower_exclusions=[dict(uuid=bridge, reason='unknown')]),
+                       dict(lower_participants_order=[self.uuids[1], self.uuids[0]]),
+                       dict(lower_participants_before=[bridge, self.uuids[1], self.uuids[0]]),
+                       dict(lower_order=[self.uuids[0], bridge, self.uuids[1]])):
+            rid = self.submit(('under',), single_lower=True, lower_settle_ms=300)
+            self.broker.TakeInitialLayout(queries.SOURCE)
+            self.assertEqual(self.complete(rid, **dict(valid, **faulty))['state'], 'FAILED')
+
     def test_singleton_cohort_order_alone_is_not_proof_of_raising(self):
         self.broker.single_raise_protocol=1
         for evidence in (None,[self.uuids[0]],[self.uuids[0],self.uuids[1]],
