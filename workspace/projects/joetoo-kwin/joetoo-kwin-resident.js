@@ -944,3 +944,52 @@ function singleLowerFromBroker(r, beforeActiveId, beforeDesktopId, beforeDesktop
     } catch (e) { finish(String(e)); }
 }
 registerShortcut("joetoo_bridge_initial_layout", "Joetoo initial cohort layout", "", initialLayoutFromBroker);
+
+// Shared CLI completion, deliberately separate from verified layout algorithms.
+// The initial active window is the operator-designated control context; it is
+// neither adopted into the registry nor granted destructive authority.
+function controlFocusFromBroker() {
+    // Match the existing layout UUID convention: Qt QUuid String() includes
+    // braces, while broker-owned UUIDs are canonical lower-case strings.
+    const uuid = win => windowUUID(win).replace(/^\{([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\}$/i, "$1").toLowerCase();
+    const started = Date.now();
+    const initial = workspace.activeWindow;
+    callDBus(BRIDGE, PATH, BRIDGE, "TakeControlFocus", observerSource, function(payload) {
+        if (!payload) return;
+        let request;
+        try {
+            request = JSON.parse(payload);
+            if (request.source !== observerSource || !Number.isFinite(request.remaining_ms) ||
+                Date.now() - started < 0 || Date.now() - started >= request.remaining_ms) return;
+            let state, id = request.window_uuid;
+            if (request.action === "capture") {
+                id = initial && !initial.deleted ? (uuid(initial) || null) : null;
+                state = id ? "captured" : "no_active_window";
+            } else if (request.action === "restore") {
+                const matches = workspace.windowList().filter(w => uuid(w) === id && !w.deleted);
+                const target = matches.length === 1 ? matches[0] : null;
+                if (!target) state = "missing";
+                else if (target.minimized) state = "minimized";
+                else if (!target.onAllDesktops && (!workspace.currentDesktop ||
+                    !Number.isInteger(Number(workspace.currentDesktop.x11DesktopNumber)) ||
+                    Number(workspace.currentDesktop.x11DesktopNumber) < 1 ||
+                    !(target.desktops || []).some(d => Number(d.x11DesktopNumber) ===
+                        Number(workspace.currentDesktop.x11DesktopNumber)))) state = "off_desktop";
+                else if (uuid(workspace.activeWindow) === id) state = "already_active";
+                else {
+                    // One ordinary KWin activation; raising the control window
+                    // is intentional. Never change desktop or repair the stack.
+                    workspace.activeWindow = target;
+                    state = "requested";
+                }
+            } else return;
+            callDBus(BRIDGE, PATH, BRIDGE, "CompleteControlFocus", request.id,
+                     JSON.stringify({state: state, window_uuid: id}));
+        } catch (_) {
+            if (request && request.action === "restore")
+                callDBus(BRIDGE, PATH, BRIDGE, "CompleteControlFocus", request.id,
+                    JSON.stringify({state: "unavailable", window_uuid: request.window_uuid}));
+        }
+    });
+}
+registerShortcut("joetoo_bridge_control_focus", "Joetoo control-window focus", "", controlFocusFromBroker);

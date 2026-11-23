@@ -871,7 +871,9 @@ restore_managed_snapshot() {
     local _rs_dir _rs_file _rs_rc
     _rs_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
     _rs_file=$(mktemp "${XDG_RUNTIME_DIR:?}/joetoo-restore.XXXXXXXX.conf") || return 1
-    trap 'rm -f -- "$_rs_file"' EXIT
+    # The EXIT trap assigns its own saved status before cleanup.
+    # shellcheck disable=SC2154
+    trap '_rs_exit_rc=$?; rm -f -- "$_rs_file"; control_focus_on_exit "$_rs_exit_rc"' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
     if ! python3 "$_rs_dir/libexec/joetoo_kwin_persistence.py" --restore > "$_rs_file"; then
@@ -889,11 +891,68 @@ restore_managed_snapshot() {
     return "$_rs_rc"
 }
 
+# Best effort only: neither broker availability nor activation affects the
+# mission's return code. The opaque handle can only restore the captured UUID.
+# Report only fixed, application-authored diagnostics, never raw D-Bus text,
+# the context handle, a caption, or other untrusted response fields.
+control_focus_debug() {
+    local summary
+    summary=$(jq -er '
+        def allowed($values; $fallback): . as $v | if ($values | index($v)) != null then $v else $fallback end;
+        (.state | allowed(["captured","skipped","requested","already_active","missing","off_desktop","minimized","unavailable"]; "unavailable")) as $state |
+        (.reason | allowed(["unknown_context","coordination_busy","coordination_timeout","resident_unavailable","unavailable","no_active_window"]; "none")) as $reason |
+        (.stage | allowed(["dispatch_pending","shortcut_returned","claim_accepted","completion_rejected"]; "none")) as $stage |
+        "state=[\($state)] reason=[\($reason)] stage=[\($stage)]"' <<< "$2" 2>/dev/null) || summary='state=[unavailable] reason=[unavailable] stage=[none]'
+    j_msg "-${debug}" -p "Control-window focus $1: $summary" || :
+}
+
+control_focus_capture() {
+    local result
+    control_focus_handle=''
+    if ! command -v qdbus6 >/dev/null || ! command -v jq >/dev/null; then
+        control_focus_debug capture ''; return 0
+    fi
+    result=$(qdbus6 "$bus" "$path" "$iface.ControlFocus" capture '' 2>/dev/null) || result=''
+    control_focus_debug capture "$result"
+    control_focus_handle=$(jq -er 'select(.state == "captured") | .handle |
+        select(type == "string" and test("^[0-9a-f]{64}$"))' <<< "$result" 2>/dev/null) || control_focus_handle=''
+    return 0
+}
+
+control_focus_restore() {
+    local result state
+    [[ $control_focus_handle ]] || return 0
+    result=$(qdbus6 "$bus" "$path" "$iface.ControlFocus" restore "$control_focus_handle" 2>/dev/null) || result=''
+    control_focus_handle=''  # One attempt, including failure or unavailable broker.
+    control_focus_debug restore "$result"
+    state=$(jq -er '.state | select(. == "requested" or . == "already_active" or
+        . == "missing" or . == "off_desktop" or . == "minimized")' <<< "$result" 2>/dev/null) || state=unavailable
+    j_msg "-${info}" -p "Control-window focus: [$state]" || :
+    return 0
+}
+
+# Header confirmation/die helpers may exit directly. Preserve that original
+# status while completing ordinary exits; signal exits keep their old cleanup
+# behavior and must not initiate a new activation exchange.
+# Called indirectly by EXIT traps, including the temporary restore-file trap.
+# shellcheck disable=SC2329
+control_focus_on_exit() {
+    local original_rc=$1
+    if (( original_rc != 130 && original_rc != 143 )); then
+        control_focus_restore
+    fi
+    return "$original_rc"
+}
+
+# Keep mission-local traps and explicit interruption exits unchanged. Ordinary
+# return (including failed/declined missions) always reaches completion below.
 # run as regular user, not root
 checknotroot
 
 # parse cmdline - this block and usage above must grow as options are implemented
 parse_cmdline "$@" || exit $?
+control_focus_capture
+trap 'control_focus_on_exit "$?"' EXIT
 # -c loads configuration before applying these overrides; other operations do
 # not need layout configuration and retain their existing operational behavior.
 if [[ $cli_operation != -S && $cli_operation != -c && $cli_operation != -o && $cli_operation != -r && $cli_operation != -L && $cli_operation != -m && $cli_operation != move ]]; then apply_cli_verbosity || exit $?; fi
@@ -937,3 +996,7 @@ case ${1:-} in
         readonly_managed_query "$action" "${2}" ;;
     *) bad_args 'unrecognized operation'; exit 2 ;;
 esac
+
+mission_rc=$?
+control_focus_restore
+exit "$mission_rc"

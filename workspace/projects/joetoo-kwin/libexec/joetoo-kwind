@@ -161,6 +161,137 @@ class Broker(dbus.service.Object):
         self._sdl_placement = None
         self._sdl_traces = []  # Diagnostic snapshots only; never transaction authority.
         self._managed_close = CloseRuntime(self, GLib, dbus)
+        # Activation contexts are ephemeral, bounded and unrelated to management
+        # or destructive authority. No sender connection must survive a mission.
+        self._control_contexts = {}
+        self._control_pending = None
+
+    def _control_daemon(self):
+        return dbus.Interface(self.connection.get_object('org.freedesktop.DBus',
+                              '/org/freedesktop/DBus', introspect=False), 'org.freedesktop.DBus')
+
+    def _control_authenticate(self, sender):
+        # Reuse the authenticated KWin/session identity; observerSource alone
+        # is ordering metadata, never authorization for a resident callback.
+        if self._recovery is None:
+            raise PermissionError('authenticated resident unavailable')
+        self._recovery.authenticate(sender)
+        return str(sender)
+
+    def _control_finish(self, job, result):
+        if self._control_pending is not job:
+            return
+        self._control_pending = None
+        if job.get('timer') is not None:
+            GLib.source_remove(job['timer'])
+        job['reply'](json.dumps(result))
+
+    @dbus.service.method(IFACE, in_signature="ss", out_signature="s",
+                         sender_keyword="sender", async_callbacks=("reply", "error"))
+    def ControlFocus(self, action, handle, sender=None, reply=None, error=None):
+        """Capture current active UUID or consume its one-time restore handle."""
+        try:
+            from joetoo_kwin_managed_close import DEFAULTS
+            timeout = DEFAULTS['managed_close_dbus_timeout_ms'] / 1000
+            daemon = self._control_daemon()
+            if int(daemon.GetConnectionUnixUser(sender, timeout=timeout)) != os.geteuid():
+                raise PermissionError('foreign caller')
+            if action not in ('capture', 'restore') or (action == 'capture' and handle):
+                raise ValueError('invalid control request')
+            context = None
+            if action == 'restore':
+                context = self._control_contexts.pop(str(handle), None)
+                if context is None:
+                    return reply(json.dumps(dict(state='skipped', reason='unknown_context')))
+            if self._control_pending is not None:
+                return reply(json.dumps(dict(state='skipped', reason='coordination_busy')))
+            owner = str(daemon.GetNameOwner('org.kde.KWin', timeout=timeout))
+            self._control_authenticate(owner)
+            if not self.observation_synced or (context and
+                    (context['owner'] != owner or context['source'] != self.observation_source)):
+                raise ValueError('resident changed or unavailable')
+            job = dict(id=uuid.uuid4().hex, action=str(action), owner=owner,
+                       source=self.observation_source, context=context, reply=reply,
+                       deadline=time.monotonic() + timeout, claimed=False, stage='dispatch_pending')
+            self._control_pending = job
+            def expired():
+                self._control_finish(job, dict(state='skipped', reason='coordination_timeout', stage=job['stage']))
+                return False
+            job['timer'] = GLib.timeout_add(DEFAULTS['managed_close_dbus_timeout_ms'], expired)
+            accel = dbus.Interface(self.connection.get_object('org.kde.kglobalaccel',
+                                   '/component/kwin', introspect=False), 'org.kde.kglobalaccel.Component')
+            def dispatched(*unused):
+                if self._control_pending is job and not job['claimed']:
+                    job['stage'] = 'shortcut_returned'
+            accel.invokeShortcut('joetoo_bridge_control_focus',
+                reply_handler=dispatched,
+                error_handler=lambda *unused: self._control_finish(job,
+                    dict(state='skipped', reason='resident_unavailable')), timeout=timeout)
+        except Exception:
+            if self._control_pending is not None and self._control_pending.get('reply') is reply:
+                self._control_finish(self._control_pending, dict(state='skipped', reason='unavailable'))
+            else:
+                reply(json.dumps(dict(state='skipped', reason='unavailable')))
+
+    @dbus.service.method(IFACE, in_signature="s", out_signature="s", sender_keyword="sender")
+    def TakeControlFocus(self, source, sender=None):
+        """Only the authenticated resident can claim a pending activation step."""
+        try:
+            owner = self._control_authenticate(sender)
+            job = self._control_pending
+            if (not job or job['claimed'] or time.monotonic() >= job['deadline']
+                    or owner != job['owner'] or source != job['source']
+                    or source != self.observation_source or not self.observation_synced):
+                return ''
+            job['claimed'] = True
+            job['stage'] = 'claim_accepted'
+            return json.dumps(dict(id=job['id'], action=job['action'], source=job['source'],
+                remaining_ms=max(0, int((job['deadline'] - time.monotonic()) * 1000)),
+                window_uuid=job['context']['uuid'] if job['context'] else None))
+        except Exception:
+            return ''
+
+    @dbus.service.method(IFACE, in_signature="ss", out_signature="b", sender_keyword="sender")
+    def CompleteControlFocus(self, request_id, payload, sender=None):
+        """A late/replayed callback cannot revive or retarget a completed step."""
+        try:
+            owner = self._control_authenticate(sender)
+            job = self._control_pending
+            if (not job or job['id'] != request_id or not job['claimed']
+                    or owner != job['owner'] or time.monotonic() >= job['deadline']
+                    or self.observation_source != job['source'] or not self.observation_synced
+                    or len(payload) > 1024):
+                return False
+            job['stage'] = 'completion_rejected'
+            data = json.loads(payload)
+            if not isinstance(data, dict) or set(data) != {'state', 'window_uuid'}:
+                return False
+            identifier = data['window_uuid']
+            if identifier is not None:
+                # Qt exposes QUuid with braces; normalize just as the existing
+                # observation/placement protocols do, rather than timing out.
+                identifier = str(uuid.UUID(identifier))
+            state = data['state']
+            if job['action'] == 'capture':
+                if state == 'captured' and identifier:
+                    handle = secrets.token_hex(32)
+                    while len(self._control_contexts) >= self.registry._completed_limit:
+                        self._control_contexts.pop(next(iter(self._control_contexts)))
+                    self._control_contexts[handle] = dict(uuid=identifier, owner=owner, source=job['source'])
+                    result = dict(state='captured', handle=handle)
+                elif state == 'no_active_window' and identifier is None:
+                    result = dict(state='skipped', reason=state)
+                else:
+                    return False
+            else:
+                if identifier != job['context']['uuid'] or state not in (
+                        'requested', 'already_active', 'missing', 'off_desktop', 'minimized', 'unavailable'):
+                    return False
+                result = dict(state=state)
+            self._control_finish(job, result)
+            return True
+        except Exception:
+            return False
 
     def _close_guard(self):
         if self._recovery is not None:

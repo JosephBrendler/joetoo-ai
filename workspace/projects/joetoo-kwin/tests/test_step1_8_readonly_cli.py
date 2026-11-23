@@ -23,6 +23,7 @@ class ReadOnlyCliTests(PlannerHarness, unittest.TestCase):
         spy = self.folder / 'qdbus6'
         spy.write_text('''#!/usr/bin/env python3
 import json, os, sys
+if len(sys.argv)>3 and sys.argv[3] == 'org.joetoo.KWinBridge.ControlFocus': sys.exit(1)
 with open(os.environ['TRACE'], 'a') as out:
     out.write(json.dumps(sys.argv[1:]) + '\\n')
 sys.stdout.buffer.write(open(os.environ['READONLY_FILE'], 'rb').read())
