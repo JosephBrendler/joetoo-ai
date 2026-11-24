@@ -1,6 +1,6 @@
 ---
 name: joetoo-source-maintainability
-description: Audit and improve Joetoo Bash, Python, and JavaScript source comments, function contracts, and extractable metadata using the established script_header_joetoo summarize_header conventions and the joetoo-kwin-stage-upstream explanatory-comment standard. Use for Step 1.9 joetoo-kwin source stabilization and later Joetoo maintainability reviews.
+description: Audit and improve Joetoo Bash, Python, JavaScript, and C++ source comments, function contracts, and extractable metadata using the established script_header_joetoo summarize_header conventions and the joetoo-kwin-stage-upstream explanatory-comment standard. Use for Step 1.9 joetoo-kwin source stabilization and later Joetoo maintainability reviews.
 ---
 
 # Joetoo source maintainability and structured metadata
@@ -12,7 +12,8 @@ structured contracts that can feed generated references with (2) explanatory
 inline comments that clarify *why* non-obvious code exists. The source of truth
 is the implementation, not a comment or an anticipated release contract.
 
-For `joetoo-kwin` Step 1.9, audit all curated interpreted production sources
+For `joetoo-kwin` Step 1.9, audit all curated production source code,
+including Bash, Python, JavaScript, C++ implementations and headers,
 before source-release transfer and `tarup`. This skill is reusable beyond that
 task; do not hard-code its inventory into the skill.
 
@@ -45,7 +46,7 @@ task; do not hard-code its inventory into the skill.
   outputs/return statuses, external globals/state, dependencies, prerequisites,
   mandatory invariants, notes and warnings. Make these discoverable by tools.
 - **Inline explanations:** why mechanisms and ordering matter, non-obvious
-  Bash/Python/JS behavior, security and lifecycle decisions, failure
+  Bash/Python/JS/C++ behavior, security and lifecycle decisions, failure
   classifications, and deliberate tradeoffs. Don't narrate trivial code.
 
 Add documentation only after verifying the actual behavior. Do not assert
@@ -176,13 +177,40 @@ cleanup. Explain positive window identity and safety invariants adjacent to
 enforcement points. Do not claim current `summarize_header` parses JSDoc;
 future extraction/adapters are separately authorized work.
 
+## C++ conventions — mandatory maintainability audit
+
+Include every curated C++ implementation and header in the **same mandatory
+source-maintainability audit** as Bash, Python and JavaScript. For joetoo-kwin,
+derive the current inventory from `MANIFEST`, including
+`native/managed-close/adapter.cpp`, `native/managed-close/x11.cpp`, and
+`native/managed-close/channel.h`. Review related `CMakeLists.txt` build
+comments and installation assumptions. Review `metadata.json` separately
+for accuracy/provenance, not as C++ function source.
+
+- Write concise file-level purpose, boundaries, version-sensitive KWin/Qt/X11
+  dependencies and relevant build/ABI assumptions.
+- Use consistent, Doxygen-compatible `///` or `/** ... */` contracts for
+  nontrivial public functions/classes/APIs: parameters, returns, failures,
+  ownership/lifetime, requirements and side effects. Document internal helpers
+  proportionately; avoid narrating trivial code.
+- Explain non-obvious C++ and Qt semantics at their use sites: state and
+  cleanup, event-loop or signal/slot assumptions, thread-affinity when
+  relevant, X11/XWayland protocol behavior and order-dependent operations.
+- Adopt Joetoo's **information categories** without copying Bash `# @tag`
+  syntax into C++. The current `summarize_header()` does not parse Doxygen.
+- Do not change signatures, ABI, build policy, source behavior or conditional
+  compilation under the guise of commenting. Copyright/SPDX provenance remains
+  a parallel release audit, not an exclusion from maintainability review.
+- Validate via diff and relevant native build/syntax tests when the required
+  environment exists; disclose unavailable build validation.
+
 ## Audit workflow
 
 1. **Inventory:** derive in-scope production Bash/shell, OpenRC/eselect,
-   Python, and JS files from the current curated source manifest. Review
-   configs/examples separately. Native C++/CMake and licensing provenance
-   receive a separate source-release audit. Don't forget imported/non-
-   executable source modules.
+   Python, JS, C++ implementations and headers from the current curated
+   source manifest. Include CMake in the related explanatory review; review
+   configs/examples and licensing provenance separately. Do not omit imported
+   or non-executable source modules.
 2. **Inspect:** read the full source and relevant callers, implementations,
    return paths, globals, and actual safety enforcement.
 3. **Assess:** identify missing contracts, stale assertions, opaque constructs,
@@ -193,7 +221,8 @@ future extraction/adapters are separately authorized work.
    Avoid behavior changes, interface changes and speculative refactors.
 5. **Validate:** inspect a complete diff; run `bash -n` for shell, appropriate
    ShellCheck using Joetoo stubs, Python syntax/AST and focused unittests,
-   `node --check` and relevant JS tests. For metadata, test actual extraction
+   `node --check` and relevant JS tests, plus relevant C++/CMake build or
+   syntax checks when available. For metadata, test actual extraction
    in a safe fixture where feasible. Check `git diff --check` and, if useful,
    full regression suites. Do not claim static checks prove equivalence.
 6. **Review:** present findings, patch, exact validation evidence, unresolved
@@ -229,6 +258,6 @@ Include reviewed revision and any separately scoped functional issues.
 5. Verified functional findings kept separate from documentation work.
 6. Audit-ledger status proposal and remaining blockers.
 
-Finish only when all in-scope interpreted sources have been reviewed and
-accepted; completing this audit does not certify the source transfer,
+Finish only when all in-scope interpreted and C++ production sources have
+been reviewed and accepted; completing this audit does not certify the source transfer,
 license provenance, tarball, installed image or native acceptance.
