@@ -133,6 +133,42 @@ class ManagedCloseTests(unittest.TestCase):
         self.prepare();self.commit();self.close_current()
         self.assertEqual(self.runtime.job['state'],'succeeded')
         self.assertEqual(len(self.native.calls),1)
+    def test_native_x11_dispatch_failure_retains_bounded_helper_diagnostics(self):
+        self.native.windows[WINDOW_ID]['backend']='x11'
+        self.native.hold=True
+        self.prepare('all');self.commit()
+        t=self.runtime.job['targets'][0]
+        self.native.results[t['token']].update(
+            state='dispatch_failed', helper_reaped=True, gone=False,
+            helper_exit_code=4, helper_exit_status='normal', helper_receipt_ok=False)
+        self.native.pending.pop(0)['reply_handler'](json.dumps(self.native.results[t['token']]))
+        result=json.loads(self.b.ManagedCloseStatus(self.runtime.job['id']))
+        self.assertEqual(result['state'],'partial')
+        target=result['targets'][0]
+        self.assertEqual((target['state'], target['reason'], target['retired']),
+                         ('dispatch_failed', 'native_dispatch_failed', False))
+        self.assertEqual((target['helper_exit_code'], target['helper_exit_status'], target['helper_receipt_ok']),
+                         (4, 'normal', False))
+        self.assertNotIn('token', target)
+        self.assertIn(WINDOW_ID, self.b.registry.managed_windows)
+
+    def test_native_dispatch_failure_rejects_untrusted_diagnostic_shapes(self):
+        self.native.windows[WINDOW_ID]['backend']='x11'
+        self.native.hold=True
+        self.prepare('all');self.commit()
+        t=self.runtime.job['targets'][0]
+        self.native.results[t['token']].update(
+            state='dispatch_failed', helper_reaped=True, gone=False,
+            helper_exit_code='4;unsafe', helper_exit_status='invalid', helper_receipt_ok='false')
+        self.native.pending.pop(0)['reply_handler'](json.dumps(self.native.results[t['token']]))
+        result=json.loads(self.b.ManagedCloseStatus(self.runtime.job['id']))
+        target=result['targets'][0]
+        self.assertEqual(target['reason'], 'native_dispatch_failed')
+        self.assertNotIn('helper_exit_code', target)
+        self.assertNotIn('helper_exit_status', target)
+        self.assertNotIn('helper_receipt_ok', target)
+        self.assertIn(WINDOW_ID, self.b.registry.managed_windows)
+
     def test_unknown_or_raw_uuid_id_rejected(self):
         for value in ('win-999', WINDOW_ID, 'win-1;echo secret'):
             self.prepare(identifier=value)

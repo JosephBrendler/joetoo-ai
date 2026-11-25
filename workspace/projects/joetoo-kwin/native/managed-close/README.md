@@ -146,6 +146,14 @@ entries. Previews never retire records; uncertain identities stay reserved.
 Per-target refusal/no disappearance times out without a resend or
 force escalation; known-reaped attempts can proceed to the next fixed target.
 
+For an X11 `dispatch_failed` outcome after the helper has reaped, the retained
+per-target result includes `helper_exit_code` (integer), `helper_exit_status`
+(`normal` or `crash`) and `helper_receipt_ok` (whether stdout was exactly
+`dispatched\n`). These diagnostics distinguish the helper's finite failure
+stages without exposing raw stdout, stderr or credentials. They provide no
+window-close authority and do not permit automatic retries. An older or
+unavailable native effect may omit the diagnostic fields.
+
 Legacy `ObserveWindow`/`SyncInventory` messages do not authenticate destruction.
 Only the native effect's original-window closed signal proves completion.
 `-d` completion updates presence to missing and preserves identity, slot and

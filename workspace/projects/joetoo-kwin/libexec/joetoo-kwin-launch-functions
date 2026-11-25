@@ -164,6 +164,7 @@ configured_restore_intent() # Encode the original recipe and allowlisted effecti
 # Encode a validated recipe and existing budgets; targets never become shell code.
 rdp_configured_job() # Serialize one planned RDP entry without evaluating its target
 {
+    local -a _rj_query=()
     # _op_i comes from open_plan, or launch_preflight's shadowing local. Raw
     # slurp (-Rs) makes all target stdin one JSON string, never jq/shell code.
     # --argjson parses validated numbers/objects; --arg makes timeout strings
@@ -173,6 +174,15 @@ rdp_configured_job() # Serialize one planned RDP entry without evaluating its ta
     # build, so callers stop rather than invoke a frontend with partial data.
     # RDP uses the existing VNC-named call/placement budgets; these are mechanical
     # waits, separate from registration and remote authentication.
+    # Note: MANPAGER=cat man jq | grep -E ' -R:| -s:| --argjson| --arg '
+    #   --raw-input / -R:          - pass each line of text to the filter as a string (not json)
+    #   --slurp / -s:              - read the input stream into an array and run the filter just once
+    #   --arg name value:          - --arg foo 123 will bind $foo to "123".
+    #   --argjson name JSON-text:  - --argjson foo 123 makes $foo available witn value 123.
+
+    # construct query in in an array for readability
+    _rj_query=( jq -Rs )
+# resume edit here -->
     printf '%s' "${planned_target[$_op_i]}" | jq -Rs \
         --argjson intent "${launch_intent_json:-null}" \
         --argjson settings "$rdp_settings" \

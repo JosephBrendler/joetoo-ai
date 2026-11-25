@@ -90,8 +90,12 @@ class CloseRuntime:
         retired = {t['managed_id'] for t in j['targets'] if t.get('retired') is True}
         retained = (j.get('scope') != 'all' or
                     any(record.managed_id not in retired for record in j['records']))
+        # Surface only validated scalar helper diagnostics, never raw process output.
+        target_fields = ('managed_id', 'window_uuid', 'request_id', 'desktop', 'slot',
+                         'backend', 'state', 'action', 'retired', 'reason',
+                         'helper_exit_code', 'helper_exit_status', 'helper_receipt_ok')
         return json.dumps(dict(protocol=1, request_id=j['id'], state=j['state'], reason=j.get('reason', ''),
-                               targets=[{k: v for k, v in t.items() if k in ('managed_id', 'window_uuid', 'request_id', 'desktop', 'slot', 'backend', 'state', 'action', 'retired', 'reason')} for t in j['targets']], excluded=deepcopy(j['excluded']),
+                               targets=[{k: v for k, v in t.items() if k in target_fields} for t in j['targets']], excluded=deepcopy(j['excluded']),
                                registration_retained=retained, reservations_retained=retained,
                                self_terminal=j.get('self_terminal', 'unknown')), sort_keys=True)
 
@@ -530,6 +534,16 @@ class CloseRuntime:
                 return self.uncertain(j, t, 'native_phase_unknown')
             if j['scope'] == 'all' and a['state'] in ('source_lost', 'busy_or_replay'):
                 return self.uncertain(j, t, 'native_' + a['state'])
+            if a['state'] == 'dispatch_failed':
+                # Diagnostic metadata is not authorization or proof of close. Accept
+                # only the three bounded scalar fields from the pinned native effect.
+                code = a.get('helper_exit_code')
+                status = a.get('helper_exit_status')
+                receipt = a.get('helper_receipt_ok')
+                if (type(code) is int and -255 <= code <= 255 and
+                        status in ('normal', 'crash') and type(receipt) is bool):
+                    t.update(helper_exit_code=code, helper_exit_status=status,
+                             helper_receipt_ok=receipt)
             self.target_failed(j, t, 'dispatch_rejected' if a['state'] in rejected else 'dispatch_failed',
                                'native_' + a['state'])
         else:

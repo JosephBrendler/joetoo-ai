@@ -170,6 +170,8 @@ public Q_SLOTS:
         m_used.append(token); if (m_used.size() > 128) m_used.removeFirst();
         m_token = token; m_uuid = w->internalId(); m_window = w; m_xid = w->windowId(); m_pid = pid;
         m_class = appClass; m_gone = false; m_state = "dispatching";
+        // Diagnostics belong to this specific accepted close token, never a prior attempt.
+        m_helperExitKnown = false; m_helperExitCode = 0; m_helperExitStatus.clear(); m_helperReceiptOk = false;
         if (w->isWaylandClient() && !w->isX11Client()) {
             // Native Wayland only. X11 closeWindow() is deliberately unreachable.
             w->closeWindow();
@@ -222,7 +224,12 @@ public Q_SLOTS:
                 if (!process) return;
                 const auto receipt = process->readAllStandardOutput();
                 if (m_token == token && m_process == process) {
-                    if (exit == QProcess::NormalExit && code == 0 && receipt == "dispatched\n")
+                    // Keep only bounded result facts; never retain raw stdout, stderr or credentials.
+                    m_helperExitKnown = true;
+                    m_helperExitCode = code;
+                    m_helperExitStatus = exit == QProcess::NormalExit ? QStringLiteral("normal") : QStringLiteral("crash");
+                    m_helperReceiptOk = receipt == "dispatched\n";
+                    if (exit == QProcess::NormalExit && code == 0 && m_helperReceiptOk)
                         m_state = m_gone ? "closed" : "dispatching";
                     else if (m_state == "fencing" || m_state == "dispatching") m_state = "dispatch_failed";
                     closeChannel(); m_process = nullptr; m_deadline = 0;
@@ -255,8 +262,15 @@ private:
         auto *live = effects->findWindow(m_uuid);
         const bool gone = m_gone && (!live || live->isDeleted() || !live->isManaged());
         const QString state = m_state == "closed" && !gone ? QStringLiteral("dispatching") : m_state;
-        return json({{"state", state}, {"token", m_token}, {"uuid", m_uuid.toString(QUuid::WithoutBraces)},
-            {"helper_reaped", !m_process}, {"gone", gone}});
+        QJsonObject result{{"state", state}, {"token", m_token}, {"uuid", m_uuid.toString(QUuid::WithoutBraces)},
+            {"helper_reaped", !m_process}, {"gone", gone}};
+        // Optional diagnostics appear only after a known-reaped X11 dispatch failure.
+        if (state == "dispatch_failed" && m_helperExitKnown && !m_process) {
+            result.insert("helper_exit_code", m_helperExitCode);
+            result.insert("helper_exit_status", m_helperExitStatus);
+            result.insert("helper_receipt_ok", m_helperReceiptOk);
+        }
+        return json(result);
     }
     void closeChannel()
     {
@@ -299,6 +313,9 @@ private:
     unsigned int m_atomSequence = 0;
     qint64 m_atomDeadline = 0;
     int m_pid = 0;
+    int m_helperExitCode = 0;
+    QString m_helperExitStatus;
+    bool m_helperExitKnown = false, m_helperReceiptOk = false;
     bool m_gone = false, m_registered = false, m_ownerSeen = false;
 };
 // Refuse the other compositor variant before constructing native window code.
