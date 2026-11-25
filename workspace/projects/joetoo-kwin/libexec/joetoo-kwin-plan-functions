@@ -1,15 +1,30 @@
 #!/bin/bash
 # Copyright 2025-2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Adapted from archive/step1-candidate/joetoo-kwin-plan-functions.
-# Sourced by the client. These arrays are launch intent, never runtime identity.
-# Later -o and -m l/r must consume this policy rather than copy its formulas.
-# Severity and color globals are supplied by the caller's script_header_joetoo.
-# shellcheck disable=SC2154
+#
+# joetoo-kwin-plan-functions - sourced Bash library for joetoo-kwin.
+#
+# Provides configuration defaults, validates launch recipes and policy settings,
+#   and translates launch intent into logical slots, window geometry, initial
+#   stacking order, and preferred-focus intent.
+# Supplies and validates timing and operational limits used by other components.
+#
+# Configured launches (-o, -L) and interactive l/r movement share the same
+#   geometry policy, avoiding duplicate layout calculations.
+#
+# This library does not query KWin, launch viewers, establish runtime window
+#   identity, or authorize launches. Those responsibilities belong elsewhere.
+# Protocol validators and the exposure predictor run as short-lived offline
+#   Python helpers. A valid plan does not prove runtime ownership or usability.
+#
+# Severity, color, and pseudo-boolean globals are supplied by the caller
+#   through script_header_joetoo.
+#
 
-# Defaults also feed sourced launch-functions and typed configuration reporting.
-# shellcheck disable=SC2034
-plan_defaults() {
+plan_defaults() # Reset built-in launch, geometry and operation-policy defaults
+{
+    # Assign unconditionally: callers apply defaults before configuration layers.
+    # Recipe arrays must also reset so an earlier plan cannot leak into a run.
     # Work-area discovery is unresolved: dimensions must be supplied explicitly.
     # Close is independent of launch geometry and remote authentication.
     managed_close_timeout_ms=15000
@@ -22,8 +37,11 @@ plan_defaults() {
     snapshot_validation_timeout_ms=30000
     screen_width=""
     screen_height=""
-    desktop_limit=20
+    # max number of virtual desktops (kwin-6 limit is 25)
+    desktop_limit=24
+    # max number of paneled windows per desktop
     dt_win_limit=4
+    # number of pixels to offset-show when a window is under another
     min_window_exposure_px=32
     initial_focus_timeout_ms=500
     initial_focus_poll_interval_ms=25
@@ -46,44 +64,100 @@ plan_defaults() {
     rdp_backend_log_byte_limit=65536
     rdp_x11_renderer=auto
     rdp_x11_identity_settle_ms=500
-    # Offline configured RDP intent; runtime dispatch belongs to Stage 2.
+    # Remote framebuffer/client scaling are separate from KWin outer frames.
+    # These are configured RDP policy defaults, not child process arguments.
     rdp_remote_width=1024
     rdp_remote_height=768
     RDP_SMART_SIZING=$TRUE
     rdp_initial_client_width=800
     rdp_initial_client_height=600
     rdp_windowing_backend=auto
+    # nla = nla + tls (see configuration guide)
     rdp_security_protocol=nla
     rdp_certificate_policy=strict
     sftp_advisory_enabled=$TRUE
     sftp_advisory_timeout_ms=2000
     sftp_advisory_ssh_port=22
-    terminal_width_percent=87
+    #-----[ Size and spacing factors ]--------------------------------------------
+    # Total horizontal screen width allocated to the terminal panel region.
+#    terminal_width_percent=87
+    terminal_width_percent=92
+
+    # Total vertical screen height allocated to the terminal panel region.
+    # (leave room for under/over-layer exposure)
+#    terminal_height_percent=85
+    terminal_height_percent=95
+
+    # **Horizontal** gap between adjacent terminal panels, as % of screen width.
     terminal_gap_percent=2
-    terminal_height_percent=85
+
+    # **Vertical** gap between rows of terminal panels, as % of screen height.
+#    terminal_row_gap_percent=3
+    terminal_row_gap_percent=2
+
+    # Distance from the screen's left edge to the terminal region's left edge.
     terminal_left_percent=1
-    terminal_top_percent=5
-    terminal_row_gap_percent=3
-    graphical_left_percent=5
+
+    # Distance from the screen's top edge to the terminal region's top edge.
+#    terminal_top_percent=5
+    terminal_top_percent=2
+
+    # Distance from the screen's left edge to the graphical window region.
+#    graphical_left_percent=5
+    graphical_left_percent=3
+
+    # Distance from the screen's top edge to the graphical window region.
     graphical_top_percent=3
-    graphical_width_percent=94
-    graphical_height_percent=90
+
+    # Width of the graphical window region, as % of total screen width.
+#    graphical_width_percent=94
+    graphical_width_percent=97
+
+    # Height of the graphical window region, as % of total screen height.
+#    graphical_height_percent=90
+    graphical_height_percent=97
+
+    # NOTE: terminal_gap_percent and terminal_row_gap_percent control spacing
+    #   between panels, while terminal_left_percent and terminal_top_percent
+    #   position the entire terminal region relative to the screen edges.
+    # The graphical settings describe a separate region used for non-panel
+    #   windows, not gaps between windows.
+    graphical_height_percent=97
     declare -ga desktop_session_list=()
     declare -ga desktop_session_frames=() # Optional original per-recipe frame policy, never observed geometry.
 }
+# @usage plan_defaults
+# @ret Final declare status, normally 0; requires writable configuration
+# @append globals.
+# @vars Sets layout percentages, dimensions, limits, timing and remote
+# @append policies.
+# @vars Resets global desktop_session_list and desktop_session_frames arrays.
+# @req Bash and the header's TRUE/FALSE pseudo-boolean convention.
+# @rule Call before sourcing user layers, not after applying overrides.
+# @note Screen dimensions remain empty until explicitly configured.
+# @note This assigns policy only; it does not create files or start any client.
 
-plan_error() {
+plan_error() # Report a planner diagnostic with the standard validation status
+{
     j_msg "-${err}" -p "${PN}: $1"
     return 2
 }
+# @usage plan_error MESSAGE
+# @args $1: caller-authored diagnostic; sensitive recipe input must be
+# @append redacted.
+# @ret Always 2, regardless of the reporting function's return status.
+# @deps j_msg
+# @vars Reads PN and err from the caller/header.
 
 # Geometry is also used by interactive moves, without a session recipe list.
-validate_layout_geometry() {
+validate_layout_geometry() # Check bounded display dimensions and percentage-region policy
+{
     local _vp_name _vp_value
     for _vp_name in screen_width screen_height desktop_limit terminal_width_percent \
         terminal_gap_percent terminal_height_percent terminal_left_percent terminal_top_percent \
         terminal_row_gap_percent graphical_left_percent graphical_top_percent \
         graphical_width_percent graphical_height_percent; do
+        # Indirect lookup reads the setting named by _vp_name; unset is empty.
         _vp_value=${!_vp_name-}
         # Bound length BEFORE arithmetic, avoiding overflow and Bash expressions.
         if [[ ! $_vp_value =~ ^(0|[1-9][0-9]{0,4})$ ]]; then
@@ -116,10 +190,22 @@ validate_layout_geometry() {
     fi
     return 0
 }
+# @usage validate_layout_geometry
+# @ret 0 if numeric bounds and region sums are valid; 2 otherwise.
+# @deps plan_error
+# @vars Reads screen_width/height, desktop_limit and terminal/graphical
+# @append settings.
+# @req Populate globals from defaults and effective trusted configuration
+# @append first.
+# @rule Validate canonical decimal strings before Bash arithmetic evaluation.
+# @note Does not require recipes, check gutters for each layout, or query KWin.
+# @note terminal_geometry/calculate_plan check actual rectangle usability
+# @append later.
 
 # Destructive operations have their own finite mechanical/confirmation budgets.
 # Keep these bounds consistent with the authenticated broker's settings().
-validate_close_settings() {
+validate_close_settings() # Validate finite close-operation timing without authorizing closure
+{
     local _cl_name _cl_min _cl_max _cl_value
     for _cl_name in managed_close_timeout_ms managed_close_total_timeout_ms managed_close_prepare_timeout_ms \
         managed_close_x11_grab_ms managed_close_poll_ms managed_close_dbus_timeout_ms; do
@@ -139,14 +225,26 @@ validate_close_settings() {
     (( managed_close_total_timeout_ms >= managed_close_timeout_ms )) || {
         plan_error 'managed close total timeout must cover per-window timeout'; return 2; }
 }
+# @usage validate_close_settings
+# @ret 0 on accepted bounds and total/per-window relation; 2 otherwise.
+# @deps plan_error
+# @vars Reads the six managed_close_* timing settings, in milliseconds.
+# @rule Total close timeout must cover the per-window timeout.
+# @note These mirror Python close settings; broker authentication is separate.
 
-validate_snapshot_history() {
+validate_snapshot_history() # Validate the requested retained snapshot count
+{
     if [[ ! $snapshot_history_depth =~ ^[1-9][0-9]{0,3}$ ]] || (( snapshot_history_depth > 1000 )); then
         plan_error 'snapshot_history_depth must be 1..1000'; return 2
     fi
 }
+# @usage validate_snapshot_history
+# @ret 0 for a canonical decimal count in 1..1000; 2 otherwise.
+# @deps plan_error
+# @vars Reads snapshot_history_depth; does not publish or prune history.
 
-validate_plan() {
+validate_plan() # Validate recipes and rebuild global offline planning inputs
+{
     validate_snapshot_history || return $?
     local _vp_name _vp_value _vp_record _vp_delimiters _vp_declaration
     local _vp_desktop _vp_program _vp_mode _vp_target _vp_layer _vp_explicit _vp_total _vp_sftp_dir _vp_uri _vp_rdp_target
@@ -154,7 +252,10 @@ validate_plan() {
         (( snapshot_validation_timeout_ms < 100 || snapshot_validation_timeout_ms > 120000 )); then
         plan_error 'snapshot_validation_timeout_ms must be 100..120000 ms'; return 2
     fi
-    # Reset all derived state so rebuilding a plan cannot accumulate old entries.
+    # Rebuild derived state after the initial snapshot-setting checks. Only a
+    # successful return makes these arrays safe to consume; later validation
+    # errors can leave a partially filled plan. -g keeps arrays visible even
+    # when this helper is called inside check_plan/open_plan.
     declare -ga planned_desktop=() planned_slot=() planned_program=() planned_mode=() planned_target=()
     declare -ga planned_x=() planned_y=() planned_width=() planned_height=() planned_layer=()
     declare -ga planned_explicit=() desktop_groups=()
@@ -177,7 +278,8 @@ validate_plan() {
     if [[ ! $sftp_capability_timeout_ms =~ ^[1-9][0-9]{0,4}$ ]] || (( sftp_capability_timeout_ms > 10000 )); then
         plan_error 'sftp_capability_timeout_ms must be 1..10000 ms'; return 2
     fi
-    # These new observation bounds fit inside the existing ten-second lease.
+    # Initial-layout focus observation is bounded separately from remote
+    # viewer identification and must fit the broker initial-layout lease.
     if [[ ! $initial_focus_timeout_ms =~ ^[1-9][0-9]{0,3}$ ||
           ! $initial_focus_poll_interval_ms =~ ^[1-9][0-9]{0,2}$ ]] ||
         (( initial_focus_timeout_ms > 2000 || initial_focus_poll_interval_ms > 250 ||
@@ -192,11 +294,15 @@ validate_plan() {
         (( dt_win_limit > 256 || min_window_exposure_px > 32768 )); then
         plan_error 'invalid dt_win_limit (1..256) or min_window_exposure_px (1..32768)'; return 2
     fi
+    # Declaration text distinguishes an indexed array from a scalar or map;
+    # recipe values themselves are never eval-ed as code by this parser.
     _vp_declaration=$(declare -p desktop_session_list 2>/dev/null) || return 2
     if [[ $_vp_declaration != 'declare -a '* || ${#desktop_session_list[@]} == 0 ]]; then
         plan_error 'desktop_session_list must be a nonempty indexed Bash array'; return 2
     fi
     for _vp_record in "${desktop_session_list[@]}"; do
+        # Remove every non-pipe character, then count separators. read -r
+        # below preserves literal backslashes and explicit empty fields.
         _vp_delimiters=${_vp_record//[^|]/}
         if (( ${#_vp_delimiters} != 3 && ${#_vp_delimiters} != 4 )) || [[ $_vp_record == *[$'\n\r\t\e']* ]]; then
             # A malformed target may contain credentials. Never echo the record.
@@ -218,6 +324,9 @@ validate_plan() {
             sftp) [[ $_vp_program == dolphin ]] || { plan_error 'sftp mode requires Dolphin'; return 2; } ;;
             *) plan_error 'unsupported mode (MODE redacted); expected local, ssh, swr, via-ssh, direct, sftp or rdp for the supported program'; return 2 ;;
         esac
+        # Settings/bounds are shared JSON; endpoints remain per-recipe JSON.
+        # The checked program/mode guards above are structural only: the
+        # executable adapter matrix is enforced later by launch_preflight.
         _vp_rdp_target=""
         if [[ $_vp_mode == rdp ]]; then
             _vp_sftp_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 2
@@ -225,6 +334,8 @@ validate_plan() {
                 [[ ! ${_op_single:-} ]] || plan_error '-L: invalid TARGET (redacted); expected rdp://USER@HOST[:PORT], no password or switches'
                 return 2
             }
+            # Validate one effective settings set for all RDP entries; this
+            # performs no renderer detection, RDP connection or broker call.
             if [[ -z $rdp_settings ]]; then
                 rdp_settings=$(python3 "$_vp_sftp_dir/joetoo_kwin_rdp_target.py" --settings \
                     "$rdp_remote_width" "$rdp_remote_height" "$RDP_SMART_SIZING" \
@@ -264,6 +375,8 @@ validate_plan() {
         _vp_explicit=0
         if [[ -n $_vp_layer ]]; then _vp_explicit=1; else _vp_layer=panel; fi
         case $_vp_layer in panel|under|over) ;; *) plan_error 'invalid layer'; return 2 ;; esac
+        # First occurrence fixes group order. The historical terminal_counts
+        # name counts all panel windows, irrespective of executable.
         [[ -v total_counts[$_vp_desktop] ]] || desktop_groups+=("$_vp_desktop")
         total_counts[$_vp_desktop]=$(( ${total_counts[$_vp_desktop]:-0} + 1 ))
         implicit_counts[$_vp_desktop]=$(( ${implicit_counts[$_vp_desktop]:-0} + 1 - _vp_explicit ))
@@ -278,6 +391,8 @@ validate_plan() {
         planned_sftp_uri+=("$_vp_uri")
         planned_rdp_target+=("$_vp_rdp_target")
     done
+    # Implicit records consume the ordinary budget. Additional explicitly
+    # layered records may warn, but never evade the four-panel allocator.
     for _vp_desktop in "${desktop_groups[@]}"; do
         _vp_total=${total_counts[$_vp_desktop]}
         if (( _vp_total > 256 )); then
@@ -295,10 +410,36 @@ validate_plan() {
     done
     return 0
 }
+# @usage validate_plan
+# @ret 0 on accepted settings/records; 2 on invalid input or parser failure.
+# @deps validate_snapshot_history, validate_layout_geometry,
+# @append validate_close_settings, plan_error, j_msg
+# @deps python3; sibling joetoo_kwin_rdp_target.py,
+# @append joetoo_kwin_sftp_target.py and joetoo_kwin_vnc_target.py
+# @vars Reads effective policy and desktop_session_list; sets planned_* arrays,
+# @append desktop_groups, per-desktop count/counter maps and preferred/stack
+# @append maps.
+# @vars Sets rdp_bounds/rdp_settings/vnc_bounds and normalized target JSON
+# @append fields.
+# @req Call plan_defaults, then load trusted configuration; helpers are
+# @append siblings.
+# @rule Four fields or blank fifth field imply panel; explicit layers are
+# @append retained.
+# @rule Physical panel count is at most four, independent of logical slot
+# @append count.
+# @note Groups keep first-seen desktop order; geometry/slots are calculated
+# @append later.
+# @note Protocol settings are validated only for matching recipes.
+# @note Only consume derived state after success; failures may leave partial
+# @append data.
+# @warn Offline grammar is broader than the executable program/mode matrix.
+# @append Runtime launch_preflight still checks support, prerequisites and
+# @append broker.
 
-# Shared terminal policy: count/slot in, geometry_x/y/width/height out.
-# A two-terminal request here will also serve the later interactive l/r workflow.
-terminal_geometry() {
+# Shared panel policy: count/index in, geometry_x/y/width/height out.
+# Interactive l/r calls this same function for panel indices 1 and 2.
+terminal_geometry() # Calculate one panel rectangle within the shared terminal budget
+{
     local _tg_count=$1 _tg_slot=$2 _tg_columns _tg_rows _tg_col _tg_row
     local _tg_region _tg_gap _tg_height _tg_row_gap
     if [[ ! $_tg_count =~ ^[1-4]$ || ! $_tg_slot =~ ^[1-4]$ ]] || (( _tg_slot > _tg_count )); then
@@ -306,6 +447,9 @@ terminal_geometry() {
     fi
     _tg_columns=$_tg_count; _tg_rows=1
     if (( _tg_count == 4 )); then _tg_columns=2; _tg_rows=2; fi
+    # Convert a one-based panel index to zero-based column/row coordinates.
+    # Bash integer division floors the nonnegative percentage calculations;
+    # the width budget includes gutters rather than applying per window.
     _tg_col=$(( (_tg_slot - 1) % _tg_columns ))
     _tg_row=$(( (_tg_slot - 1) / _tg_columns ))
     _tg_region=$(( screen_width * terminal_width_percent / 100 ))
@@ -321,13 +465,26 @@ terminal_geometry() {
     fi
     return 0
 }
+# @usage terminal_geometry COUNT PANEL_INDEX
+# @args COUNT: 1..4 panels; PANEL_INDEX: 1..COUNT, not a managed logical slot.
+# @ret 0 on a usable rectangle; 2 on invalid count/index or exhausted area.
+# @deps plan_error; Bash integer arithmetic
+# @vars Reads screen and terminal_* policy; writes geometry_x/y/width/height.
+# @req validate_layout_geometry has accepted the effective configuration.
+# @rule One to three panels use one row; four use a two-by-two arrangement.
+# @note Gutters are percentages of the full display, inside the total budget.
+# @note Also used with count 2 by CLI l/r movement; no second layout formula.
+# @warn Outputs may have changed on failure; use them only after return 0.
 
-calculate_plan() {
+calculate_plan() # Assign logical slots, frame rectangles and initial stack/focus intent
+{
     local _cp_i _cp_desktop _cp_slot _cp_terminal_slot _cp_key _cp_offset _cp_warning _cp_dir
     local -A _cp_cascade=()
     local _cp_group _cp_layer _cp_preferred
     for ((_cp_i=0; _cp_i<${#planned_desktop[@]}; _cp_i++)); do
         _cp_desktop=${planned_desktop[$_cp_i]}
+        # Logical reservation order is separate from the panel index below.
+        # -L can seed next_slot to use an unreserved broker inventory slot.
         _cp_slot=$(( ${next_slot[$_cp_desktop]:-0} + 1 ))
         next_slot[$_cp_desktop]=$_cp_slot
         if [[ ${planned_layer[$_cp_i]} == panel ]]; then
@@ -335,8 +492,8 @@ calculate_plan() {
             terminal_slots[$_cp_desktop]=$_cp_terminal_slot
             terminal_geometry "${terminal_counts[$_cp_desktop]}" "$_cp_terminal_slot" || return $?
         else
-            # Provisional graphical underlay geometry. This does not control
-            # KWin stacking or focus; these require later native validation.
+            # Shared graphical rectangles serve both under and over recipes.
+            # Broker/resident stacking and focus are separate runtime work.
             geometry_x=$(( screen_width * graphical_left_percent / 100 ))
             geometry_y=$(( screen_height * graphical_top_percent / 100 ))
             geometry_width=$(( screen_width * graphical_width_percent / 100 ))
@@ -347,6 +504,8 @@ calculate_plan() {
             _cp_offset=$(( ${_cp_cascade[$_cp_key]:-0} * min_window_exposure_px ))
             _cp_cascade[$_cp_key]=$(( ${_cp_cascade[$_cp_key]:-0} + 1 ))
             geometry_x=$(( geometry_x + _cp_offset )); geometry_y=$(( geometry_y + _cp_offset ))
+            # Clamp position at the screen edge without shrinking the frame.
+            # Later entries can therefore coincide; exposure is advisory.
             (( geometry_x + geometry_width <= screen_width )) || geometry_x=$(( screen_width - geometry_width ))
             (( geometry_y + geometry_height <= screen_height )) || geometry_y=$(( screen_height - geometry_height ))
         fi
@@ -354,8 +513,9 @@ calculate_plan() {
             geometry_x + geometry_width > screen_width || geometry_y + geometry_height > screen_height )); then
             plan_error 'calculated geometry cannot fit configured display'; return 2
         fi
-        # Optional explicit policy overrides use the same validation and
-        # placement path; ordinary recipes retain the shared calculations.
+        # Validate the derived frame before applying any explicit override.
+        # Overrides are aligned original recipe policy, never a capture of
+        # an operator-adjusted runtime frame; no second layout engine exists.
         if (( ${#desktop_session_frames[@]} > 0 )); then
             if (( ${#desktop_session_frames[@]} != ${#planned_desktop[@]} )); then
                 plan_error 'desktop_session_frames must match recipe count'; return 2
@@ -367,6 +527,8 @@ calculate_plan() {
                 [[ $_cp_frame =~ ^[0-9]{1,5}\|[0-9]{1,5}\|[0-9]{1,5}\|[0-9]{1,5}$ ]] || {
                     plan_error 'invalid per-recipe frame; expected X|Y|WIDTH|HEIGHT'; return 2; }
                 IFS='|' read -r _cp_fx _cp_fy _cp_fw _cp_fh <<< "$_cp_frame"
+                # The regex bounds arithmetic input; 10# accepts leading
+                # zeroes as decimal rather than Bash octal notation.
                 geometry_x=$((10#$_cp_fx)); geometry_y=$((10#$_cp_fy))
                 geometry_width=$((10#$_cp_fw)); geometry_height=$((10#$_cp_fh))
                 if (( geometry_width < 1 || geometry_height < 1 || geometry_x + geometry_width > screen_width ||
@@ -380,6 +542,8 @@ calculate_plan() {
         planned_width+=("$geometry_width"); planned_height+=("$geometry_height")
         j_msg "-${debug}" -p "Planned desktop [${_cp_desktop}] slot [${_cp_slot}]: ${geometry_x},${geometry_y} ${geometry_width}x${geometry_height}"
     done
+    # Stable layer ordering: within each layer walk original recipe order.
+    # Updating only for non-under leaves last over preferred, else last panel.
     for _cp_group in "${desktop_groups[@]}"; do
         planned_stack_slots[$_cp_group]=""; _cp_preferred=""
         for _cp_layer in under panel over; do
@@ -395,6 +559,9 @@ calculate_plan() {
         j_msg "-${info}" -m "Desktop [$_cp_group]: implicit [${implicit_counts[$_cp_group]}], explicit [$(( total_counts[$_cp_group] - implicit_counts[$_cp_group] ))]; initial stack slots bottom-to-top [${planned_stack_slots[$_cp_group]}], preferred focus slot [${_cp_preferred:-none}] (intent only)"
     done
     _cp_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+    # Pipe planned rectangles to the existing pure exposure predictor. Its
+    # stdout is warning text, not shell commands or proof of clickability.
+    # The pipeline normally reports Python's status; caller shell options apply.
     _cp_warning=$(
         for ((_cp_i=0; _cp_i<${#planned_desktop[@]}; _cp_i++)); do
             printf '%s %s %s %s %s %s %s\n' "${planned_desktop[$_cp_i]}" "${planned_layer[$_cp_i]}" "${planned_slot[$_cp_i]}" \
@@ -406,9 +573,31 @@ calculate_plan() {
     done <<< "$_cp_warning"
     return 0
 }
+# @usage calculate_plan
+# @ret 0 even with exposure warnings; 2 for geometry/frame errors;
+# @append 1 for helper-path or exposure-process failure.
+# @deps terminal_geometry, plan_error, j_msg, python3 joetoo-kwin-exposure.py
+# @vars Consumes validated planned_* inputs and desktop_groups/count maps.
+# @vars Appends planned_slot/x/y/width/height; advances
+# @append next_slot/terminal_slots.
+# @vars Updates geometry_*, planned_stack_slots and preferred_slot.
+# @req Successful validate_plan; optional caller seed in next_slot for -L.
+# @rule Logical slots and panel positions are independent; never renumber
+# @append peers.
+# @rule Stack intent is under, panel, over; retain recipe order within each
+# @append layer.
+# @note Preferred slot is last over, else last panel; under-only has no
+# @append preference.
+# @note Frame overrides are original policy, not observed saved-window
+# @append geometry.
+# @warn Not idempotent: validate/reset derived state before calculating again.
+# @warn No KWin placement or actual visibility/focus proof is performed here.
 
-print_plan() {
+print_plan() # Render the current plan as a severity-aware aligned terminal table
+{
     local _pp_i _pp_col _pp_length _pp_padding _pp_line _pp_color _pp_layer
+    # Flatten the header and each recipe to ten cells. Modulo ten selects
+    # the column; a first pass measures widths before any rows are printed.
     local -a _pp_cells=(Desktop Slot Program Mode Target Layer X Y Width Height)
     local -a _pp_widths=()
     if [[ ${1:-dry-run} == launch ]]; then
@@ -456,3 +645,15 @@ print_plan() {
     done
     return 0
 }
+# @usage print_plan [launch|dry-run]
+# @args launch changes the heading; omitted/other labels use the dry-run
+# @append heading.
+# @ret 0 after rendering; 1 if a get_msg_len call fails.
+# @deps j_msg, get_msg_len, printf
+# @vars Reads planned_* arrays, desktop_groups, screen/terminal policy and
+# @append the header's notice, BCon, BGon and Boff formatting globals.
+# @req Successfully validated and calculated parallel plan arrays.
+# @rule Printing is not confirmation, launch, registration or stack
+# @append verification.
+# @note Widths are display columns, not Bash string lengths; padding is plain.
+# @warn Planned target fields are displayed; this is no general secret filter.

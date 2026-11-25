@@ -2,13 +2,25 @@
 # Copyright 2025-2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# joetoo-kwin - early KWin bridge client (Step 1.2b manual-resident stage)
-# Active-window movement and one-window launch placement only.
+# joetoo-kwin - ordinary-user CLI for the session's KWinBridge broker.
+# Bash owns option/configuration policy, confirmation and human reporting.
+# The broker/resident own managed identity, placement and close verification;
+# remote adapters and persistence helpers own their distinct resource/data work.
+# Local window success is never proof of SSH/RDP/VNC authentication or usability.
+#
+# Bash is required: arrays, dynamic local scope, process substitution, coproc,
+# here-strings and allocated FDs below are not portable POSIX-shell syntax.
+# Configuration is trusted executable Bash. The CLI deliberately avoids the
+# header's app_configure workflow and its unrelated account-state side effects.
+# No functions run on mere definition, but sourcing this executable runs its
+# footer: inspect/extract definitions for tests rather than sourcing it live.
 
 # shellcheck source=./script_header_joetoo.shellcheck_filtered_stub
 source /usr/sbin/script_header_joetoo
 
 PN=${0##*/}
+# BUILD currently comes from joetoolkit, with a checkout fallback. A package-
+# specific BUILD source is separate release work, not an implicit version here.
 # BUILD is consumed indirectly by show_config through varlist.
 # shellcheck disable=SC2034
 if [ -f /etc/joetoolkit/BUILD ]; then . /etc/joetoolkit/BUILD; else BUILD="0.0.1"; fi
@@ -16,20 +28,17 @@ if [ -f /etc/joetoolkit/BUILD ]; then . /etc/joetoolkit/BUILD; else BUILD="0.0.1
 
 #-----[ variables ]-------------------------------------------------------------------------------------
 
-# kwin bus/svc, obj/path, inteface identifiers (together = address) for the bridge --
-# servicename (represents app connection to a bus) is analagous to network hostname. form: dot-separated
+# Session-bus address: well-known service, object path, method interface.
+# Service/interface names intentionally match; the object path is distinct.
+# These identify the broker, not a remote server or a managed-window owner.
 bus=org.joetoo.KWinBridge
-# object path (identify and group objects many:1 in rel to services) is analagous to URL. form: slash-separated
 path=/org/joetoo/KWinBridge
-# interface (set of callable methods) is analagous to plugin identifier. form: dot-separated
 iface=org.joetoo.KWinBridge
-# the org.joetoo.KWinBridge methods are implemented in the Python broker (libexec/joetoo-kwind)
-# the KWin resident JavaScript (joetoo-kwin-resident.js) callsthose methods to retrieve requests
-# and report placement results
 
 #-----[ functions ]-------------------------------------------------------------------------------------
 
-usage() {
+usage() # Print this CLI's recipe, operation and option synopsis
+{
     j_msg "-${notice}" -p 'Configured recipes include dolphin|sftp|sftp://[USER@]HOST[:PORT][/ABSOLUTE/PATH][|LAYER]; inspect authentication/listing in Dolphin'
     j_msg "-${notice}" -p 'SDL RDP recipe: sdl-freerdp|rdp|rdp://USER@HOST[:PORT][|LAYER]; local placement is independent of remote login'
     j_msg "-${notice}" -p 'TigerVNC recipe: vncviewer|ssh|ssh://[USER@]HOST[:SSH_PORT]/display/N (or /port/P); both forwarded endpoints use loopback'
@@ -53,10 +62,16 @@ usage() {
     j_msg "-${notice}" -p "       ${PN} [-f CONFIG] -S (save timestamped managed recipes/policy; not manual geometry)"
     j_msg "-${notice}" -p "       ${PN} -r (validate, confirm and launch new instances from last-good recipes)"
 }
+# @usage usage
+# @ret Returns the final j_msg status; output follows header verbosity.
+# @deps j_msg
+# @vars Reads PN and notice; overrides the header's usage function.
+# @note Does not load configuration, launch applications or exit itself.
 
 # Retain the positional move/test grammar. getopts handles common options and
-# clusters, stopping at -m so negative coordinates remain positional values.
-parse_cmdline() {
+# clusters, stopping at -m/-L so mission operands are not parsed as options.
+parse_cmdline() # Separate common options from the selected mission and operands
+{
     local _pc_opt
     OPTIND=1
     cli_operation=""
@@ -97,10 +112,23 @@ parse_cmdline() {
     fi
     return 0
 }
+# @usage parse_cmdline [OPTIONS] OPERATION [OPERANDS...]
+# @opts -v/-q accumulate; -f FILE selects a plan; exactly one operation.
+# @args All CLI arguments, preserving shell argument boundaries.
+# @ret 0 on accepted structure; 2 with usage on argument errors.
+# @deps getopts, bad_args, validate_single_operands
+# @vars Sets OPTIND/OPTARG, cli_operation, cli_args, cli_verbosity, config,
+# @append CONFIG_SELECTED; uses header TRUE/FALSE pseudo-booleans.
+# @rule Common options must precede -m/-L operands; getopts stops there.
+# @note Legacy move/test commands and --help are recognized in the first
+# @append positional argument.
+# @note Recipe semantics, executability and broker eligibility are checked
+# @append later.
 
 # Structural checks protect the shared pipe-recipe representation
 # Semantic recipe/target validation is in validate_plan and launch_preflight
-validate_single_operands() {
+validate_single_operands() # Check -L field boundaries and its supported layer vocabulary
+{
     local _so_name _so_value _so_i=0
     local -a _so_names=(DESKTOP PROGRAM MODE TARGET LAYER)
     # DESKTOP PROGRAM MODE TARGET are not optional
@@ -113,6 +141,8 @@ validate_single_operands() {
             bad_args "-L: $_so_name is redacted; expected one recipe field without pipe/control characters"; return 2
         fi
     done
+    # The '-' default applies only to an absent fifth argument. Unlike ':-',
+    # it does not turn an explicitly empty layer into over; empty is rejected.
     # LAYER is optional (default to over)
     case ${5-over} in
         over|under) ;;
@@ -120,8 +150,15 @@ validate_single_operands() {
         *) bad_args '-L: invalid LAYER (redacted); expected over, under or omission'; return 2 ;;
     esac
 }
+# @usage validate_single_operands DESKTOP PROGRAM MODE TARGET [LAYER]
+# @args Four or five separate fields; omitted layer means over.
+# @ret 0 for accepted structure/layer; 2 with a redacted diagnostic otherwise.
+# @deps bad_args
+# @rule Reject pipes and ASCII control characters before joining fields.
+# @note Does not validate desktop range, target semantics or slot ownership.
 
-config_path_present() {
+config_path_present() # Distinguish an absent config path from an inaccessible location
+{
     # Distinguish absence from an unsearchable parent. An inaccessible optional
     # layer must not disappear merely because test -e cannot stat its pathname.
     local _cpp_path=$1 _cpp_parent=${1%/*} _cpp_next
@@ -138,8 +175,17 @@ config_path_present() {
     fi
     return 1
 }
+# @usage config_path_present PATH
+# @args $1: configuration pathname; relative paths use the invocation
+# @append directory.
+# @ret 0 if path or symlink exists, including a dangling symlink.
+# @ret 1 if absent beneath an accessible directory; 2 if location inaccessible.
+# @deps j_msg; Bash pathname tests and parameter expansion
+# @vars Reads PN and err.
+# @note Presence is not readability or syntax validation; callers check those.
 
-select_config() {
+select_config() # Select one per-run plan without hiding inaccessible configuration
+{
     [[ ! $CONFIG_SELECTED ]] || return 0
     local _sc_presence _sc_home=${XDG_CONFIG_HOME:-$HOME/.config} _sc_user _sc_system=/etc/joetoo-kwin/joetoo-kwin.conf
     [[ $_sc_home == /* ]] || _sc_home=$HOME/.config
@@ -152,13 +198,24 @@ select_config() {
     j_msg "-${err}" -p "No configuration: create [$_sc_user] or select -f CONFIG; system fallback [$_sc_system] absent"
     return 2
 }
+# @usage select_config [optional]
+# @args optional: allow no selected plan when both default candidates are
+# @append absent.
+# @ret 0 on explicit/located selection or permitted absence; 2 on lookup error.
+# @deps config_path_present, j_msg
+# @vars Reads CONFIG_SELECTED, XDG_CONFIG_HOME, HOME; sets config.
+# @rule Explicit -f wins; otherwise XDG user plan precedes /etc fallback.
+# @note Relative XDG_CONFIG_HOME is ignored; no profile/link is changed.
 
-prepare_config_sources() {
+prepare_config_sources() # Collect and precheck configuration layers without sourcing them
+{
     # Resolve paths before sourcing trusted files. Source in the existing caller
     # scope, so Bash declarations retain their pre-layering behavior.
     local _cs_home=${XDG_CONFIG_HOME:-$HOME/.config} _cs_file _cs_presence
     [[ $_cs_home == /* ]] || _cs_home=$HOME/.config
     select_config "${1:-}" || return $?
+    # -g makes the array global even though this helper is called from other
+    # functions. Only path selection happens here; source runs in the caller.
     declare -ga config_sources=()
     for _cs_file in /etc/joetoo-kwin/defaults.conf "$_cs_home/joetoo-kwin/defaults.conf"; do
         if config_path_present "$_cs_file"; then config_sources+=("$_cs_file")
@@ -181,8 +238,18 @@ prepare_config_sources() {
         fi
     done
 }
+# @usage prepare_config_sources [optional]
+# @args optional: allow no per-run plan, while retaining optional defaults.
+# @ret 0 after successful checks; propagates selection errors; 2 for bad files.
+# @deps select_config, config_path_present, bash -n, j_msg
+# @vars Selects config; reads CONFIG_SELECTED, XDG_CONFIG_HOME, HOME.
+# @vars Replaces global config_sources with ordered pathnames.
+# @rule Order is system defaults, user defaults, selected per-run plan.
+# @rule Present unreadable or invalid layers are errors, never silent fallback.
+# @note Callers source trusted Bash in their own scope; this is no sandbox.
 
-apply_cli_verbosity() {
+apply_cli_verbosity() # Replay ordered -v/-q overrides after effective configuration
+{
     local _acv_opt
     if [[ ! $verbosity =~ ^[0-7]$ ]]; then
         j_msg "-${err}" -p "${PN}: verbosity must be between 0 and 7"; return 2
@@ -196,9 +263,17 @@ apply_cli_verbosity() {
     unset -v _pc_adjust_verbosity _pc_operator
     return 0
 }
+# @usage apply_cli_verbosity
+# @ret 0 on completion; 2 for invalid verbosity; propagates helper failure.
+# @deps _pc_action_verbosity, j_msg
+# @vars Reads cli_verbosity; validates/mutates verbosity.
+# @vars Temporarily sets then unsets _pc_adjust_verbosity and _pc_operator.
+# @note The escaped macro is evaluated by the header, not by this assignment.
+# @note Header policy supplies clamping and the interactive verbosity floor.
 
 # Keep the supervised action's status distinct from the reporting bitmask.
-plan_stage() {
+plan_stage() # Announce an action and report its captured status independently
+{
     local _ps_level=$1 _ps_label=$2 _ps_action_rc
     shift 2
     # Validators may emit diagnostics. Use the output-producing AAR form so
@@ -208,9 +283,18 @@ plan_stage() {
     j_msg "-${_ps_level}" -pn "${_ps_label} result:"
     report_action "$_ps_action_rc" "$_ps_level"
 }
+# @usage plan_stage LEVEL LABEL COMMAND [ARGS...]
+# @args $1: header severity; $2: operator label; remaining arguments: command.
+# @ret report_action result; preserves action failure ahead of reporting
+# @append failure.
+# @deps j_msg, report_action; the supplied command/function
+# @vars Reads header messaging globals; command may mutate caller-visible
+# @append state.
+# @note Quoted "$@" executes directly in this shell, without eval or subshell.
 
 # Report the captured action status; reporting faults must not mask action failure.
-report_action() {
+report_action() # Keep the operation result separate from the presentation bitmask
+{
     local _ps_action_rc=$1 _ps_level=$2 _ps_report_rc
     if handle_result "$_ps_action_rc" completed failed "$_ps_level"; then
         _ps_report_rc=0
@@ -225,11 +309,19 @@ report_action() {
     (( _ps_report_rc == 0 )) || return 1
     return 0
 }
+# @usage report_action ACTION_RC LEVEL
+# @args $1: already captured operation status; $2: reporting severity.
+# @ret Original nonzero ACTION_RC; otherwise 1 for reporting failure, else 0.
+# @deps handle_result, decode_right_status, j_msg
+# @vars Reads PN, err and header reporting globals.
+# @note Bit 0 reports action failure; higher bits indicate reporting faults.
+# @rule Do not replace the original action failure with a reporting bitmask.
 
-check_plan() {
+check_plan() # Load effective policy, validate and render a dry-run or launch plan
+{
     local _cp_script_dir _cp_layer _cp_single_slot _cp_record
     _cp_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
-    # Candidate helper is colocated under libexec; no installed-file changes.
+    # Current lookup is source-tree-relative; packaged-path integration is separate.
     # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-plan-functions
     source "${_cp_script_dir}/libexec/joetoo-kwin-plan-functions" || return 1
     plan_defaults
@@ -241,6 +333,8 @@ check_plan() {
         source "$_cp_layer" || { j_msg "-${err}" -p "Configuration source failed [$_cp_layer]"; return 2; }
     done
     apply_cli_verbosity || return $?
+    # Bash dynamic scope exposes open_plan's local _op_single* context here.
+    # This avoids a second single-launch parser or geometry calculation.
     # -L retains all selected configuration settings, replacing recipe intent only.
     if [[ ${_op_single:-} ]]; then
         printf -v _cp_record '%s|%s|%s|%s|%s' "${_op_single_fields[@]:0:4}" "${_op_single_fields[4]:-over}"
@@ -254,6 +348,8 @@ check_plan() {
         next_slot[${planned_desktop[0]}]=$((_cp_single_slot - 1))
     fi
     plan_stage "$info" 'Calculating shared geometry' calculate_plan || return $?
+    # bool.* and rlv.* are show_config formatting selectors, not Bash variable
+    # names. In particular rlv.config uses the header's long-path rendering.
     # Explicit varlist avoids unrelated workflow/status-file initialization.
     local notice_varlist="PN BUILD rlv.config screen_width screen_height"
     local info_varlist="snapshot_history_depth verbosity desktop_limit dt_win_limit min_window_exposure_px"
@@ -271,7 +367,7 @@ check_plan() {
     show_config || die "failed to show_config for notice_varlist"
     # d_do returns success after evaluation; handle rendering failures inside it.
     varlist="$info_varlist"
-    # ShellCheck warns that stuff inside '...' doesnt expand - but for d_do that is the point
+    # Keep this literal until d_do evaluates it, using the current varlist.
     # shellcheck disable=SC2016
     d_do 'j_msg "-${info}" -p "=====[ Additional Information ]==============="
         show_config || die "failed to show_config for info_varlist"
@@ -279,22 +375,41 @@ check_plan() {
     # varlist is consumed by show_config through d_do/eval.
     # shellcheck disable=SC2034
     varlist="$debug_varlist"
-    # ShellCheck warns that stuff inside '...' doesnt expand - but for d_do that is the point
     # shellcheck disable=SC2016
     d_do 'j_msg "-${debug}" -p "=====[ Additional Debug Information ]==============="
         show_config || die "failed to show_config for debug_varlist"
     ' "$debug" || return $?
     print_plan "${1:-dry-run}"
-    # -c ends here. Confirmation and launch belong to the later -o tranche.
+    # -c stops at this plan; open_plan continues with confirmation and launch.
 }
+# @usage check_plan [launch]
+# @args launch: additionally run whole-plan launch_preflight before rendering.
+# @ret Propagates validation/planning failures; final status is print_plan's.
+# @deps plan-functions, prepare_config_sources, apply_cli_verbosity, plan_stage
+# @append launch_preflight in launch mode; show_config, d_do, die, print_plan
+# @vars Sets planner defaults/arrays and effective config globals via sourcing.
+# @vars Reads _op_single/_op_single_fields from open_plan's dynamic scope.
+# @req Source-tree-relative libexec helpers; trusted Bash configuration.
+# @rule -L replaces recipe intent only, retains effective
+# @append settings/reservations.
+# @note This function does not confirm or spawn applications; open_plan does.
+# @warn Trusted config can execute commands; dry-run is not a security sandbox.
 
-bad_args() {
+bad_args() # Display an argument diagnostic and local usage synopsis
+{
     j_msg "-${err}" -p "${PN}: $1"
     usage
     return 2
 }
+# @usage bad_args MESSAGE
+# @args $1: application-authored diagnostic, redacted where input is sensitive.
+# @ret 2, irrespective of message-rendering status.
+# @deps j_msg, usage
+# @vars Reads PN and err.
+# @rule Do not pass arbitrary secret-bearing targets as MESSAGE.
 
-validate_geometry() {
+validate_geometry() # Validate five legacy explicit move/launch geometry operands
+{
     local _vg_arg _vg_positive
     for _vg_arg in "$@"; do
         if ! isint "$_vg_arg"; then
@@ -319,12 +434,20 @@ validate_geometry() {
     done
     return 0
 }
+# @usage validate_geometry DESKTOP X Y WIDTH HEIGHT
+# @ret 0 if all are integers and desktop/width/height are positive; else 2.
+# @deps isint, j_msg
+# @vars Reads PN and err.
+# @req Caller supplies exactly five operands.
+# @note This legacy check does not enforce broker ranges or desktop capacity.
 
-wait_for_request() {
+wait_for_request() # Poll a placement request and report its terminal or missing result
+{
     local _wr_request=$1 _wr_label=$2 _wr_attempt _wr_status _wr_rc=1 _wr_level=$err
-    # wait up to 5 sec, in 100ms increments
+    # Nominal sleep budget, excluding IPC latency: 50 polls at 100 ms.
+    # The broker can terminate a request earlier; this is not its deadline.
     local _wr_limit="50" _wr_increment="0.1"
-    # extend wait to 15 sec if for launch
+    # Launch and optional-move use 150 polls with the same sleep interval.
     [[ $_wr_label == launch || $_wr_label == optional-move ]] && _wr_limit=150
     for ((_wr_attempt=0; _wr_attempt<_wr_limit; _wr_attempt++)); do
          # kwin bus/svc, obj/path, inteface identifiers.method (together = address)
@@ -343,9 +466,8 @@ wait_for_request() {
         _wr_status="${PN}: ${_wr_label} timed out (request [${_wr_request}])"
     fi
     if [[ $_wr_label == optional-move ]]; then
-        # Historical output convention, superseded by the verbosity refinement below:
-        # The full broker detail owns this result line; no preceding open announcement.
-        # Detail now follows the concise verification result at info/error severity.
+        # move_window already opened the verification announcement. Close that
+        # line once, then emit broker detail separately at info/error severity.
         local _wr_report_rc
         if report_action "$_wr_rc" "$notice"; then _wr_report_rc=0; else _wr_report_rc=$?; fi
         if (( _wr_rc == 0 )); then
@@ -369,10 +491,20 @@ wait_for_request() {
         return "$_wr_rc"
     fi
 }
+# @usage wait_for_request REQUEST_ID LABEL
+# @args $1: broker request ID; $2: move, optional-move or launch label.
+# @ret 0 on observed OK, 1 on other results; optional-move uses report_action.
+# @deps qdbus6 Status, sleep, report_action, j_msg
+# @vars Reads bus, path, iface, PN and header severities.
+# @note Nominal sleep budget is 5 s, or 15 s for launch/optional-move.
+# @append D-Bus round trips add time; the broker owns its actual deadline.
+# @note This poller does not cancel broker work or terminate application
+# @append children.
 
 # qdbus6 exposes error names as a first diagnostic line, not a structured
 # exception API. Match only exact known names; always retain the original text.
-report_move_submission_failure() {
+report_move_submission_failure() # Explain known move submission errors while retaining their detail
+{
     local _msf_detail=$1 _msf_name=${1%%$'\n'*}
     case $_msf_name in
         "Error: ${iface}.Busy")
@@ -386,8 +518,16 @@ report_move_submission_failure() {
     esac
     [[ -z $_msf_detail ]] || j_msg "-${err}" -p "$_msf_detail"
 }
+# @usage report_move_submission_failure DETAIL
+# @args $1: captured qdbus6 diagnostic; only its first line selects a category.
+# @ret Status of the final conditional/message; not a normalized failure code.
+# @deps j_msg
+# @vars Reads iface, path, bus and err.
+# @note Full original detail is displayed after any recognized fixed
+# @append diagnostic.
 
-move_active_window() {
+move_active_window() # Submit the five-field legacy move and invoke its resident shortcut
+{
     local _ma_request
     validate_geometry "$@" || return $?
      # kwin bus/svc, obj/path, inteface identifiers.method (together = address)
@@ -401,10 +541,18 @@ move_active_window() {
         joetoo_bridge_move >/dev/null || return 1
     wait_for_request "$_ma_request" move
 }
+# @usage move_active_window DESKTOP X Y WIDTH HEIGHT
+# @ret 2 on geometry validation error; 1 on IPC/status failure; 0 on
+# @append observed OK.
+# @deps validate_geometry, qdbus6 Submit/invokeShortcut, wait_for_request
+# @vars Reads bus, path and iface.
+# @note Resident chooses the active window when its shortcut executes.
+# @rule This is not managed-ID authority and does not assign a managed slot.
 
 # Normalize the six approved move forms before any D-Bus call. Omitted values
 # use zero placeholders only with independent preservation flags on SubmitMove.
-move_window() {
+move_window() # Normalize six movement forms and preserve omitted frame components
+{
     local _mw_desktop=0 _mw_x=0 _mw_y=0 _mw_width=0 _mw_height=0 _mw_side=""
     local _mw_PD=$FALSE _mw_PP=$FALSE _mw_PS=$FALSE _mw_value _mw_abs _mw_dir _mw_request
     case $# in
@@ -427,6 +575,8 @@ move_window() {
     done
     # Explicit decimal conversion preserves signed coordinates without octal parsing.
     for _mw_value in _mw_desktop _mw_x _mw_y _mw_width _mw_height; do
+        # Indirect expansion reads the named local; printf -v writes back to
+        # that local. 10# forces decimal, including values with leading zeroes.
         _mw_abs=${!_mw_value}
         if [[ $_mw_abs == -* ]]; then printf -v "$_mw_value" '%d' "$((-10#${_mw_abs#-}))"
         else printf -v "$_mw_value" '%d' "$((10#$_mw_abs))"; fi
@@ -436,7 +586,7 @@ move_window() {
     fi
     if [[ $_mw_side ]]; then
         _mw_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
-        # Candidate helper is colocated under libexec; no installed-file changes.
+        # Current lookup is source-tree-relative; packaged-path integration is separate.
         # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-plan-functions
         source "${_mw_dir}/libexec/joetoo-kwin-plan-functions" || return 1
         plan_defaults
@@ -464,6 +614,8 @@ move_window() {
         move_active_window "$_mw_desktop" "$_mw_x" "$_mw_y" "$_mw_width" "$_mw_height"
         return $?
     fi
+    # These strings serialize D-Bus booleans. They intentionally differ from
+    # Joetoo's TRUE=0/FALSE='' flags, whose truth is tested by string presence.
     local _mw_pd=false _mw_pp=false _mw_ps=false _mw_action_rc _mw_detail
     [[ ! $_mw_PD ]] || _mw_pd=true
     [[ ! $_mw_PP ]] || _mw_pp=true
@@ -496,8 +648,26 @@ move_window() {
     j_msg "-${notice}" -pn 'Verifying active-window move ...'
     wait_for_request "$_mw_request" optional-move
 }
+# @usage move_window l|r
+# @cont move_window DESKTOP [l|r]
+# @cont move_window DESKTOP X Y
+# @cont move_window X Y WIDTH HEIGHT
+# @cont move_window DESKTOP X Y WIDTH HEIGHT
+# @args Operands are bounded decimal integers or the literal l/r side selector.
+# @ret 2 on validation errors; other failures propagated; 0 on verified
+# @append success.
+# @deps isint, plan-functions for l/r, qdbus6, report_action
+# @append report_move_submission_failure, wait_for_request, move_active_window
+# @vars Reads CONFIG_SELECTED, config, cli_verbosity, bus, path, iface.
+# @vars Layout moves load settings and geometry globals from shared planner.
+# @rule Preserve flags, not placeholder zeroes, govern omitted components.
+# @note Five explicit values retain the legacy Submit path; others use
+# @append SubmitMove.
+# @warn Operates on shortcut-time active window, not a caller-supplied
+# @append managed ID.
 
-launch_one_window() {
+launch_one_window() # Run the development class-correlated launch/placement probe
+{
     local _lw_class=$1 _lw_request _lw_child
     shift
     # arguments: five geometry values, --, executable and its arguments.
@@ -525,10 +695,20 @@ launch_one_window() {
     # The launched application is independent of joetoo-kwind supervision.
     wait_for_request "$_lw_request" launch
 }
+# @usage launch_one_window CLASS DESKTOP X Y WIDTH HEIGHT -- PROGRAM [ARG...]
+# @ret 2 for malformed class/geometry/argv; 1 on executable/IPC/status failure.
+# @ret 0 when the legacy placement request reports OK.
+# @deps validate_geometry, qdbus6 SubmitLaunch, wait_for_request, j_msg
+# @vars Reads bus, path, iface, PN and header severities.
+# @rule Arm before spawning; quoted argv is executed directly without eval.
+# @warn Test-only selector; this is not positive managed registration.
+# @note Background child is not reaped or killed by this function.
 
-# Managed launch test entry point. The broker owns the registry and performs
-# all UUID selection; the Bash client supplies only intent and its child PID.
-launch_managed_window() {
+# Generic managed launch shared by configured local/SSH/Dolphin adapters and
+# the development multi-launch fixture. RDP/VNC use separate owned workers.
+# Broker correlation selects the UUID; this client supplies intent and a PID.
+launch_managed_window() # Launch a generic adapter child with separate registration/placement
+{
     local _lm_class=$1 _lm_slot=$2 _lm_payload _lm_placement _lm_registration
     local _lm_pid _lm_result _lm_state _lm_attempt _lm_registration_rc=1
     launch_registration_id=""; launch_placement_id=""
@@ -553,6 +733,8 @@ launch_managed_window() {
         j_msg "-${err}" -p "${PN}: program not found [${1}]"
         return 1
     fi
+    # Production recipes carry validated restore intent; the old test entry
+    # point can still submit just class/slot/frame through the additive API.
     if [[ -n ${launch_intent_json:-} && $launch_intent_json != null ]]; then
         _lm_payload=$(jq -cn --argjson intent "$launch_intent_json" \
             --argjson x "${_lm_geometry[1]}" --argjson y "${_lm_geometry[2]}" \
@@ -608,12 +790,25 @@ launch_managed_window() {
     fi
     (( _lm_registration_rc == 0 && _lm_placement_rc == 0 ))
 }
+# @usage launch_managed_window CLASS SLOT DESKTOP X Y WIDTH HEIGHT -- PROGRAM
+# @append [ARG...]
+# @ret 0 only when registration and placement succeed; 2 for bad arguments.
+# @ret 1 for executable/IPC/JSON or terminal failure; child is not killed here.
+# @deps validate_geometry, isint, jq, qdbus6, sleep, wait_for_request
+# @vars Reads launch_intent_json, bus, path, iface; resets/sets
+# @append launch_registration_id and launch_placement_id for open_plan.
+# @rule Broker owns UUID selection; returned IDs are not proof of completion.
+# @rule Close inherited lock FD 9 in the application before background
+# @append execution.
+# @note Used by production generic adapters and test_multi_launch; remote
+# @append RDP/VNC adapters have their own identity/lifecycle workers.
 
 # Step 1.4d native registration test fixture, not the configured -o launcher.
-# The four coordinates deliberately describe one 1920x1080 test display.
-# These are fixed TEST VALUES; the shared geometry policy belongs to Step 1.5.
+# The fixed frame values deliberately describe one 1920x1080 test display.
+# Production geometry comes from plan-functions, not these development values.
 # Each launch must become managed by positive PID/UUID correlation.
-test_multi_launch() {
+test_multi_launch() # Exercise four managed Konsole registrations with fixed test frames
+{
     local _tml_desktop _tml_x _tml_slot _tml_failed=0
     j_msg "-${notice}" -p "${PN}: TEST ONLY: register four local Konsole windows on desktops 1 and 2"
     for _tml_desktop in 1 2; do
@@ -635,17 +830,26 @@ test_multi_launch() {
     j_msg "-${notice}" -p "${PN}: all four test launches registered and placement succeeded"
     return 0
 }
+# @usage test_multi_launch
+# @ret 0 if all four calls succeed; 1 if any call fails.
+# @deps launch_managed_window, konsole, j_msg
+# @vars Reads PN and header severities; callee updates launch IDs.
+# @warn Development-only: launches four windows without the -o recipe workflow.
+# @note Fixed desktop/frame values describe a 1920x1080 test arrangement.
 
 # ListManaged is the authority: never enumerate or adopt merely observed windows.
 # Validate the entire snapshot before printing rows; optional/private fields are
 # deliberately omitted. Listing does not source executable configuration files.
-list_managed_windows() {
+list_managed_windows() # Validate managed inventory before displaying it or selecting a slot
+{
     local _lm_snapshot
     if ! command -v qdbus6 >/dev/null || ! command -v python3 >/dev/null; then
         j_msg "-${err}" -p 'Managed inventory requires qdbus6 and python3'; return 2
     fi
     _lm_snapshot=$(qdbus6 "$bus" "$path" "$iface.ListManaged" 2>/dev/null) || {
         j_msg "-${err}" -p 'Managed inventory unavailable: broker ListManaged failed'; return 2; }
+    # Python source arrives on stdin via the quoted heredoc; broker JSON uses
+    # separate FD 3. Neither JSON nor user data is interpolated into the source.
     python3 - "${1:-table}" "${2:-}" 3<<< "$_lm_snapshot" <<'PY_LIST_MANAGED'
 import json
 import os
@@ -655,6 +859,7 @@ import uuid
 
 
 def unique_keys(pairs):
+    # Reject duplicate fields instead of accepting json's last-value-wins rule.
     result = {}
     for key, value in pairs:
         if key in result:
@@ -670,6 +875,8 @@ try:
             or not isinstance(inventory.get('windows'), list)
             or inventory['count'] != len(inventory['windows'])):
         raise ValueError('invalid inventory')
+    # Build the complete validated batch before any table/free-slot output.
+    # type(...) is int also excludes Python booleans, a subclass of int.
     rows = []
     ids, uuids, slots = set(), set(), set()
     for record in inventory['windows']:
@@ -715,11 +922,23 @@ else:
         print('  '.join(str(value).ljust(width) for value, width in zip(row, widths)).rstrip())
 PY_LIST_MANAGED
 }
+# @usage list_managed_windows [table]
+# @cont list_managed_windows slot DESKTOP
+# @args slot: internal -L query; DESKTOP must already be recipe-validated.
+# @ret 0 with table/empty message or free slot; 2 on IPC/validation/no-slot
+# @append error.
+# @deps qdbus6 ListManaged, python3 (json, os, re, sys, uuid), j_msg
+# @vars Reads bus, path, iface and err; sources no configuration itself.
+# @rule Reject duplicate IDs/UUIDs/reservations before producing output rows.
+# @rule Missing records still reserve slots; uncertain inventory forbids
+# @append selection.
+# @note A free-slot result is advisory; authoritative launch checks run later.
 
 # The management queries are snapshots, never ownership or remote-health proof.
 # Validate the complete allowlisted broker reply before emitting any output.
 # Bash owns D-Bus; a separate libexec Python module parses fd 3 and prints safe fields.
-readonly_managed_query() {
+readonly_managed_query() # Render validated broker status or one retained managed record
+{
     local _rq_kind=$1 _rq_id=${2:-} _rq_method _rq_payload _rq_dir _rq_helper
     case $_rq_kind in
         status) _rq_method=RegistryStatus ;;
@@ -748,12 +967,26 @@ readonly_managed_query() {
     fi
     python3 "$_rq_helper" "$_rq_kind" "$_rq_id" 3<<< "$_rq_payload"
 }
+# @usage readonly_managed_query status
+# @cont readonly_managed_query info MANAGED_ID
+# @ret 0 on valid output; helper returns 1 for UNKNOWN and 2 for malformed
+# @append data.
+# @ret 2 for invalid kind, missing dependencies/helper, failed IPC or size
+# @append check.
+# @deps qdbus6, python3, joetoo_kwin_readonly.py, j_msg
+# @vars Reads bus, path, iface and err.
+# @note Current helper lookup tries the source-tree location before the
+# @append packaged libexec fallback; installed-path policy remains Step 1.9 work.
+# @rule Queries confer neither ownership nor proof of remote authentication.
 
 #-----[ main script ]----------------------------------------------------------------------------------
+# Historical fixture-injection marker; remaining helpers are defined below.
+# Actual invocation/mission dispatch follows control_focus_on_exit.
 
-# The frontend owns one D-Bus connection through preview/confirmation. It never
-# owns applications; accepted work and retained results belong to the broker.
-close_managed_windows() {
+# The Python frontend owns one D-Bus connection across preview/confirmation.
+# It does not supervise applications; accepted work/results belong to broker.
+close_managed_windows() # Confirm a broker-owned graceful close or progressive clean sweep
+{
     local _mc_scope=all _mc_id=${2:-} _mc_dir _mc_settings _mc_preview _mc_result _mc_pid _mc_read _mc_write _mc_rc _mc_original_read _mc_original_write _mc_helper_dir _mc_defaults _mc_key
     [[ $1 != -d ]] || _mc_scope=one
     _mc_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
@@ -781,9 +1014,14 @@ close_managed_windows() {
           managed_close_x11_grab_ms:$d,managed_close_poll_ms:$e,managed_close_dbus_timeout_ms:$f}') || return 2
     _mc_settings=$(python3 "$_mc_helper_dir/joetoo_kwin_managed_close.py" --settings "$_mc_settings") || {
         j_msg "-${err}" -p 'Invalid managed close timing settings; no action authorized'; return 2; }
+    # Named coproc supplies two one-line JSON replies and a private CONFIRM
+    # input channel. The Python process retains the authenticated D-Bus owner;
+    # separate qdbus6 processes could not preserve that caller continuity.
     coproc CLOSE_FRONTEND { python3 "$_mc_helper_dir/joetoo_kwin_managed_close.py" "$_mc_scope" "$_mc_id" "$_mc_settings" 9>&-; }
     _mc_pid=$CLOSE_FRONTEND_PID
     # Duplicate descriptors: Bash may unset the coproc array after child exit.
+    # {name} allocates an FD and stores its number in the named Bash variable;
+    # the original coprocess descriptors can then close without losing the pipe.
     exec {_mc_read}<&"${CLOSE_FRONTEND[0]}" {_mc_write}>&"${CLOSE_FRONTEND[1]}"
     _mc_original_read=${CLOSE_FRONTEND[0]}; _mc_original_write=${CLOSE_FRONTEND[1]}
     exec {_mc_original_read}<&- {_mc_original_write}>&-
@@ -836,14 +1074,28 @@ close_managed_windows() {
     if wait "$_mc_pid"; then _mc_rc=0; else _mc_rc=$?; fi
     return "$_mc_rc"
 }
+# @usage close_managed_windows -d MANAGED_ID
+# @cont close_managed_windows -x
+# @ret Returns frontend status after exchange; early validation/IPC is nonzero.
+# @deps prepare_config_sources, apply_cli_verbosity, jq, python3
+# @append joetoo_kwin_managed_close.py, confirm_continue_or_exit, j_msg
+# @vars Loads managed_close_* defaults/overrides; uses config_sources and PN.
+# @req Close frontend plus authenticated broker/native identity support.
+# @rule No CONFIRM is sent before a valid preview and affirmative operator
+# @append input.
+# @rule -d retains registration/slot; -x retires only broker-verified removals.
+# @note Accepted work belongs to the broker after frontend or terminal loss.
+# @warn Installs then clears INT/TERM/HUP traps; header refusal may exit
+# @append directly.
 
 # Snapshots are generated data, not copies of arbitrary executable config files.
-save_managed_snapshot() {
+save_managed_snapshot() # Export and publish the complete verified launch intent privately
+{
     local _ss_dir _ss_text _ss_layer _ss_result
     _ss_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
     # Retention is current operator configuration, independent of launch intent
     # and of which authenticated managed windows belong to the complete save.
-    # Candidate helper is colocated under libexec; no installed-file changes.
+    # Current lookup is source-tree-relative; packaged-path integration is separate.
     # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-plan-functions
     source "$_ss_dir/libexec/joetoo-kwin-plan-functions" || return 1
     plan_defaults
@@ -855,6 +1107,8 @@ save_managed_snapshot() {
     apply_cli_verbosity || return $?
     validate_snapshot_history || return $?
     _ss_text=$(qdbus6 "$bus" "$path" "$iface.ExportManagedSnapshot") || return 1
+    # The pipeline status is Python's: it validates the exported generated
+    # configuration with this CLI's -c path before publishing a history entry.
     _ss_result=$(printf '%s\n' "$_ss_text" | python3 "$_ss_dir/libexec/joetoo_kwin_persistence.py" --save "$_ss_dir/joetoo-kwin" "$snapshot_history_depth") || return $?
     j_msg "-${notice}" -p "Last-good managed recipes saved privately [$(jq -r '.snapshot' <<< "$_ss_result")]; manual geometry and remote authentication are not saved"
     if jq -e '.migrated_legacy' <<< "$_ss_result" >/dev/null; then
@@ -866,11 +1120,26 @@ save_managed_snapshot() {
         j_msg "-${warn}" -p 'Snapshot published; history pruning incomplete; inspect the private history directory'
     fi
 }
+# @usage save_managed_snapshot
+# @ret Propagates configuration/validation/save failures; path/export errors
+# @append are 1.
+# @deps plan-functions, qdbus6 ExportManagedSnapshot, jq, python3
+# @append joetoo_kwin_persistence.py, apply_cli_verbosity, j_msg
+# @vars Loads effective settings and config_sources; uses
+# @append snapshot_history_depth.
+# @rule Broker validates the full arrangement; helper validates generated
+# @append recipes.
+# @rule Save launch intent/policy, never runtime UUID/PID or manual geometry.
+# @note Persistence helper owns atomic history publication and private modes.
+# @note After publication, remaining status comes from the reporting block.
 
-restore_managed_snapshot() {
+restore_managed_snapshot() # Validate last-good recipes and launch new instances via open_plan
+{
     local _rs_dir _rs_file _rs_rc
     _rs_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
     _rs_file=$(mktemp "${XDG_RUNTIME_DIR:?}/joetoo-restore.XXXXXXXX.conf") || return 1
+    # Single quotes defer file/status expansion until EXIT, while these
+    # function-local names are still available. Save status before rm changes it.
     # The EXIT trap assigns its own saved status before cleanup.
     # shellcheck disable=SC2154
     trap '_rs_exit_rc=$?; rm -f -- "$_rs_file"; control_focus_on_exit "$_rs_exit_rc"' EXIT
@@ -879,10 +1148,12 @@ restore_managed_snapshot() {
     if ! python3 "$_rs_dir/libexec/joetoo_kwin_persistence.py" --restore > "$_rs_file"; then
         rm -f -- "$_rs_file"; trap - EXIT INT TERM HUP; return 2
     fi
+    # Only generated/validated recipe assignments become executable config;
+    # old UUIDs, connection state and arbitrary edited Bash are not restored.
     config=$_rs_file; CONFIG_SELECTED=$TRUE
     # Same configured launcher: lock, complete preflight, confirmation, new
     # children/identities and one shared initial-layout cohort per desktop.
-    # Candidate helper is colocated under libexec; no installed-file changes.
+    # Current lookup is source-tree-relative; packaged-path integration is separate.
     # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-launch-functions
     source "$_rs_dir/libexec/joetoo-kwin-launch-functions" || { rm -f -- "$_rs_file"; trap - EXIT INT TERM HUP; return 1; }
     if open_plan; then _rs_rc=0; else _rs_rc=$?; fi
@@ -890,12 +1161,22 @@ restore_managed_snapshot() {
     trap - EXIT INT TERM HUP
     return "$_rs_rc"
 }
+# @usage restore_managed_snapshot
+# @ret 2 on snapshot-read failure; 1 on helper/temp-path setup failure.
+# @ret Otherwise returns open_plan status, preserving ordinary launch outcomes.
+# @deps mktemp, rm, python3 persistence helper, launch-functions/open_plan
+# @vars Requires XDG_RUNTIME_DIR; sets config, CONFIG_SELECTED and launch
+# @append state.
+# @rule Restore launches new identities; never re-adopt saved UUIDs or PIDs.
+# @note EXIT removes the temporary plan and chains control-focus completion.
+# @warn Replaces then clears EXIT/INT/TERM/HUP traps; no general trap stacking.
 
 # Best effort only: neither broker availability nor activation affects the
 # mission's return code. The opaque handle can only restore the captured UUID.
 # Report only fixed, application-authored diagnostics, never raw D-Bus text,
 # the context handle, a caption, or other untrusted response fields.
-control_focus_debug() {
+control_focus_debug() # Print only allowlisted control-focus diagnostic categories
+{
     local summary
     summary=$(jq -er '
         def allowed($values; $fallback): . as $v | if ($values | index($v)) != null then $v else $fallback end;
@@ -905,8 +1186,16 @@ control_focus_debug() {
         "state=[\($state)] reason=[\($reason)] stage=[\($stage)]"' <<< "$2" 2>/dev/null) || summary='state=[unavailable] reason=[unavailable] stage=[none]'
     j_msg "-${debug}" -p "Control-window focus $1: $summary" || :
 }
+# @usage control_focus_debug PHASE RESPONSE_JSON
+# @args $1: application-authored phase; $2: untrusted broker response or empty.
+# @ret 0, even on parse or reporting failure.
+# @deps jq, j_msg
+# @vars Reads debug and header messaging policy.
+# @rule Never print raw replies, UUIDs, captions or the context handle.
+# @note Header DEBUG can force visibility; QUIET remains header-controlled.
 
-control_focus_capture() {
+control_focus_capture() # Capture the invocation's initial active UUID via an opaque handle
+{
     local result
     control_focus_handle=''
     if ! command -v qdbus6 >/dev/null || ! command -v jq >/dev/null; then
@@ -918,8 +1207,16 @@ control_focus_capture() {
         select(type == "string" and test("^[0-9a-f]{64}$"))' <<< "$result" 2>/dev/null) || control_focus_handle=''
     return 0
 }
+# @usage control_focus_capture
+# @ret Always 0; missing dependencies/broker/capture are nonfatal.
+# @deps qdbus6 ControlFocus, jq, control_focus_debug
+# @vars Reads bus, path, iface; clears/sets global control_focus_handle.
+# @rule Runs before mission execution; no permanent sender helper is created.
+# @note Active window is the approved control context, not process ownership
+# @append proof.
 
-control_focus_restore() {
+control_focus_restore() # Consume a saved handle and request eligible control activation once
+{
     local result state
     [[ $control_focus_handle ]] || return 0
     result=$(qdbus6 "$bus" "$path" "$iface.ControlFocus" restore "$control_focus_handle" 2>/dev/null) || result=''
@@ -930,31 +1227,48 @@ control_focus_restore() {
     j_msg "-${info}" -p "Control-window focus: [$state]" || :
     return 0
 }
+# @usage control_focus_restore
+# @ret Always 0; focus outcome never substitutes for mission status.
+# @deps qdbus6 ControlFocus, jq, control_focus_debug, j_msg
+# @vars Reads bus, path, iface, info; consumes control_focus_handle.
+# @rule Resident skips missing/minimized/off-desktop/already-active control
+# @append windows.
+# @note Normal KWin activation may raise the control window after mission
+# @append layout.
+# @note requested means activation requested, not verified keyboard input.
 
 # Header confirmation/die helpers may exit directly. Preserve that original
 # status while completing ordinary exits; signal exits keep their old cleanup
 # behavior and must not initiate a new activation exchange.
 # Called indirectly by EXIT traps, including the temporary restore-file trap.
 # shellcheck disable=SC2329
-control_focus_on_exit() {
+control_focus_on_exit() # Preserve exit status while completing ordinary control-focus cleanup
+{
     local original_rc=$1
     if (( original_rc != 130 && original_rc != 143 )); then
         control_focus_restore
     fi
     return "$original_rc"
 }
+# @usage control_focus_on_exit ORIGINAL_RC
+# @args $1: status captured before EXIT cleanup; not a pseudo-boolean.
+# @ret Exactly ORIGINAL_RC, independent of restoration success.
+# @deps control_focus_restore
+# @rule Skip activation for status 130 (INT) or 143 (TERM and HUP).
+# @note HUP deliberately shares the TERM exit status in this CLI.
 
-# Keep mission-local traps and explicit interruption exits unchanged. Ordinary
-# return (including failed/declined missions) always reaches completion below.
+# Main dispatch follows all definitions. Ordinary returns reach the explicit
+# focus completion below; direct header exits use EXIT, signals retain cleanup.
 # run as regular user, not root
 checknotroot
 
-# parse cmdline - this block and usage above must grow as options are implemented
+# Parsing validates command structure before the best-effort control capture.
+# Capture is a graphical query; even -c/-s/-l/-i may later restore activation.
 parse_cmdline "$@" || exit $?
 control_focus_capture
 trap 'control_focus_on_exit "$?"' EXIT
-# -c loads configuration before applying these overrides; other operations do
-# not need layout configuration and retain their existing operational behavior.
+# Config-sensitive missions apply verbosity after their own configuration load.
+# Other missions apply it here; preserve the order of repeated -v/-q options.
 if [[ $cli_operation != -S && $cli_operation != -c && $cli_operation != -o && $cli_operation != -r && $cli_operation != -L && $cli_operation != -m && $cli_operation != move ]]; then apply_cli_verbosity || exit $?; fi
 set -- "$cli_operation" "${cli_args[@]}"
 case ${1:-} in
@@ -972,7 +1286,7 @@ case ${1:-} in
     -h|--help) usage ;;
     -o) action="open";   # open multiple windows
         launch_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || exit 1
-        # Candidate helper is colocated under libexec; no installed-file changes.
+        # Current lookup is source-tree-relative; packaged-path integration is separate.
         # shellcheck source=/home/joe/joetoo-ai/workspace/projects/joetoo-kwin/libexec/joetoo-kwin-plan-functions
         source "$launch_dir/libexec/joetoo-kwin-launch-functions" || exit 1
         open_plan ;;
@@ -997,6 +1311,8 @@ case ${1:-} in
     *) bad_args 'unrecognized operation'; exit 2 ;;
 esac
 
+# Capture the mission result before reporting/restoration can overwrite $?.
+# Restoration consumes its handle, so the EXIT hook cannot activate twice.
 mission_rc=$?
 control_focus_restore
 exit "$mission_rc"

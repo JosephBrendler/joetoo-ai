@@ -123,6 +123,7 @@ HELP
 # cleanup/error policy, nested-call behavior, and how to return two statuses.
 run_step() {
     local label=$1
+    local action=${label%% *}   # first word of label (e.g. Verify, Plan, Check...)
     local transcript
     # Remove LABEL from "$@": remaining positional parameters are the exact
     # command and arguments. Quoted "$@" preserves argument boundaries and
@@ -153,7 +154,7 @@ run_step() {
     # right_status. Its return is a reporting BITMASK, not necessarily equal
     # to action_rc. The first bit means the action failed; higher bits may
     # mean the UI/logging layer failed independently.
-    if handle_result "$action_rc" 'ok' 'failed' "$notice"; then
+    if handle_result "$action_rc" 'ok' "$action failed" "$notice"; then
         report_rc=0
     else
         report_rc=$?
@@ -164,7 +165,8 @@ run_step() {
     # a pipeline subshell for this loop. Never run transcript text as shell.
     if [[ -s $transcript ]]; then
         while IFS= read -r line || [[ -n $line ]]; do
-            j_msg "-${info}" -m "$line"
+            # do this at info severity
+            j_msg "-${info}" -p "$line"
         done < "$transcript"
     fi
     # -f tolerates an already-absent file; -- prevents option interpretation
@@ -361,9 +363,24 @@ safe_file() {
 # shellcheck disable=SC2329
 file_parity() {
     local src=$1 dest=$2
-    [[ -f $src && -f $dest && ! -L $src && ! -L $dest ]] &&
-        cmp -s -- "$src" "$dest" &&
-        [[ $(stat -c '%a' -- "$src") == "$(stat -c '%a' -- "$dest")" ]]
+    if [[ ! -f $src || -L $src ]]; then
+        printf 'Source missing or unsafe: %s\n' "$src"
+        return 1
+    fi
+    if [[ ! -f $dest || -L $dest ]]; then
+        printf 'Destination missing or unsafe: %s\n' "$dest"
+        return 1
+    fi
+    if ! cmp -s -- "$src" "$dest"; then
+        printf 'Content differs: %s\n' "$dest"
+        return 1
+    fi
+    if [[ $(stat -c '%a' -- "$src") != \
+          $(stat -c '%a' -- "$dest") ]]; then
+        printf 'Permission mode differs: %s\n' "$dest"
+        return 1
+    fi
+    return 0
 }
 
 # Read-only decision explanation, not a source write:
