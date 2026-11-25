@@ -8,7 +8,7 @@ If that exact path does not exist, locate the installed skill named `joetoo-sour
 
 **Target files:**
 
-`<INSERT FILE PATH(S) OR DIRECTORY HERE>`
+`libexec/joetoo-kwin-launch-functions`
 
 ## Task
 
@@ -64,8 +64,6 @@ Present a concise assessment of the proposed changes.
 **Second: prepare improvements.**
 
 Produce the proposed comment/metadata edits as a reviewable diff or patch. For large files, work in coherent sections, but assess the complete file for consistency.
-
-Prefer useful explanatory comments over maximum comment volume. Avoid commentary that merely restates obvious code.
 
 **Third: validate.**
 
