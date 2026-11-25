@@ -35,36 +35,56 @@ sftp_launch_advisory() # Report bounded SFTP reachability hints without vetoing 
     # success immediately; it must not veto a confirmed Dolphin SFTP request.
     [[ $SFTP_ADVISORY_ENABLED ]] || return 0
     local _sa_result _sa_warning _sa_observation
+    local -a _sa_python_args=()
+
     # The normalized URI comes from open_plan, after confirmation. Python
     # reuses the URI validator and bounds NSS/getent and nc zero-I/O TCP checks;
-    # it never authenticates or lists the remote directory. The URI is stdin,
-    # with timeout milliseconds and default SSH port as separate argv values.
-    # BASH_SOURCE[0] locates the sibling helper, not the invoking CLI or cwd.
-    # $(...) captures stdout JSON, strips trailing newlines and runs in a
-    # subshell; the if tests the pipeline status. Normal helper exceptions are
-    # already converted to inconclusive JSON; execution failures reach else.
-    if _sa_result=$(printf '%s' "$1" | python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_sftp_advisory.py" \
-        "$sftp_advisory_timeout_ms" "$sftp_advisory_ssh_port"); then
-        # Expected object: resolution/tcp status strings, optional port, and a
-        # warning string (empty means no warning). jq -r emits an unquoted string;
-        # -e fails for false/null or no selected result. select rejects a nonstring
-        # warning. Invalid JSON or a missing/nonstring warning uses our fixed
-        # fallback; other observation fields are not schema-validated here.
-        _sa_warning=$(jq -er '.warning | select(type == "string")' <<< "$_sa_result") || _sa_warning='SFTP advisory: result unavailable; launching Dolphin anyway.'
-        # Only nonempty warnings are printed. The final || : deliberately absorbs
-        # j_msg UI/logging failure: advice and its presentation cannot cancel the
-        # already-confirmed application launch. ':' is the successful shell no-op.
-        [[ -z $_sa_warning ]] || j_msg "-${warn}" -p "$_sa_warning" || :
-        # Keep the other helper fields as compact JSON (-c), removing warning so
-        # it is not repeated at debug severity. Bad JSON gets the literal fallback
-        # 'unavailable'. Debug reporting is also best-effort, not launch status.
-        _sa_observation=$(jq -c 'del(.warning)' <<< "$_sa_result") || _sa_observation='unavailable'
-        j_msg "-${debug}" -p "SFTP NSS/TCP advisory observation (not SSH authentication or SFTP listing verification): $_sa_observation" || :
+    # it never authenticates or lists the remote directory.
+    # printf writes the sftp URI (e.g. sftp://joe@x402/home/joe) to its stdout, which
+    # is piped to python3's stdin, and joetoo_kwin_sftp_advisory.py reads that
+    # with sys.stdin(read().  $(...) captures stdout JSON, strips trailing newlines
+    # and runs in a subshell; if tests the pipeline status.
+    # *exceptions in the python helpers main() are converted to inconclusive 'resolution': 'uncertain'
+    # JSON output; *execution failures reach else.
+
+    # locate the python helper in the same directory as this calling library
+    _sa_python_args=( "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_sftp_advisory.py" )
+    # supply timeout milliseconds as argv[1] and default SSH port as argv[2]
+    _sa_python_args+=( "$sftp_advisory_timeout_ms" "$sftp_advisory_ssh_port" )
+    if _sa_result=$( printf '%s' "$1" | python3 "${_sa_python_args[@]}" ); then
+        # The Python helper returns a JSON object containing:
+        #   resolution: name-resolution result
+        #   tcp:        TCP connectivity result
+        #   port:       selected SSH port, if available
+        #   warning:    human-readable warning, or "" if none
+        # note: MANPAGER=cat man jq | grep -E ' -r:| -e:| -c:'
+        #   --raw-output / -r:     - emits an unquoted string
+        #   --exit-status / -e:    - fails for false/null or no selected result
+        #   --compact-output / -c: - compact JSON
+        # extract the warning field of the json output and pass it to the jq filter operator '|'
+        # so the filter can use select to reject a nonstring warning
+        # A valid empty warning ("") is accepted; it means no warning is needed.
+        # Invalid JSON or a missing/nonstring will fail thru || to emit a fixed fallback warning
+        _sa_warning=$(
+            jq -er '.warning | select(type == "string")' <<< "$_sa_result"
+        ) || _sa_warning='SFTP advisory: result unavailable; launching Dolphin anyway.'
+
+        # Display the advisory warning only when the helper supplies one.
+        # Messaging does not determine whether Dolphin is launched.
+        if [[ -n $_sa_warning ]]; then j_msg "-${warn}" -p "$_sa_warning"; fi
+
+        # Collect the other helper fields as compact JSON (-c), to be emitted at debug severity only
+        # (but remove warning since is is already displayed at warn severity above)
+        # Bad JSON gets the literal fallback 'unavailable'. Debug reporting is also best-effort, not launch status.
+        _sa_observation=$(
+            jq -c 'del(.warning)' <<< "$_sa_result"
+        ) || _sa_observation='unavailable'
+        j_msg "-${debug}" -p "SFTP NSS/TCP advisory observation (not SSH authentication or SFTP listing verification): [$_sa_observation]"
     else
-        # No usable helper process result exists. Use a fixed inconclusive warning
-        # and still return success; Dolphin/KIO may use different SSH/NSS settings.
-        # || : absorbs a reporting failure on this fallback path as well.
-        j_msg "-${warn}" -p 'SFTP advisory: helper unavailable/inconclusive; launching Dolphin anyway.' || :
+        # The advisory helper failed to execute successfully, so no reliable connectivity observation is available.
+        # This does not establish that Dolphin's SFTP operation will fail. Report the uncertainty and
+        # allow the already-confirmed application launch to proceed.
+        j_msg "-${warn}" -p 'SFTP advisory: helper unavailable/inconclusive; launching Dolphin anyway.'
     fi
     return 0
 }
@@ -82,27 +102,54 @@ sftp_launch_advisory() # Report bounded SFTP reachability hints without vetoing 
 # The implied logical slot is retained independently from physical panel index.
 configured_restore_intent() # Encode the original recipe and allowlisted effective restore settings
 {
-    local _ri_helper _ri_name _ri_names
+    local _ri_helper _ri_name _ri_names_out
+    local -a _ri_python_args=() _ri_names=()
     # Use the same installed sibling-layout assumption as launch_resource.
-    # The persistence helper owns the export allowlist; do not enumerate all
-    # shell variables or serialize trusted executable config files into a save.
+    # The joetoo_kwin_persistence.py "persistence helper" owns the export allowlist;
+    # use that to avoid dumping un-needed or private information into a save.
     _ri_helper="$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_persistence.py"
-    # Discover whitespace-separated setting names first. Failure is an
-    # operational capture error (2), distinct from a valid but unrestorable
+
+    # Discover whitespace-separated allowlisted setting names first.
+    # Failure is an operational capture error (2), distinct from a valid but unrestorable
     # recipe that the second helper call represents as JSON null.
-    _ri_names=$(python3 "$_ri_helper" --setting-names) || return 2
-    # Split only helper-owned setting names; ${!name} indirectly reads the named
-    # effective global. printf emits alternating name/value fields terminated by
-    # NUL, preserving whitespace and empty values across the pipe. Python checks
-    # the exact field count and validates/normalizes the allowlisted settings.
-    # _op_i is open_plan's dynamically scoped current index. Recipe argv supplies
-    # desktop, logical slot, program, mode, original target, resolved layer and
-    # optional frame override. Missing override becomes empty via ${...:-}.
-    # The helper emits intent JSON or null for a valid launch outside the safe
-    # export subset. open_plan warns on null but stops on command failure.
-    for _ri_name in $_ri_names; do printf '%s\0%s\0' "$_ri_name" "${!_ri_name}"; done | \
-        python3 "$_ri_helper" --intent "${planned_desktop[$_op_i]}" "${planned_slot[$_op_i]}" \
-        "${planned_program[$_op_i]}" "${planned_mode[$_op_i]}" "${planned_target[$_op_i]}" "${planned_layer[$_op_i]}" "${desktop_session_frames[$_op_i]:-}"
+    # helper --setting-names uses print(' '.join(SETTING_NAMES)) to return space-delimited list of variable names
+    _ri_names_out=$(python3 "$_ri_helper" --setting-names) || return 2
+
+    # use an array to avoid having to use an unquoted variable name to list them later
+    # Split the returned line into an indexed array
+    #   -r prevents backslash interpretation
+    #   -a assigns one array element per whitespace-separated setting name
+    read -r -a _ri_names <<< "$_ri_names_out"
+
+    # reject as invalid if empty setting-name list
+    (( ${#_ri_names[@]} > 0 )) || return 2
+
+    # split only helper-owned setting names; ${!name} indirectly reads the named effective global.
+    # printf emits alternating name/value fields terminated by NUL, preserving whitespace
+    #   and empty values across the pipe.
+    # Python checks the exact field count and validates/normalizes the allowlisted settings.
+    # _op_i is open_plan()'s dynamically scoped current index
+    # Recipe argv supplies desktop, logical slot, program, mode, original target, resolved layer and
+    #   optional frame override. Missing override becomes empty via ${...:-}.
+    # The helper emits intent JSON or null for a valid launch outside the safe export subset
+    # open_plan warns on null but stops on command failure.
+
+    # assemble _ri_python_args in an array for readability
+    _ri_python_args=( "$_ri_helper" )   #........................# name the python helper module
+    _ri_python_args+=( --intent )   #............................# intent (recipe) of the launch plan follows
+    _ri_python_args+=( "${planned_desktop[$_op_i]}" )   #........# desktop
+    _ri_python_args+=( "${planned_slot[$_op_i]}" )   #...........# slot
+    _ri_python_args+=( "${planned_program[$_op_i]}" )   #........# program
+    _ri_python_args+=( "${planned_mode[$_op_i]}" )   #...........# mode
+    _ri_python_args+=( "${planned_target[$_op_i]}" )   #.........# target
+    _ri_python_args+=( "${planned_layer[$_op_i]}" )   #..........# layer
+    _ri_python_args+=( "${desktop_session_frames[$_op_i]:-}" )   # frames
+
+    # send the allowlisted setting names and effective values to Python
+    # as alternating NUL-terminated fields on standard input
+    for _ri_name in "${_ri_names[@]}"; do
+        printf '%s\0%s\0' "$_ri_name" "${!_ri_name}"
+    done | python3 "${_ri_python_args[@]}"
 }
 # @usage configured_restore_intent
 # @ret writes intent JSON, including null for an unrestorable recipe
