@@ -103,19 +103,19 @@ Use those values for the two Boolean settings, not literal `true`/`false`.
 | `screen_width` | empty; required | 1..32768 pixels; intended display width, not autodetected |
 | `screen_height` | empty; required | 1..32768 pixels; intended display height |
 | `desktop_session_list` | empty array; required for `-c`/`-o` | Nonempty indexed Bash array of recipes; at most 256 entries per desktop |
-| `desktop_limit` | 20 | 1..256; each recipe desktop must be 1..this limit |
+| `desktop_limit` | 24 | 1..256; each recipe desktop must be 1..this limit |
 | `dt_win_limit` | 4 | 1..256; caps implicit-layer entries per desktop; explicit layers may exceed it with a warning |
 | `min_window_exposure_px` | 32 | 1..32768 pixels; exposure-warning threshold |
-| `terminal_width_percent` | 87 | 1..100%; **total** panel region width, not per-window width |
-| `terminal_gap_percent` | 2 | 0..100%; horizontal panel gutter |
-| `terminal_height_percent` | 85 | 1..100%; panel height budget |
-| `terminal_left_percent` | 1 | 0..100%; panel region left offset |
-| `terminal_top_percent` | 5 | 0..100%; panel region top offset |
-| `terminal_row_gap_percent` | 3 | 0..100%; panel row gutter |
-| `graphical_left_percent` | 5 | 0..100%; under/over region left offset |
-| `graphical_top_percent` | 3 | 0..100%; under/over region top offset |
-| `graphical_width_percent` | 94 | 1..100%; under/over region width |
-| `graphical_height_percent` | 90 | 1..100%; under/over region height |
+| `terminal_width_percent` | 90 | 1..100%; **total** panel region width, not per-window width |
+| `terminal_gap_percent` | 1 | 0..100%; horizontal panel gutter |
+| `terminal_height_percent` | 92 | 1..100%; panel height budget |
+| `terminal_left_percent` | 2 | 0..100%; panel region left offset |
+| `terminal_top_percent` | 2 | 0..100%; panel region top offset |
+| `terminal_row_gap_percent` | 1 | 0..100%; panel row gutter |
+| `graphical_left_percent` | 1 | 0..100%; shared under/over region left offset |
+| `graphical_top_percent` | 1 | 0..100%; shared under/over region top offset |
+| `graphical_width_percent` | 98 | 1..100%; shared under/over region width |
+| `graphical_height_percent` | 94 | 1..100%; shared under/over region height |
 | `verbosity` | header value; `notice` (5) if empty | 0..7; explicit CLI `-v`/`-q` adjustments apply after sourcing |
 
 Left + width and top + height must each be <=100 for both regions. Calculated
@@ -123,6 +123,15 @@ frames must fit the supplied display. The panel allocator supports at most four
 panel entries per desktop regardless of `dt_win_limit`. Exposure is a frame
 prediction, not proof of compositor visibility. The shared planner owns outer
 frame geometry; remote pixel and initial client sizes below do not replace it.
+
+The percentage values above describe the current built-ins in `plan_defaults()`
+(`libexec/joetoo-kwin-plan-functions`), not an immutable product requirement.
+On a 1920x1080 configured display, the graphical base rectangle is
+`(19,10) 1881x1015`. `under` and `over` use this same rectangle; their
+one-shot stacking order is separate. The four-panel 2x2 layout uses the
+`terminal_*` budget independently. Neither region automatically excludes a
+KDE taskbar, compositor work area or widget area; verify visual fit on each
+host and override these values in trusted configuration as appropriate.
 
 ## Initial cohort and SFTP
 
@@ -405,11 +414,12 @@ TLS/connection state, target or private log path is inferred or printed.
 
 ## Single managed launch (`-L`)
 
-`joetoo-kwin [-v|-q ...] [-f FILE] -L DESKTOP PROGRAM MODE TARGET [over]`
+`joetoo-kwin [-v|-q ...] [-f FILE] -L DESKTOP PROGRAM MODE TARGET [over|under]`
 accepts separate shell arguments, not a pipe-delimited string or raw application
-argv. Omitted layer means **over for `-L` only**. Explicit `over` is supported;
-`panel`, `under` and unknown/blank explicit layers are rejected before launch.
-Configured `-o` retains its implicit/blank **panel** default and all three layers.
+argv. Omitted layer means **over for `-L` only**. Explicit `over` and
+one-shot `under` are supported. `panel` and unknown/blank explicit layers are
+rejected before launch. Configured `-o` retains its implicit/blank **panel**
+default and all three layers.
 
 The ordinary configuration layers still supply screen dimensions, security,
 backend, geometry and mechanical limits. The selected per-run file's recipe
@@ -428,20 +438,22 @@ positively register and place only the new UUID; state/slot checks repeat before
 submission and the broker independently guards reservation. A newly conflicting
 slot is rejected, not silently changed after confirmation.
 
-A one-entry initial-layout transaction raises only that UUID once and verifies it
-above the other observed normal application windows on the requested desktop.
-It also verifies unchanged existing-peer geometry and membership. No persistent
-keep-above flag or existing-window move is used. Special shell/dock layers are
-not ordinary application stacking; an existing normal keep-above window can
-prevent successful verification, which is reported as failure rather than forced
-through. An inactive desktop is not switched automatically; focus follows the
-existing initial-layout policy. Placement, one-shot stack/focus and remote login
-remain separate outcomes; an incomplete raise may leave a valid placed viewer
-and returns failure without closing it or releasing its reservation.
+A one-entry initial-layout transaction verifies the requested one-shot
+stacking: `over` raises only the new exact UUID, while `under` lowers it
+beneath participating normal-layer peers. Existing peer geometry and
+membership are preserved. There is no permanent keep-above/below flag,
+existing-window move or live reflow. Special shell/dock layers are not
+ordinary application stacking, and unsupported peer state can prevent
+successful verification rather than triggering a forced change. An inactive
+desktop is not switched automatically; focus follows the initial-layout
+policy. Placement, one-shot stacking/focus and remote login remain separate
+outcomes; a stacking failure can leave a valid placed window and return
+failure without closing it or releasing its reservation.
 
-`-L` requires a matching broker/resident advertising `single_raise_protocol=1`;
-an older pair is rejected before confirmation. The existing `-o` protocol remains
-compatible. Live-desktop reflow is withdrawn from Step 1.5d; the earlier
+`-L over` requires the broker/resident `single_raise_protocol=1`, and
+`-L under` requires `single_lower_protocol=1`; an older or mismatched pair is
+rejected before confirmation. The existing `-o` protocol remains compatible.
+Live-desktop reflow is deferred; the earlier
 [source review](../archive/task_step1.5/step1.5d-managed-inventory-and-live-layout-review.md)
 is historical, not an active implementation requirement. See the
 [historical headless candidate and native matrix](../archive/task_step1.5/step1.5d-single-recipe-headless-candidate.md),

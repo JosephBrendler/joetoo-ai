@@ -37,10 +37,13 @@ AI policies.
   and window-placement behavior. Use the tested single interactive Bash
   `--rcfile` design, `ssh_wrapper`, and ordinary non-root SSH. No always-enabled
   security-sensitive Konsole D-Bus API and no mandatory `tmux`.
-- Preserve the 87%-by-default **total** terminal-width budget, adjustable
-  gutters, and right-hand visibility for desktop widgets and selecting windows
-  behind Konsole. `mw l/r` and planned multiwindow placement must share one
-  calculation, not diverging duplicate formulas.
+- Preserve a configurable **total** terminal/panel-width budget, adjustable
+  gutters, and room at the right for desktop widgets and for selecting windows
+  behind Konsole. The authoritative built-in geometry values are assigned by
+  `plan_defaults()` in `libexec/joetoo-kwin-plan-functions`; system, user and
+  per-run configuration may override them. Interactive `-m l|r` and configured
+  multiwindow placement must use shared geometry calculations, not divergent
+  duplicate formulas.
 - Distinguish logical desktop/slot and readable titles such as
   `joetoo_konsole_3.1` from per-run request IDs, managed IDs and KWin UUIDs.
   No class-only or title-only adoption/closing of unrelated windows.

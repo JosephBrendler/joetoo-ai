@@ -85,7 +85,7 @@ compatibility help form; use `-h` with ordinary short-option parsing.
 | --- | --- |
 | `-c [-f FILE]` | Source/validate configuration and print the dry-run plan; no broker launch or network/client execution. Trusted Bash itself can have side effects. |
 | `-o [-f FILE]` | Preflight the whole configured plan, confirm, then serially launch, register, place and finalize each desktop cohort. |
-| `-L DESKTOP PROGRAM MODE TARGET [over]` | One new managed window; omitted layer is `over`; explicit `over` works. `panel` and `under` are rejected. TARGET must still be supplied, including `""` for Dolphin home. There is no SLOT or geometry operand. |
+| `-L DESKTOP PROGRAM MODE TARGET [over|under]` | One new managed window; omitted layer is `over`; explicit `over` and one-shot `under` work. `panel` remains unsupported. TARGET must still be supplied, including `""` for Dolphin home. There is no SLOT or geometry operand. |
 | `-l` | Read-only fixed-column managed inventory, including retained missing/uncertain records and full UUIDs. No executable plan is sourced. |
 | `-s` | Read-only `RegistryStatus` snapshot: counts, synchronization, Busy/uncertainty and capabilities. No remote-session health claim or plan sourcing. |
 | `-i MANAGED_ID` | Read-only `GetManaged` detail for exactly one canonical managed ID. Last-known observation is not current authenticated-window proof. UNKNOWN is distinct from broker unavailability. |
@@ -190,6 +190,13 @@ incomplete/nonzero outcome. Busy, source/owner loss or uncertain cleanup stops
 unsafe continuation.
 
 ### Configuration and profiles
+
+The built-in panel and graphical regions are defined in `plan_defaults()`;
+their current percentages are tabulated in the configuration reference.
+On a configured 1920x1080 display, the current graphical under/over base frame
+is `(19,10) 1881x1015`; panel entries use a separate 2x2 allocator. These
+percentages do not automatically deduct the KDE work area or taskbar. Verify
+visual fit and use a trusted configuration override when appropriate.
 
 Precedence is built-ins, optional `/etc/joetoo-kwin/defaults.conf`, optional
 `${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/defaults.conf`, selected per-run plan,

@@ -453,11 +453,13 @@ broker must not independently generate placement coordinates.
 
 The panel allocator supports one through four panel entries in ordinary
 one/two/three-region layouts and the four-region two-by-two arrangement.
-Defaults reserve 87% of the configured screen width for the terminal/panel
-region, with configurable gaps, position and dimensions. **Panel allocation
-is application-independent**: Dolphin can occupy a panel, and Konsole can
-appear in an explicit `under` or `over` layer. The panel limit applies to
-panel positions, not the number of accessible SSH connections.
+The terminal/panel region has a configurable total width, height, position and
+gutters. `plan_defaults()` in `libexec/joetoo-kwin-plan-functions` is the
+single authority for built-in values; the configuration reference and template
+document those values, and trusted configuration layers can override them.
+**Panel allocation is application-independent**: Dolphin can occupy a panel,
+and Konsole can appear in an explicit `under` or `over` layer. The panel limit
+applies to panel positions, not the number of accessible SSH connections.
 
 An ordinary `dt_win_limit=4` implicit-entry budget is enforced; explicit
 layers may increase the total window count with a warning without bypassing
@@ -466,9 +468,15 @@ receive logical slot numbers, regardless of the physical allocator position.
 
 ### 6.2 Graphical regions and stacking
 
-`under` and `over` use the configurable graphical region dimensions
+`under` and `over` share the configurable graphical region dimensions
 (`graphical_left_percent`, `graphical_top_percent`,
 `graphical_width_percent`, `graphical_height_percent`) and cascade offsets.
+They are stacking classifications, not independent geometry regions. Their
+percentages are of the full configured display, not the compositor work area;
+no automatic panel/work-area deduction is implied. Configured graphical
+cascades clamp to display edges rather than to a separate widget-safe region.
+A graphical `under` viewer can sit behind four `panel` windows without
+occupying a fifth panel position.
 After positive registration, one bounded cohort transaction establishes and
 verifies bottom-to-top `under → panel → over`, preserving entry order within
 each layer. The last successful `over` or, absent that, last `panel` is
