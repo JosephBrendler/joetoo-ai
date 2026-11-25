@@ -52,6 +52,63 @@ task; do not hard-code its inventory into the skill.
 Add documentation only after verifying the actual behavior. Do not assert
 unproven guarantees, fabricate error-code meanings, or mask defects with prose.
 
+## Mandatory block-level inline comprehension
+
+A function contract is not a substitute for documenting its implementation.
+Inspect **every function** statement by statement, splitting its body into
+logical blocks. A block may be one or two lines if a single expression carries
+non-obvious behavior; a simple sequence may form a larger block. Comments
+should enable a junior developer unfamiliar with the project to understand the
+code without reconstructing its meaning from callers, tool manuals or tests.
+
+For **each nontrivial block**, establish and explain the applicable facts:
+
+1. **Purpose:** what it accomplishes and why it is needed here.
+2. **Inputs/state:** where important values originate; local, global config,
+   caller-local/dynamically scoped, environment, prior command or external state.
+3. **Mechanics:** unfamiliar language semantics, short-circuit chains, pipelines,
+   command substitutions, file descriptors, subprocess options and ordering.
+4. **Data contracts:** input/output framing and types, JSON schemas/filters,
+   IPC and helper protocols, process statuses and their verified meanings.
+5. **Decisions:** what each meaningful branch permits, prevents or skips.
+6. **Failure handling:** reasons for return, continue, retry, fallback, ignored
+   failures or deliberately nonblocking reporting.
+7. **Invariants:** ownership, lifecycle, security, ordering and resource bounds
+   that constrain how this block may safely operate.
+
+Place the explanatory comment **beside the relevant statement or immediately
+before its block**. Do not merely summarize the function once at its start or
+in post-function metadata. Existing messages (e.g. `j_msg`) can suffice only
+when they genuinely explain the decision or operation, not simply its outcome.
+Do not narrate self-evident assignments or inflate volume for its own sake;
+**brevity is not a reason to leave a nontrivial block opaque**.
+
+Verify claims against the real called helper, caller and implementation. When
+code invokes external tools or helpers, explain their purpose, important
+options, input framing, outputs and failure interpretation *at the use site*;
+the reader should not need to run `--help` or reverse-engineer a JSON filter.
+Call out non-obvious pseudo-boolean and variable conventions, dynamic scope,
+resource-path assumptions, `|| :` / other status suppression, and differences
+between action status and message/reporting status where relevant. Explain
+*what the code does*, even if the technique seems awkward; do not justify
+questionable implementation as intrinsically necessary without evidence.
+
+When code appears overly complex, inconsistent with Joetoo conventions or
+broader best practices, or potentially defective, **record the concern
+separately for maintainer-directed refactoring**. Also report places where
+following Joetoo convention appears to conflict with established practice.
+Do not rename, simplify, reorganize or change executable behavior during the
+documentation audit. Document verified behavior; flag uncertainties instead
+of inventing contracts or silently fixing defects.
+
+**Coverage is a completion criterion:** after drafting, reread each function
+in order. Account for every nontrivial block with an adjacent explanation,
+or identify it and justify specifically why its code/message is already clear.
+Report material gaps as incomplete; metadata extraction, lint success and
+regression parity alone do not establish maintainability or justify `ACCEPTED`.
+Only the maintainer may accept an audit. This is part of the existing review,
+not a new stage or permission gate.
+
 ## Exact current Bash metadata convention
 
 The source-reviewed `summarize_header()` in
@@ -213,21 +270,24 @@ for accuracy/provenance, not as C++ function source.
    or non-executable source modules.
 2. **Inspect:** read the full source and relevant callers, implementations,
    return paths, globals, and actual safety enforcement.
-3. **Assess:** identify missing contracts, stale assertions, opaque constructs,
-   misleading documentation, security implications, and overcommenting.
-   Record functional discrepancies separately.
-4. **Draft:** prepare small reviewable batches. Bash may require declaration
-   formatting for parser compatibility; make such syntax edits explicit.
-   Avoid behavior changes, interface changes and speculative refactors.
+3. **Assess:** identify missing contracts, stale assertions, opaque blocks,
+   misleading comments, security implications and unnecessary narration.
+   Check the whole function, not just its header or most complex branch.
+   Record implementation/design concerns separately from comment changes.
+4. **Draft:** add adjacent block-level explanations as well as contracts;
+   prepare small reviewable batches. Bash may require declaration formatting
+   for parser compatibility; make those changes explicit. Do not refactor.
 5. **Validate:** inspect a complete diff; run `bash -n` for shell, appropriate
    ShellCheck using Joetoo stubs, Python syntax/AST and focused unittests,
    `node --check` and relevant JS tests, plus relevant C++/CMake build or
    syntax checks when available. For metadata, test actual extraction
    in a safe fixture where feasible. Check `git diff --check` and, if useful,
    full regression suites. Do not claim static checks prove equivalence.
-6. **Review:** present findings, patch, exact validation evidence, unresolved
-   ambiguities, and proposed ledger disposition; obtain maintainer approval
-   before updating an accepted status.
+6. **Review:** independently reread every edited function for inline coverage
+   and factual accuracy, identifying any intentionally uncommented nontrivial
+   blocks and why they are sufficiently clear. Present findings, patch, test
+   evidence, separate refactoring concerns and proposed ledger disposition.
+   Obtain maintainer approval before updating an accepted status.
 
 For the Step 1.9 audit, maintain a ledger under `task_1.9/` with each file's
 status: `PENDING`, `INSPECTED`, `DRAFTED`, `VALIDATED`, `ACCEPTED`, or `BLOCKED`.
@@ -253,10 +313,15 @@ Include reviewed revision and any separately scoped functional issues.
 
 1. Audited files/functions and concise deficiency assessment.
 2. Function metadata coverage and exact `@cont`/`@append` usage rationale.
-3. Complete patch/diff, with any Bash opening-layout changes identified.
-4. Syntax/static/parser/focused test results and their limitations.
-5. Verified functional findings kept separate from documentation work.
-6. Audit-ledger status proposal and remaining blockers.
+3. **Per-function inline-block coverage:** explain the important blocks now
+   documented; identify and justify any nontrivial blocks left uncommented.
+4. Complete patch/diff, with any Bash opening-layout changes identified.
+5. Syntax/static/parser/focused test results and their limitations, including
+   any baseline failures rather than treating them as new regressions.
+6. Verified functional defects, awkward constructs, convention/best-practice
+   tensions and potential refactors **separately** from documentation edits.
+7. Audit-ledger status proposal and remaining blockers; `ACCEPTED` is reserved
+   for the maintainer after examining inline readability and factual accuracy.
 
 Finish only when all in-scope interpreted and C++ production sources have
 been reviewed and accepted; completing this audit does not certify the source transfer,
