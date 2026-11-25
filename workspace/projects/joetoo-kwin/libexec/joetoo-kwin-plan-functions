@@ -75,54 +75,47 @@ plan_defaults() # Reset built-in launch, geometry and operation-policy defaults
     # nla = nla + tls (see configuration guide)
     rdp_security_protocol=nla
     rdp_certificate_policy=strict
-    sftp_advisory_enabled=$TRUE
+    SFTP_ADVISORY_ENABLED=$TRUE
     sftp_advisory_timeout_ms=2000
     sftp_advisory_ssh_port=22
     #-----[ Size and spacing factors ]--------------------------------------------
-    # Total horizontal screen width allocated to the terminal panel region.
-#    terminal_width_percent=87
-    terminal_width_percent=92
+    # Total horizontal screen width allocated to the terminal **panel** region.
+    terminal_width_percent=90
 
-    # Total vertical screen height allocated to the terminal panel region.
+    # Total vertical screen height allocated to the terminal **panel** region.
     # (leave room for under/over-layer exposure)
-#    terminal_height_percent=85
-    terminal_height_percent=95
+    terminal_height_percent=92
 
     # **Horizontal** gap between adjacent terminal panels, as % of screen width.
-    terminal_gap_percent=2
+    terminal_gap_percent=1
 
     # **Vertical** gap between rows of terminal panels, as % of screen height.
-#    terminal_row_gap_percent=3
-    terminal_row_gap_percent=2
+    terminal_row_gap_percent=1
 
     # Distance from the screen's left edge to the terminal region's left edge.
-    terminal_left_percent=1
+    terminal_left_percent=2
 
     # Distance from the screen's top edge to the terminal region's top edge.
-#    terminal_top_percent=5
     terminal_top_percent=2
 
-    # Distance from the screen's left edge to the graphical window region.
-#    graphical_left_percent=5
-    graphical_left_percent=3
+    # empirical; (19, 10) 1881x1015 on a 1920x1080 pixel display
+    # Distance from the screen's left edge to the graphical **over/under** window region.
+    graphical_left_percent=1
 
-    # Distance from the screen's top edge to the graphical window region.
-    graphical_top_percent=3
+    # Distance from the screen's top edge to the graphical **over/under** window region.
+    graphical_top_percent=1
 
     # Width of the graphical window region, as % of total screen width.
-#    graphical_width_percent=94
-    graphical_width_percent=97
+    graphical_width_percent=98
 
     # Height of the graphical window region, as % of total screen height.
-#    graphical_height_percent=90
-    graphical_height_percent=97
+    graphical_height_percent=94
 
     # NOTE: terminal_gap_percent and terminal_row_gap_percent control spacing
     #   between panels, while terminal_left_percent and terminal_top_percent
     #   position the entire terminal region relative to the screen edges.
     # The graphical settings describe a separate region used for non-panel
     #   windows, not gaps between windows.
-    graphical_height_percent=97
     declare -ga desktop_session_list=()
     declare -ga desktop_session_frames=() # Optional original per-recipe frame policy, never observed geometry.
 }
@@ -270,7 +263,7 @@ validate_plan() # Validate recipes and rebuild global offline planning inputs
 
     validate_layout_geometry || return $?
     validate_close_settings || return $?
-    if [[ $sftp_advisory_enabled != "$TRUE" && -n $sftp_advisory_enabled ]] ||
+    if [[ $SFTP_ADVISORY_ENABLED != "$TRUE" && -n $SFTP_ADVISORY_ENABLED ]] ||
         [[ ! $sftp_advisory_timeout_ms =~ ^[1-9][0-9]{0,4}$ || ! $sftp_advisory_ssh_port =~ ^[1-9][0-9]{0,4}$ ]] ||
         (( sftp_advisory_timeout_ms > 10000 || sftp_advisory_ssh_port > 65535 )); then
         plan_error 'invalid SFTP advisory settings: enabled TRUE/FALSE, timeout 1..10000 ms, port 1..65535'; return 2

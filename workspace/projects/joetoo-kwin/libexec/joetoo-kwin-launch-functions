@@ -33,7 +33,7 @@ sftp_launch_advisory() # Report bounded SFTP reachability hints without vetoing 
     # Its validator accepts the Joetoo pseudo-boolean TRUE=0 or FALSE="" here:
     # [[ value ]] tests nonempty text, not numeric truth. Disabled advice returns
     # success immediately; it must not veto a confirmed Dolphin SFTP request.
-    [[ $sftp_advisory_enabled ]] || return 0
+    [[ $SFTP_ADVISORY_ENABLED ]] || return 0
     local _sa_result _sa_warning _sa_observation
     # The normalized URI comes from open_plan, after confirmation. Python
     # reuses the URI validator and bounds NSS/getent and nc zero-I/O TCP checks;
@@ -72,7 +72,7 @@ sftp_launch_advisory() # Report bounded SFTP reachability hints without vetoing 
 # @args $1: validated, normalized Dolphin SFTP URI
 # @ret 0, including disabled, inconclusive and failed advisory/reporting paths
 # @deps python3, dirname, jq, j_msg, sibling SFTP advisory helper
-# @vars reads sftp_advisory_enabled, sftp_advisory_timeout_ms,
+# @vars reads SFTP_ADVISORY_ENABLED, sftp_advisory_timeout_ms,
 # @append sftp_advisory_ssh_port and header warn/debug severities
 # @req caller has obtained launch confirmation
 # @rule NSS/TCP observations prove neither SSH authentication nor remote listing

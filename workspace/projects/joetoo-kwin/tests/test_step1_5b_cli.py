@@ -4,12 +4,14 @@
 """Full CLI with disposable header and bus; never operates KWin."""
 import re
 import unittest
-from test_step1_5a_plan import PlannerHarness, ROOT, INSTALLED_HEADER_AVAILABLE
+from test_step1_5a_plan import PlannerHarness, ROOT, INSTALLED_HEADER_AVAILABLE, REFERENCE_GEOMETRY
 
 
 class MoveTests(PlannerHarness, unittest.TestCase):
     def setUp(self):
         super().setUp()
+        # Assert exact move rectangles only against explicit reference inputs.
+        self.write_config(reference_geometry=True)
         self.client.write_text(self.client.read_text().replace(
             '#-----[ main script ]', '''
 qdbus6() {
@@ -56,7 +58,8 @@ qdbus6() {
                 self.assertIn(method, calls[0])
 
     def test_layout_needs_no_session_list_and_reuses_config(self):
-        self.config.write_text('screen_width=1920\nscreen_height=1080\nterminal_gap_percent=4\n')
+        self.config.write_text('screen_width=1920\nscreen_height=1080\n'
+                               + REFERENCE_GEOMETRY + 'terminal_gap_percent=4\n')
         calls = self.run_move(['-v', '-f', str(self.config), '-m', 'r'])
         self.assertTrue(calls[0].endswith('0 892 54 797 918 true false false'), calls)
 

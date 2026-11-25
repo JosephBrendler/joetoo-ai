@@ -102,7 +102,7 @@ class AdvisoryLaunchTests(_Launch):
             trace = self.calls.read_text(); self.assertNotIn('resolver:', trace); self.assertIn('tcp:2200', trace)
 
     def test_disabled_and_unavailable_helper_never_block_launch(self):
-        self.write_config(['4|dolphin|sftp|sftp://host'], extra='sftp_advisory_enabled=$FALSE')
+        self.write_config(['4|dolphin|sftp|sftp://host'], extra='SFTP_ADVISORY_ENABLED=$FALSE')
         self.assertEqual(self.run_client().returncode, 0)
         self.assertNotIn('resolver:', self.calls.read_text()); self.assertNotIn('tcp:', self.calls.read_text())
         self.write_config(['5|dolphin|sftp|sftp://host'])
@@ -116,7 +116,7 @@ class AdvisoryLaunchTests(_Launch):
 
     def test_invalid_settings_reject_before_any_advisory(self):
         for extra in ['sftp_advisory_timeout_ms=0', 'sftp_advisory_timeout_ms=10001',
-                      'sftp_advisory_ssh_port=65536', 'sftp_advisory_enabled=yes']:
+                      'sftp_advisory_ssh_port=65536', 'SFTP_ADVISORY_ENABLED=yes']:
             self.write_config(['4|dolphin|sftp|sftp://host'], extra=extra)
             self.assertNotEqual(self.run_client().returncode, 0)
             self.assertNotIn('resolver:', self.calls.read_text() if self.calls.exists() else '')

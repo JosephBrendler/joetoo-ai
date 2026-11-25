@@ -3,14 +3,15 @@ import os
 import subprocess
 from pathlib import Path
 import unittest
-from test_step1_5a_plan import PlannerHarness, ROOT
+from test_step1_5a_plan import PlannerHarness, ROOT, REFERENCE_GEOMETRY
 
 
 class LayerPlanTests(PlannerHarness, unittest.TestCase):
-    def test_default_panels_and_explicit_layers(self):
+    def test_reference_panels_and_explicit_layers(self):
         self.write_config(['4|dolphin|local|Documents|panel', '4|konsole|ssh|host|panel',
                            '4|konsole|ssh|host|over', '2|konsole|ssh|host|',
-                           '4|konsole|ssh|host|over'], extra='verbosity=6\nmin_window_exposure_px=8')
+                           '4|konsole|ssh|host|over'],
+                          extra=REFERENCE_GEOMETRY + 'verbosity=6\nmin_window_exposure_px=8')
         output = self.plan()
         rows = self.rows(output)
         self.assertEqual([r[1] for r in rows], ['1', '2', '3', '1', '4'])

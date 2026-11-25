@@ -16,7 +16,7 @@ class ManagedLaunchCLITests(TestCase):
     @staticmethod
     def run_transaction(state='registered', slot='1'):
         source = CLIENT.read_text()
-        start = source.index('launch_managed_window() {')
+        start = source.index('launch_managed_window()')
         end = source.index('\n}\n', start) + 2
         impl = source[start:end]
         with TemporaryDirectory() as tmp:

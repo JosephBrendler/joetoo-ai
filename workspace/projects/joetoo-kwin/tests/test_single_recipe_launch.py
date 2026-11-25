@@ -7,13 +7,16 @@ from pathlib import Path
 import shutil
 import subprocess
 import unittest
-from test_step1_5a_plan import ROOT
+from test_step1_5a_plan import ROOT, REFERENCE_GEOMETRY
 import test_step1_5c_launch as configured
 
 
 class SingleRecipeTests(configured.ConfiguredLaunchTests):
     def setUp(self):
         super().setUp()
+        # Exact frame assertions use explicit geometry, not product defaults.
+        with self.config.open('a') as stream:
+            stream.write('\n' + REFERENCE_GEOMETRY)
         self.env['BROKER_STATE']=json.dumps(dict(observation=dict(synchronized=True),
             presence_counts=dict(uncertain=0),request_counts=dict(pending=0,running=0),
             placement_transaction=dict(state='IDLE'),initial_layout_protocol=1,recovery_snapshot_protocol=1,

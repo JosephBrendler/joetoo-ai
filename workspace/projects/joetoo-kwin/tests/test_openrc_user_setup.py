@@ -175,7 +175,7 @@ from joetoo_kwin_persistence import SETTING_NAMES, intent
 settings = dict.fromkeys(SETTING_NAMES, '1000')
 settings.update(rdp_windowing_backend='auto', rdp_x11_renderer='auto',
                 rdp_security_protocol='nla', rdp_certificate_policy='strict',
-                RDP_SMART_SIZING='0', sftp_advisory_enabled='0')
+                RDP_SMART_SIZING='0', SFTP_ADVISORY_ENABLED='0')
 request = dict(desktop=2, slot=1, program='dolphin', mode='sftp',
                target='sftp://joe@example.org/home/joe/', layer='under',
                settings=settings)

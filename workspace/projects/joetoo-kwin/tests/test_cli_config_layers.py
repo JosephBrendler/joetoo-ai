@@ -22,7 +22,8 @@ class ConfigLayersTests(PlannerHarness, unittest.TestCase):
         return self.run_cli('-c', '-f', str(self.config), *(args or ('-v',)))
 
     def test_builtin_baseline_and_missing_optional_files(self):
-        self.assertIn('terminal_width_percent=87', self.effective())
+        self.assertIn(f'terminal_width_percent={self.builtin_default("terminal_width_percent")}',
+                      self.effective())
         self.assertFalse(self.system_defaults.exists())
         self.assertFalse(self.user_defaults.exists())
 
@@ -145,13 +146,16 @@ class ConfigLayersTests(PlannerHarness, unittest.TestCase):
 
     def test_layout_move_consumes_the_same_layers(self):
         from test_step1_5b_cli import MoveTests
+        from test_step1_5a_plan import REFERENCE_GEOMETRY
         move=MoveTests()
         try:
             move.setUp()
             move.system_defaults.write_text('terminal_width_percent=80\n')
             user=Path(move.env['XDG_CONFIG_HOME'])/'joetoo-kwin/defaults.conf'
             user.parent.mkdir(parents=True);user.write_text('terminal_gap_percent=4\n')
-            move.config.write_text('screen_width=1920\nscreen_height=1080\nterminal_width_percent=70\n')
+            move.config.write_text('screen_width=1920\nscreen_height=1080\n'
+                                   + REFERENCE_GEOMETRY.replace('terminal_gap_percent=2\n', '')
+                                   + 'terminal_width_percent=70\n')
             calls=move.run_move(['-f',str(move.config),'-m','l'])
             self.assertTrue(calls[0].endswith('0 19 54 634 918 true false false'),calls)
         finally: move.doCleanups()

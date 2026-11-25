@@ -11,7 +11,7 @@ INFO = '''snapshot_history_depth verbosity desktop_limit dt_win_limit min_window
 terminal_width_percent terminal_gap_percent terminal_height_percent terminal_left_percent terminal_top_percent terminal_row_gap_percent
 graphical_left_percent graphical_top_percent graphical_width_percent graphical_height_percent
 rdp_registration_timeout_ms rdp_windowing_backend rdp_security_protocol rdp_certificate_policy rdp_x11_renderer rdp_remote_width rdp_remote_height bool.RDP_SMART_SIZING rdp_initial_client_width rdp_initial_client_height
-vnc_viewer_ready_timeout_ms bool.sftp_advisory_enabled sftp_advisory_timeout_ms sftp_advisory_ssh_port'''.split()
+vnc_viewer_ready_timeout_ms bool.SFTP_ADVISORY_ENABLED sftp_advisory_timeout_ms sftp_advisory_ssh_port'''.split()
 DEBUG = '''snapshot_validation_timeout_ms initial_focus_timeout_ms initial_focus_poll_interval_ms single_lower_settle_ms sftp_capability_timeout_ms
 rdp_registration_poll_ms rdp_registration_event_limit rdp_registration_window_limit rdp_backend_log_byte_limit rdp_x11_identity_settle_ms
 vnc_ssh_start_timeout_ms vnc_supervisor_poll_interval_ms vnc_cleanup_timeout_ms vnc_local_port_attempts vnc_identity_event_limit vnc_identity_settle_ms vnc_dbus_timeout_ms vnc_placement_timeout_ms vnc_identity_start_timeout_ms
@@ -36,10 +36,10 @@ class ConfigPresentationTests(PlannerHarness, unittest.TestCase):
                 self.assertIn('DRY RUN: [2]', output)
 
     def test_boolean_values_and_formatting_prefixes(self):
-        self.write_config(extra='RDP_SMART_SIZING=$FALSE\nsftp_advisory_enabled=$TRUE')
+        self.write_config(extra='RDP_SMART_SIZING=$FALSE\nSFTP_ADVISORY_ENABLED=$TRUE')
         output = self.plan('-v')
         self.assertIn('RDP_SMART_SIZING=False', output)
-        self.assertIn('sftp_advisory_enabled=True', output)
+        self.assertIn('SFTP_ADVISORY_ENABLED=True', output)
         # Capture the actual arguments supplied to show_config, not just fixture output.
         with self.mock_header.open('a') as stream:
             stream.write('\nshow_config() { printf "VARS:%s\\n" "$varlist"; }\n')
@@ -88,11 +88,11 @@ class InstalledConfigPresentationTests(PlannerHarness, unittest.TestCase):
                 self.assertIn(str(self.config), re.sub(r'\s+', '', plain))
                 if flags:
                     self.assertRegex(plain, r'RDP_SMART_SIZING.*True')
-                    self.assertRegex(plain, r'sftp_advisory_enabled.*True')
+                    self.assertRegex(plain, r'SFTP_ADVISORY_ENABLED.*True')
                 self.assertIn('DRY RUN: [2]', plain)
 
     def test_actual_header_false_pseudo_booleans(self):
-        self.write_config(extra='RDP_SMART_SIZING=$FALSE\nsftp_advisory_enabled=$FALSE')
+        self.write_config(extra='RDP_SMART_SIZING=$FALSE\nSFTP_ADVISORY_ENABLED=$FALSE')
         plain = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', self.plan('-v'))
         self.assertRegex(plain, r'RDP_SMART_SIZING.*False')
-        self.assertRegex(plain, r'sftp_advisory_enabled.*False')
+        self.assertRegex(plain, r'SFTP_ADVISORY_ENABLED.*False')

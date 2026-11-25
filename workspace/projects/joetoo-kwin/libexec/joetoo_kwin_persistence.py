@@ -22,7 +22,7 @@ LEGACY_SETTING_NAMES = '''snapshot_validation_timeout_ms screen_width screen_hei
 terminal_width_percent terminal_gap_percent terminal_height_percent terminal_left_percent terminal_top_percent terminal_row_gap_percent
 graphical_left_percent graphical_top_percent graphical_width_percent graphical_height_percent
 initial_focus_timeout_ms initial_focus_poll_interval_ms sftp_capability_timeout_ms
-sftp_advisory_enabled sftp_advisory_timeout_ms sftp_advisory_ssh_port
+SFTP_ADVISORY_ENABLED sftp_advisory_timeout_ms sftp_advisory_ssh_port
 rdp_registration_timeout_ms rdp_registration_poll_ms rdp_registration_event_limit rdp_registration_window_limit rdp_backend_log_byte_limit
 rdp_x11_renderer rdp_x11_identity_settle_ms rdp_remote_width rdp_remote_height RDP_SMART_SIZING
 rdp_initial_client_width rdp_initial_client_height rdp_windowing_backend rdp_security_protocol rdp_certificate_policy
@@ -172,7 +172,7 @@ def intent(data):
         raise ValueError('incomplete effective restore settings')
     enums = {'rdp_windowing_backend': ('auto', 'wayland', 'x11'), 'rdp_x11_renderer': ('auto', 'software'),
              'rdp_security_protocol': ('nla', 'negotiate'), 'rdp_certificate_policy': ('strict', 'prompt'),
-             'RDP_SMART_SIZING': ('0', ''), 'sftp_advisory_enabled': ('0', '')}
+             'RDP_SMART_SIZING': ('0', ''), 'SFTP_ADVISORY_ENABLED': ('0', '')}
     for name, value in values.items():
         if not isinstance(value, str) or (value not in enums[name] if name in enums else not re.fullmatch(r'[0-9]{1,8}', value)):
             raise ValueError('invalid restore settings (redacted)')

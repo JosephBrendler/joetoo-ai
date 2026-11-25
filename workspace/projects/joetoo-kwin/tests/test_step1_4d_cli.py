@@ -16,7 +16,7 @@ class TestMultiLaunchFixtureTests(TestCase):
     @staticmethod
     def run_fixture(fail=False):
         source = CLIENT.read_text()
-        start = source.index('test_multi_launch() {')
+        start = source.index('test_multi_launch()')
         end = source.index('\n}\n', start) + 2
         implementation = source[start:end]
         with TemporaryDirectory() as tmp:
@@ -65,7 +65,7 @@ class TestMultiLaunchFixtureTests(TestCase):
         self.assertIn('        open_plan ;;', source)
 
         # The fixture still uses managed positive registration, not legacy adoption.
-        start = source.index('test_multi_launch() {')
+        start = source.index('test_multi_launch()')
         end = source.index('\n}\n', start) + 2
         fixture = source[start:end]
 

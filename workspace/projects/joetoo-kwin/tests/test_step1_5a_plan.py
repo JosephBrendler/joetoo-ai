@@ -19,6 +19,21 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = Path('/usr/sbin/script_header_joetoo')
 
+# Fixed reference inputs for tests asserting exact pixel geometry. These are
+# explicit test fixtures, never claims about the product's mutable defaults.
+REFERENCE_GEOMETRY = (
+    'terminal_width_percent=87\n'
+    'terminal_height_percent=85\n'
+    'terminal_gap_percent=2\n'
+    'terminal_row_gap_percent=3\n'
+    'terminal_left_percent=1\n'
+    'terminal_top_percent=5\n'
+    'graphical_left_percent=5\n'
+    'graphical_top_percent=3\n'
+    'graphical_width_percent=94\n'
+    'graphical_height_percent=90\n'
+)
+
 
 class PlannerHarness:
     def setUp(self):
@@ -55,14 +70,22 @@ class PlannerHarness:
                 '/etc/joetoo-kwin/defaults.conf', str(self.system_defaults)))
         self.write_config()
 
-    def write_config(self, records=None, extra=''):
+    def write_config(self, records=None, extra='', *, reference_geometry=False):
         if records is None:
             records = ['1|konsole|ssh|unreachable.invalid', '1|konsole|local|btop']
         # Test inputs are literal trusted Bash strings; no user input is evaluated.
         self.config.write_text('screen_width=1920\nscreen_height=1080\n' +
                                'desktop_session_list=(\n' +
                                '\n'.join("'" + record + "'" for record in records) +
-                               '\n)\n' + extra + '\n')
+                               '\n)\n' + (REFERENCE_GEOMETRY if reference_geometry else '') + extra + '\n')
+
+    def builtin_default(self, name):
+        # Read the last effective numeric assignment; commented prior values
+        # are not authoritative, and tests must not freeze changing defaults.
+        source = (ROOT / 'libexec/joetoo-kwin-plan-functions').read_text()
+        matches = re.findall(rf'(?m)^[ \t]+{re.escape(name)}=(\d+)$', source)
+        self.assertTrue(matches, f'No numeric plan default for {name}')
+        return int(matches[-1])
 
     def run_cli(self, *args, expected=0):
         result = subprocess.run(['bash', str(self.client), *args], env=self.env,
@@ -103,13 +126,29 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
     def test_default_budget_and_effective_config_before_plan(self):
         output = self.plan('-v')
         self.assertLess(output.index('CONFIG'), output.index('DRY RUN'))
-        self.assertIn('terminal_width_percent=87', output)
+        names = ('terminal_width_percent', 'terminal_height_percent',
+                 'terminal_gap_percent', 'terminal_left_percent', 'terminal_top_percent')
+        defaults = {name: self.builtin_default(name) for name in names}
+        for name, value in defaults.items():
+            self.assertIn(f'{name}={value}', output)
         self.assertIn('not autodetected', output)
-        self.assertEqual([row[-4:] for row in self.rows(output)],
-                         [['19', '54', '816', '918'], ['873', '54', '816', '918']])
+        self.assertTrue(1 <= defaults['terminal_width_percent'] <= 100)
+        self.assertTrue(1 <= defaults['terminal_height_percent'] <= 100)
+        # Independent two-panel arithmetic using the configured 1920x1080
+        # test display and actual current default settings.
+        width, height = 1920, 1080
+        x = width * defaults['terminal_left_percent'] // 100
+        y = height * defaults['terminal_top_percent'] // 100
+        gap = width * defaults['terminal_gap_percent'] // 100
+        panel_width = (width * defaults['terminal_width_percent'] // 100 - gap) // 2
+        panel_height = height * defaults['terminal_height_percent'] // 100
+        expected = [[x, y, panel_width, panel_height],
+                    [x + panel_width + gap, y, panel_width, panel_height]]
+        self.assertEqual([list(map(int, row[-4:])) for row in self.rows(output)], expected)
 
     def test_config_overrides_defaults_then_cli_overrides_config(self):
-        self.write_config(extra='terminal_width_percent=80\nterminal_gap_percent=4\nverbosity=6')
+        self.write_config(extra='terminal_width_percent=80\nterminal_gap_percent=4\nverbosity=6',
+                          reference_geometry=True)
         self.client.write_text(self.client.read_text().replace('exit "$mission_rc"', 'printf "TEST_VERBOSITY=%s\\n" "$verbosity"\nexit "$mission_rc"'))
         output = self.plan('-q')
         self.assertIn('TEST_VERBOSITY=5', output)
@@ -137,7 +176,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
         for count in (1, 3, 4):
             with self.subTest(count=count):
                 self.write_config(['1|konsole|direct|'] * count,
-                                  'screen_width=2560\nscreen_height=1440')
+                                  'screen_width=2560\nscreen_height=1440', reference_geometry=True)
                 rows = self.rows(self.plan())
                 self.assertEqual(len(rows), count)
                 rects = [list(map(int, row[-4:])) for row in rows]
@@ -153,7 +192,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
 
     def test_graphical_windows_do_not_consume_terminal_slots(self):
         self.write_config(['1|konsole|ssh|unreachable.invalid', '1|vncviewer|via-ssh|host|under',
-                           '1|konsole|direct|', '2|konsole|direct|'])
+                           '1|konsole|direct|', '2|konsole|direct|'], reference_geometry=True)
         rows = self.rows(self.plan())
         self.assertEqual([row[1] for row in rows], ['1', '2', '3', '1'])
         self.assertEqual(rows[0][-4:], ['19', '54', '816', '918'])
@@ -164,7 +203,8 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
     def test_custom_offsets_height_and_row_gutters(self):
         self.write_config(['1|konsole|direct|'] * 4,
                           'terminal_left_percent=2\nterminal_top_percent=10\n'
-                          'terminal_height_percent=80\nterminal_row_gap_percent=4')
+                          'terminal_height_percent=80\nterminal_row_gap_percent=4',
+                          reference_geometry=True)
         rows = self.rows(self.plan())
         self.assertEqual(rows[0][-4:], ['38', '108', '816', '410'])
         self.assertEqual(rows[2][-4:], ['38', '561', '816', '410'])
@@ -295,6 +335,7 @@ class InstalledHeaderPlannerTests(PlannerHarness, unittest.TestCase):
         self.client.write_text((ROOT / 'joetoo-kwin').read_text().replace(
             'source /usr/sbin/script_header_joetoo',
             'source /usr/sbin/script_header_joetoo\nchecknotroot() { :; }', 1))
+        self.write_config(reference_geometry=True)
         output = self.plan()
         plain = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', output)
         self.assertIn('DRY RUN: [2]', plain)
@@ -319,7 +360,8 @@ class InstalledHeaderPlannerTests(PlannerHarness, unittest.TestCase):
         self.assertIn('TEST_VERBOSITY=5', self.plan('-qqqqqqqq'))
 
     def test_validator_diagnostic_does_not_interrupt_open_status_line(self):
-        self.write_config(['21|konsole|local|btop'])
+        # 26 exceeds KWin 6's maximum 25, not merely a mutable default.
+        self.write_config(['26|konsole|local|btop'])
         result = subprocess.run(['bash', str(self.client), '-c', '-f', str(self.config)],
                                 env=self.env, text=True, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, timeout=20)

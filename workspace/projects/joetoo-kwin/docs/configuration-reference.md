@@ -131,7 +131,7 @@ frame geometry; remote pixel and initial client sizes below do not replace it.
 | `initial_focus_timeout_ms` | 500 | 1..2000 ms; bounded observation after one focus request |
 | `initial_focus_poll_interval_ms` | 25 | 1..250 ms and <= focus timeout; current Bash spelling accepts at most two digits, so use 1..99 through the CLI |
 | `sftp_capability_timeout_ms` | 2000 | 1..10000 ms; local capability check |
-| `sftp_advisory_enabled` | `$TRUE` | `$TRUE`/`$FALSE`; optional post-confirmation NSS/TCP advisory |
+| `SFTP_ADVISORY_ENABLED` | `$TRUE` | `$TRUE`/`$FALSE`; optional post-confirmation NSS/TCP advisory |
 | `sftp_advisory_timeout_ms` | 2000 | 1..10000 ms per advisory stage |
 | `sftp_advisory_ssh_port` | 22 | 1..65535; advisory fallback port, explicit SFTP URI port takes precedence |
 
@@ -260,7 +260,7 @@ rdp_remote_height=1080
 rdp_windowing_backend=wayland
 rdp_registration_timeout_ms=600000
 RDP_SMART_SIZING=$FALSE
-sftp_advisory_enabled=$FALSE
+SFTP_ADVISORY_ENABLED=$FALSE
 # End of example
 
 ```
