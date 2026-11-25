@@ -2,42 +2,130 @@
 # Copyright 2025-2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Sourced by joetoo-kwin; geometry and ownership remain with their existing owners.
-# shellcheck disable=SC2154
+# The CLI/header supplies configuration, planner arrays and messaging functions;
+# this library does not initialize them. j_msg takes a numeric severity from
+# header globals: -p suppresses its standard prefix, -m suppresses emoji, and
+# -n keeps the line open for report_action's right-margin result.
 
-launch_resource() {
+launch_resource() # Run the desktop-capacity or local-path helper with literal arguments
+{
+    # BASH_SOURCE[0] names this sourced library, whereas $0 names the CLI.
+    # Resolve the Python helper beside this file, independently of the current
+    # working directory; the source/install layout must keep these siblings.
+    # Quoted "$@" preserves each mode argument (including JSON) as one argument.
+    # The helper writes JSON and returns 0, or explains failure on stderr and
+    # returns 1. This wrapper leaves interpretation and stopping to its caller.
     python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_launch_resources.py" "$@"
 }
+# @usage launch_resource MODE [ARG...]
+# @args MODE: local-path TARGET CONFIG, snapshot, provision REQUIRED BASELINE
+# @cont or verify REQUIRED BASELINE; BASELINE is the helper's JSON snapshot
+# @ret helper status; writes its JSON result to stdout on success
+# @deps python3, dirname, sibling joetoo_kwin_launch_resources.py
+# @rule provision may append KWin desktops; verify must not create them
+# @note local-path resolves relative paths against HOME, not the config directory
 
 # Only called from confirmed execution, immediately before the SFTP launch.
 # Reporting/helper failures cannot change the managed application outcome.
-sftp_launch_advisory() {
+sftp_launch_advisory() # Report bounded SFTP reachability hints without vetoing a launch
+{
+    # check_plan loads plan_defaults, trusted config layers and CLI overrides.
+    # Its validator accepts the Joetoo pseudo-boolean TRUE=0 or FALSE="" here:
+    # [[ value ]] tests nonempty text, not numeric truth. Disabled advice returns
+    # success immediately; it must not veto a confirmed Dolphin SFTP request.
     [[ $sftp_advisory_enabled ]] || return 0
     local _sa_result _sa_warning _sa_observation
+    # The normalized URI comes from open_plan, after confirmation. Python
+    # reuses the URI validator and bounds NSS/getent and nc zero-I/O TCP checks;
+    # it never authenticates or lists the remote directory. The URI is stdin,
+    # with timeout milliseconds and default SSH port as separate argv values.
+    # BASH_SOURCE[0] locates the sibling helper, not the invoking CLI or cwd.
+    # $(...) captures stdout JSON, strips trailing newlines and runs in a
+    # subshell; the if tests the pipeline status. Normal helper exceptions are
+    # already converted to inconclusive JSON; execution failures reach else.
     if _sa_result=$(printf '%s' "$1" | python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_sftp_advisory.py" \
         "$sftp_advisory_timeout_ms" "$sftp_advisory_ssh_port"); then
+        # Expected object: resolution/tcp status strings, optional port, and a
+        # warning string (empty means no warning). jq -r emits an unquoted string;
+        # -e fails for false/null or no selected result. select rejects a nonstring
+        # warning. Invalid JSON or a missing/nonstring warning uses our fixed
+        # fallback; other observation fields are not schema-validated here.
         _sa_warning=$(jq -er '.warning | select(type == "string")' <<< "$_sa_result") || _sa_warning='SFTP advisory: result unavailable; launching Dolphin anyway.'
+        # Only nonempty warnings are printed. The final || : deliberately absorbs
+        # j_msg UI/logging failure: advice and its presentation cannot cancel the
+        # already-confirmed application launch. ':' is the successful shell no-op.
         [[ -z $_sa_warning ]] || j_msg "-${warn}" -p "$_sa_warning" || :
+        # Keep the other helper fields as compact JSON (-c), removing warning so
+        # it is not repeated at debug severity. Bad JSON gets the literal fallback
+        # 'unavailable'. Debug reporting is also best-effort, not launch status.
         _sa_observation=$(jq -c 'del(.warning)' <<< "$_sa_result") || _sa_observation='unavailable'
         j_msg "-${debug}" -p "SFTP NSS/TCP advisory observation (not SSH authentication or SFTP listing verification): $_sa_observation" || :
     else
+        # No usable helper process result exists. Use a fixed inconclusive warning
+        # and still return success; Dolphin/KIO may use different SSH/NSS settings.
+        # || : absorbs a reporting failure on this fallback path as well.
         j_msg "-${warn}" -p 'SFTP advisory: helper unavailable/inconclusive; launching Dolphin anyway.' || :
     fi
     return 0
 }
+# @usage sftp_launch_advisory URI
+# @args $1: validated, normalized Dolphin SFTP URI
+# @ret 0, including disabled, inconclusive and failed advisory/reporting paths
+# @deps python3, dirname, jq, j_msg, sibling SFTP advisory helper
+# @vars reads sftp_advisory_enabled, sftp_advisory_timeout_ms,
+# @append sftp_advisory_ssh_port and header warn/debug severities
+# @req caller has obtained launch confirmation
+# @rule NSS/TCP observations prove neither SSH authentication nor remote listing
+# @note does not change the managed application's launch result
 
 # Capture only allowlisted effective settings and the complete original recipe.
 # The implied logical slot is retained independently from physical panel index.
-configured_restore_intent() {
+configured_restore_intent() # Encode the original recipe and allowlisted effective restore settings
+{
     local _ri_helper _ri_name _ri_names
+    # Use the same installed sibling-layout assumption as launch_resource.
+    # The persistence helper owns the export allowlist; do not enumerate all
+    # shell variables or serialize trusted executable config files into a save.
     _ri_helper="$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_persistence.py"
+    # Discover whitespace-separated setting names first. Failure is an
+    # operational capture error (2), distinct from a valid but unrestorable
+    # recipe that the second helper call represents as JSON null.
     _ri_names=$(python3 "$_ri_helper" --setting-names) || return 2
+    # Split only helper-owned setting names; ${!name} indirectly reads the named
+    # effective global. printf emits alternating name/value fields terminated by
+    # NUL, preserving whitespace and empty values across the pipe. Python checks
+    # the exact field count and validates/normalizes the allowlisted settings.
+    # _op_i is open_plan's dynamically scoped current index. Recipe argv supplies
+    # desktop, logical slot, program, mode, original target, resolved layer and
+    # optional frame override. Missing override becomes empty via ${...:-}.
+    # The helper emits intent JSON or null for a valid launch outside the safe
+    # export subset. open_plan warns on null but stops on command failure.
     for _ri_name in $_ri_names; do printf '%s\0%s\0' "$_ri_name" "${!_ri_name}"; done | \
         python3 "$_ri_helper" --intent "${planned_desktop[$_op_i]}" "${planned_slot[$_op_i]}" \
         "${planned_program[$_op_i]}" "${planned_mode[$_op_i]}" "${planned_target[$_op_i]}" "${planned_layer[$_op_i]}" "${desktop_session_frames[$_op_i]:-}"
 }
+# @usage configured_restore_intent
+# @ret writes intent JSON, including null for an unrestorable recipe
+# @ret 2 if setting-name discovery fails; otherwise the intent pipeline status
+# @deps python3, dirname, sibling joetoo_kwin_persistence.py
+# @vars reads caller-local _op_i, planned desktop/slot/program/mode/target/layer
+# @append arrays, desktop_session_frames and helper-allowlisted setting globals
+# @req called within the current validated launch entry's dynamic Bash scope
+# @rule recipe metadata grants neither managed ownership nor close authority
+# @note null permits launch but makes the record ineligible for faithful -S export
 
 # Encode a validated recipe and existing budgets; targets never become shell code.
-rdp_configured_job() {
+rdp_configured_job() # Serialize one planned RDP entry without evaluating its target
+{
+    # _op_i comes from open_plan, or launch_preflight's shadowing local. Raw
+    # slurp (-Rs) makes all target stdin one JSON string, never jq/shell code.
+    # --argjson parses validated numbers/objects; --arg makes timeout strings
+    # that configured_job subsequently validates and converts to integer budgets.
+    # The jq object combines plan frame/slot, global RDP settings and registration
+    # bounds; optional intent is omitted when null. Invalid JSON fails this job
+    # build, so callers stop rather than invoke a frontend with partial data.
+    # RDP uses the existing VNC-named call/placement budgets; these are mechanical
+    # waits, separate from registration and remote authentication.
     printf '%s' "${planned_target[$_op_i]}" | jq -Rs \
         --argjson intent "${launch_intent_json:-null}" \
         --argjson settings "$rdp_settings" \
@@ -51,40 +139,103 @@ rdp_configured_job() {
          mechanical:{call_timeout_ms:$call,placement_timeout_ms:$placement}} +
          (if $intent == null then {} else {intent:$intent} end)'
 }
+# @usage rdp_configured_job
+# @ret jq status; writes a structured job to stdout on success
+# @deps jq
+# @vars reads caller-local _op_i, launch_intent_json, planned_* arrays,
+# @append rdp_settings, rdp_bounds, vnc_dbus_timeout_ms, vnc_placement_timeout_ms
+# @req validated plan, settings and bounds; optional intent is JSON or null
+# @rule planner-owned outer frame is separate from RDP remote/client dimensions
+# @note existing VNC-named mechanical budgets are also used by this RDP frontend
 
-launch_configured_rdp() {
+launch_configured_rdp() # Run the owned RDP frontend and retain its structured local result
+{
+    # The Python frontend returns one structured local result. On successful
+    # handoff its worker retains the original broker connection/child supervision;
+    # a verified clean pending failure instead ends the worker and owned child.
+    # Bash locals shadow caller variables; the timestamp initializer reuses the
+    # caller's timestamp when nonempty, or obtains one for a direct adapter call.
     local _rl_job _rl_rc
     local launch_attempt_timestamp=${launch_attempt_timestamp:-$(timestamp)}
+    # Clear shared output state so an earlier entry's IDs or clean-failure flag
+    # cannot be mistaken for this attempt. Failure to build the current job
+    # returns 2 before starting any RDP frontend.
     launch_registration_id=""; launch_placement_id=""; launch_rdp_result=""; LAUNCH_CLEAN_FAILURE=$FALSE
     _rl_job=$(rdp_configured_job) || return 2
     j_msg "-${notice}" -p "[$launch_attempt_timestamp] Starting owned SDL RDP viewer; remote authentication remains unverified"
-    # Job data uses FD 3, preserving stdin for the original interactive session.
-    # The frontend/worker must never inherit this configured invocation's lock.
+    # <<< supplies a here-string (JSON plus newline) on FD 3, selected by
+    # --job-fd; ordinary stdin stays available for the interactive session.
+    # 9>&- closes the inherited launcher flock descriptor in the child only.
+    # Capture stdout and the real frontend rc in if/else; using ! then $? would
+    # capture the inverted condition instead. Stderr remains separately visible.
     if launch_rdp_result=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_rdp_launch.py" \
         --job-fd 3 3<<< "$_rl_job" 9>&-); then _rl_rc=0; else _rl_rc=$?; fi
     j_msg "-${info}" -m "[$launch_attempt_timestamp] RDP local outcome (remote login unverified): $launch_rdp_result"
+    # The RDP schema nests registration and placement. jq -r emits raw strings;
+    # the // operator substitutes for absent/null/false values, falling back
+    # from registration.request_id to cleanup.request_id, then an empty string;
+    # placement may legitimately lack an ID on pre-registration failure. The
+    # here-string feeds captured JSON to jq; syntax failure returns 2. Empty
+    # IDs are checked later only on paths that require completed transactions.
     launch_registration_id=$(jq -r '.registration.request_id // .cleanup.request_id // ""' <<< "$launch_rdp_result") || return 2
     launch_placement_id=$(jq -r '.placement.request_id // ""' <<< "$launch_rdp_result") || return 2
+    # Emit only the allowlisted diagnostic code supplied by this owned mission's
+    # frontend. The fixed message does not forward arbitrary client-log text or
+    # assert that a password specifically was wrong. It changes no outcome.
     if (( _rl_rc != 0 )) && jq -e '.phase == "registration" and .diagnostic == "rdp_nla_logon_rejected"' \
         <<< "$launch_rdp_result" >/dev/null; then
         j_msg "-${err}" -p 'SDL RDP connection failed: remote NLA logon rejected (ERRCONNECT_LOGON_FAILURE 0x00020014)'
     fi
+    # Eligibility is positive machine evidence, not merely a failure label.
+    # The frontend has checked its private worker receipt, child reaping and
+    # broker/source state; require its cleanup confirmation and registration
+    # phase as well. jq -e turns the predicate into a status, >/dev/null hides
+    # its boolean output. Set a pseudo-boolean hint for open_plan; return the
+    # original frontend rc regardless, so continuation still counts as failure.
     if (( _rl_rc != 0 )) && jq -e '.continuation_eligible == true and .cleanup_confirmed == true
         and .phase == "registration" and (.state == "failed" or .state == "cancelled" or .state == "timeout")' <<< "$launch_rdp_result" >/dev/null; then
         LAUNCH_CLEAN_FAILURE=$TRUE
     fi
     return "$_rl_rc"
 }
+# @usage launch_configured_rdp
+# @ret frontend exit status; 2 if job construction or result-ID parsing fails
+# @deps rdp_configured_job, python3, dirname, jq, timestamp, j_msg
+# @vars reads current dynamic launch context and header severities/TRUE/FALSE
+# @vars writes launch_registration_id, launch_placement_id, launch_rdp_result,
+# @append LAUNCH_CLEAN_FAILURE; inherits launch_attempt_timestamp when available
+# @req confirmed entry and invocation lock; original interactive stdin available
+# @rule close FD 9 in the frontend so its worker cannot retain the launch flock
+# @rule clean failure requires the frontend's registration-phase cleanup evidence
+# @append and still requires independent remaining-entry preflight before continuing
+# @note frontend completion and local placement do not prove remote login
 
-# Same configured orchestration; VNC alone uses the deferred viewer-role path.
-launch_configured_window() {
+# Generic launches and both remote-viewer adapters share serial orchestration.
+# The remote adapters retain their own positive registration/result protocols.
+launch_configured_window() # Dispatch one launch through its existing application-specific adapter
+{
+    # Dispatch by the validated program token, forwarding the generic adapter's
+    # literal argument vector unchanged. RDP consumes the dynamic plan context
+    # instead; VNC below has its own structured job and result schema. Reset the
+    # pseudo-boolean cleanup hint on every entry, even when this adapter delegates.
+    # For Konsole/Dolphin, launch_managed_window arms broker registration/placement
+    # before spawning ARGV, hands over the child PID and waits for both results.
+    # It sets the shared request IDs and closes child FD 9; return its rc intact.
     local launch_attempt_timestamp=${launch_attempt_timestamp:-$(timestamp)}
     LAUNCH_CLEAN_FAILURE=$FALSE
     if [[ $1 == sdl-freerdp ]]; then launch_configured_rdp; return $?; fi
     if [[ $1 != vncviewer ]]; then launch_managed_window "$@"; return $?; fi
+    # The VNC-only branch starts with fresh result IDs. _op_i still selects the
+    # caller's planned target; positions come from this function's $2..$7 argv.
+    # Unlike the generic Konsole/Dolphin path, it never executes the trailing
+    # ARGV: the Python supervisor directly owns its SSH tunnel and viewer.
     local _vl_job _vl_result _vl_rc _vl_dir
     launch_registration_id=""; launch_placement_id=""
     _vl_dir=$(dirname -- "${BASH_SOURCE[0]}")
+    # jq -Rs quotes the target as data. --argjson inserts validated bounds,
+    # numeric destination/frame and optional restore intent; object addition
+    # adds this job's fields to the VNC bounds object. JSON build failure is 2,
+    # not permission to launch with defaults or reuse another entry's IDs.
     _vl_job=$(printf '%s' "${planned_target[$_op_i]}" | jq -Rs \
         --argjson intent "${launch_intent_json:-null}" \
         --argjson bounds "$vnc_bounds" --argjson slot "$2" --argjson desktop "$3" \
@@ -92,26 +243,59 @@ launch_configured_window() {
         '$bounds + {target:.,slot:$slot,desktop:$desktop,x:$x,y:$y,width:$width,height:$height} +
          (if $intent == null then {} else {intent:$intent} end)') || return 2
     j_msg "-${notice}" -p "[$launch_attempt_timestamp] Starting TigerVNC over dedicated SSH; desktop readiness may wait for VNC authentication"
+    # Send JSON on stdin to the VNC frontend; no interactive stdin handoff is
+    # needed by this interface. Close only the child's FD 9. Capture stdout and
+    # rc separately in if/else, preserving failure without set-e abort here.
     if _vl_result=$(printf '%s' "$_vl_job" | python3 "$_vl_dir/joetoo_kwin_vnc_launch.py" 9>&-); then _vl_rc=0
     else _vl_rc=$?; fi
+    # VNC returns flat request-ID fields, unlike RDP's nested objects. Missing
+    # fields become empty; malformed JSON returns 2. The orchestrator later
+    # requires IDs and independently reads terminal broker results.
     launch_registration_id=$(jq -r '.registration_request_id // ""' <<< "$_vl_result") || return 2
     launch_placement_id=$(jq -r '.placement_request_id // ""' <<< "$_vl_result") || return 2
     j_msg "-${notice}" -pn 'TigerVNC managed desktop launch result:'
+    # report_action renders the saved action status and may additionally report
+    # UI/logging faults. Ignore that reporting status here: the adapter must
+    # return the saved VNC rc, not replace it with a presentation failure.
     report_action "$_vl_rc" "$notice" || :
     j_msg "-${info}" -m "[$launch_attempt_timestamp] TigerVNC outcome (SSH/VNC usability remains separate): $_vl_result"
     if (( _vl_rc != 0 )); then j_msg "-${err}" -p "TigerVNC incomplete: $_vl_result"; fi
+    # VNC's frontend sets continuation_eligible only after checking its exact
+    # cleanup receipt, worker exit, broker owner/source and reserved-slot state.
+    # Require a failed/cancelled terminal label too; no field is inferred from
+    # local placement or remote login. open_plan rechecks remaining entries.
     if (( _vl_rc != 0 )) && jq -e '.continuation_eligible == true and
         (.state == "failed" or .state == "cancelled")' <<< "$_vl_result" >/dev/null; then
         LAUNCH_CLEAN_FAILURE=$TRUE
     fi
     return "$_vl_rc"
 }
+# @usage launch_configured_window CLASS SLOT DESKTOP X Y WIDTH HEIGHT -- ARGV...
+# @args CLASS: konsole, dolphin, vncviewer or sdl-freerdp
+# @args ARGV: literal command vector for generic launches; remote adapters use jobs
+# @ret selected adapter's status; VNC job/result-ID construction failures return 2
+# @deps launch_configured_rdp, launch_managed_window, python3, dirname, jq,
+# @append timestamp, j_msg, report_action, sibling VNC launch frontend
+# @vars reads current dynamic launch context, planned_target, vnc_bounds,
+# @append header severities/TRUE/FALSE and optional launch_attempt_timestamp
+# @vars writes launch_registration_id, launch_placement_id, LAUNCH_CLEAN_FAILURE;
+# @append the RDP branch also writes launch_rdp_result
+# @rule VNC frontend owns cleanup-receipt verification before advertising eligibility
+# @rule remote workers must not inherit the invocation's FD 9 lock
+# @note VNC and RDP have distinct result schemas and registration protocols
 
 # One supported executable-pair allowlist for configured and single-recipe launch.
-validate_launch_recipe_pair() {
+validate_launch_recipe_pair() # Validate the shared program/mode allowlist with field-specific errors
+{
+    # Combine two already-separated recipe tokens for exact case matching;
+    # this is an allowlist of program/mode pairs, not executable evaluation.
+    # Targets, runtime prerequisites and broker ownership are checked elsewhere.
     case $1:$2 in
         konsole:ssh|konsole:local|dolphin:local|dolphin:sftp|vncviewer:ssh|sdl-freerdp:rdp) return 0 ;;
     esac
+    # A known program with the wrong mode gets its own accepted-mode list.
+    # Unknown program input is redacted instead of echoed. plan_error prints the
+    # diagnostic; the explicit return 2 preserves recipe-validation classification.
     case $1 in
         konsole) plan_error 'invalid MODE for konsole; expected local or ssh' ;;
         dolphin) plan_error 'invalid MODE for dolphin; expected local or sftp' ;;
@@ -121,42 +305,79 @@ validate_launch_recipe_pair() {
     esac
     return 2
 }
+# @usage validate_launch_recipe_pair PROGRAM MODE
+# @args $1: program token; $2: mode token
+# @ret 0 for a supported pair; 2 after an invalid-program/mode diagnostic
+# @deps plan_error
+# @rule does not validate targets, availability, ownership or broker state
 
-launch_preflight() {
+launch_preflight() # Recheck prerequisites, broker health and reservations for the current plan
+{
+    # Bash locals are dynamically scoped: shadow _op_i so job construction uses
+    # this scan index without corrupting open_plan's current execution index.
     local _lp_status _lp_managed _lp_observed _lp_i _lp_conflicts _op_i _lp_job
+    # These tools underpin every adapter and JSON/bus check. command -v checks
+    # availability without executing them; missing prerequisites return 2 before
+    # confirmation/launch during check_plan's initial preflight.
     for _lp_i in bash jq qdbus6 python3; do
         command -v "$_lp_i" >/dev/null || { plan_error "missing executable [$_lp_i]"; return 2; }
     done
+    # Scan all planned entries, not the optional index passed by open_plan.
+    # Rechecking the whole remaining plan prevents a later invalid entry from
+    # being discovered only after more applications have started. Adapter-local
+    # checks also fill normalized launch inputs used after confirmation.
     for ((_lp_i=0; _lp_i<${#planned_desktop[@]}; _lp_i++)); do
         validate_launch_recipe_pair "${planned_program[$_lp_i]}" "${planned_mode[$_lp_i]}" || return $?
         case ${planned_program[$_lp_i]}:${planned_mode[$_lp_i]} in
+            # A local Dolphin target is normalized by Python to an existing readable
+            # HOME-relative/absolute directory. The helper emits a JSON string; jq -er
+            # requires that type and decodes it into the parallel planned_local_path
+            # array. Any failure rejects this recipe, with no Dolphin spawn.
             dolphin:local)
                 command -v dolphin >/dev/null || return 2
                 _lp_status=$(launch_resource local-path "${planned_target[$_lp_i]}" "$config") || return 2
                 planned_local_path[_lp_i]=$(jq -er 'select(type == "string")' <<< "$_lp_status") || return 2 ;;
+            # Check local Dolphin/KIO SFTP capability, not remote reachability. The
+            # validator already stored the normalized URI as a JSON string in
+            # planned_sftp_uri; decode it for literal argv use later. This preflight
+            # must not perform the post-confirmation NSS/TCP advisory.
             dolphin:sftp)
                 command -v dolphin >/dev/null || { plan_error 'missing executable [dolphin]'; return 2; }
                 _lp_status=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_sftp_capability.py" "$sftp_capability_timeout_ms") || return 2
                 planned_remote_uri[_lp_i]=$(jq -er 'select(type == "string")' <<< "${planned_sftp_uri[$_lp_i]}") || return 2 ;;
             sdl-freerdp:rdp)
-                # Completed entries already own their reservations in this invocation.
-                # Keep the global health checks below and preflight every unlaunched entry.
+                # Handled entries are not new RDP attempts; successful ones already
+                # own reservations. Keep global guards and check unlaunched entries.
                 [[ ! ${launch_finished[${planned_desktop[$_lp_i]}]:-} && ! ${launch_done_entry[$_lp_i]:-} ]] || continue
+                # Bind this scan index for rdp_configured_job through Bash dynamic scope.
+                # --preflight validates job, backend evidence, prerequisites and broker slot
+                # state without starting a viewer. Job FD 3 leaves stdin alone; close FD 9
+                # in case a future subprocess outlives this check. Any refusal returns 2.
                 _op_i=$_lp_i
                 _lp_job=$(rdp_configured_job) || return 2
                 if ! _lp_status=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_rdp_launch.py" \
                     --preflight --job-fd 3 3<<< "$_lp_job" 9>&-); then
                     plan_error 'RDP preflight refused; check explicit backend, prerequisites and broker state'; return 2
                 fi ;;
+            # This VNC preflight checks local supervisor prerequisites; shared broker
+            # health/reservations are checked below. Its result is used only as status,
+            # so no managed registration is created by this branch.
             vncviewer:ssh)
                 if ! _lp_status=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_vnc_launch.py" --preflight); then
                     plan_error 'TigerVNC supervisor prerequisites unavailable'; return 2
                 fi ;;
+            # Require the local terminal, nc probe and SSH client. This token grammar
+            # permits the existing SSH destination form, not arbitrary shell options.
+            # Actual SSH reachability/authentication is deliberately not a preflight
+            # success requirement: an owned placeholder terminal remains useful.
             konsole:ssh)
                 command -v konsole >/dev/null || return 2
                 command -v nc >/dev/null && command -v ssh >/dev/null || return 2
                 [[ ${planned_target[$_lp_i]} =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.@:-]*$ ]] || {
                     plan_error 'invalid SSH target'; return 2; } ;;
+            # Permit only an available executable basename, not a shell command,
+            # absolute path or option string. The original interactive Bash/session
+            # wrapper will later execute this target using its established contract.
             konsole:local)
                 command -v konsole >/dev/null || return 2
                 if [[ ! ${planned_target[$_lp_i]} =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.+-]*$ ]] ||
@@ -166,20 +387,39 @@ launch_preflight() {
             *) plan_error "unsupported executable recipe [${planned_program[$_lp_i]}:${planned_mode[$_lp_i]}]"; return 2 ;;
         esac
     done
+    # RegistryStatus is a JSON string returned by the broker at bus/path/iface,
+    # not qdbus's textual process status. Fail on IPC or invalid capability
+    # response; launch intent must be understood by this broker version.
+    # jq -e returns nonzero for a false/null predicate or malformed JSON.
     _lp_status=$(qdbus6 "$bus" "$path" "$iface.RegistryStatus") || return 1
     jq -e '.recovery_snapshot_protocol == 1' <<< "$_lp_status" >/dev/null || {
         plan_error 'compatible Step 1.7 broker required for launch-intent capture'; return 1; }
+    # Nonempty validated VNC bounds mean this plan needs the viewer-identity
+    # protocol, including X11/XWayland positive role selection. Absence of that
+    # capability must not fall back to title/class/PID-only adoption.
     if [[ -n ${vnc_bounds:-} ]]; then
         jq -e '.viewer_protocol == 1' <<< "$_lp_status" >/dev/null || {
             plan_error 'resident lacks TigerVNC X11/XWayland identity capability'; return 2; }
     fi
+    # Only inactive/ready recovery, synchronized observation, no uncertain
+    # managed presence/cleanup, no active close or registration and a terminal
+    # placement allow new work. Retained OK/ERROR placement history is not Busy.
+    # This is a health snapshot, never authority to force past the broker's
+    # independent guards when submitting the actual registration/placement.
+    # The recovery // "inactive" fallback permits the legacy absent field;
+    # explicit pending/running counts and synchronized presence remain required.
     jq -e '((.recovery // "inactive") == "inactive" or .recovery == "ready") and .managed_close_active != true and .observation.synchronized == true and .presence_counts.uncertain == 0 and .viewer_cleanup_uncertain != true
         and .request_counts.pending == 0 and .request_counts.running == 0
         and (.placement_transaction.state == "IDLE" or .placement_transaction.state == "OK"
              or .placement_transaction.state == "ERROR")' <<< "$_lp_status" >/dev/null || {
         plan_error 'broker state unresolved or required preflight interface unavailable'; return 1; }
+    # Initial stacking/focus is a separate serial transaction. Require its
+    # protocol and no active cohort before starting another plan entry.
     jq -e '.initial_layout_protocol == 1 and .initial_layout_active == false' <<< "$_lp_status" >/dev/null || {
         plan_error 'compatible initial-layout resident/broker required, or initial layout Busy'; return 1; }
+    # _op_single is open_plan's caller-local flag, visible through dynamic
+    # scope. Single under needs the lower protocol; other accepted -L layers
+    # need raise. Configured -o uses ordinary cohort policy instead.
     if [[ ${_op_single:-} ]]; then
         if [[ ${planned_layer[0]} == under ]]; then
             jq -e '.single_lower_protocol == 1' <<< "$_lp_status" >/dev/null || {
@@ -189,17 +429,33 @@ launch_preflight() {
                 plan_error '-L: compatible single-window raise broker/resident required'; return 2; }
         fi
     fi
+    # ListManaged supplies retained intended desktop/slot reservations;
+    # ListObserved supplies observed frames only for an overlap warning. Verify
+    # the minimal array/coordinate schema before jq iteration. IPC/JSON failure
+    # returns 1 rather than interpreting an unavailable registry as empty.
     _lp_managed=$(qdbus6 "$bus" "$path" "$iface.ListManaged") || return 1
     jq -e '.windows | type == "array" and all(.[]; (.intended.desktop | type == "number")
         and (.intended.slot | type == "number"))' <<< "$_lp_managed" >/dev/null || return 1
     _lp_observed=$(qdbus6 "$bus" "$path" "$iface.ListObserved") || return 1
     jq -e '.windows | type == "array"' <<< "$_lp_observed" >/dev/null || return 1
     for ((_lp_i=0; _lp_i<${#planned_desktop[@]}; _lp_i++)); do
+        # Completion maps are local to this invocation, not persistent registry
+        # state. Skip already handled entries' own reservation checks; every
+        # unlaunched entry still competes with all retained registry records,
+        # including missing windows. ${...:-} treats an absent map entry as empty.
         [[ ! ${launch_finished[${planned_desktop[$_lp_i]}]:-} && ! ${launch_done_entry[$_lp_i]:-} ]] || continue
+        # --argjson supplies numeric desktop/slot values. Select matching intended
+        # coordinates and emit managed IDs as raw lines; empty output means none.
+        # No presence filter is used: a missing record still reserves its slot.
+        # A jq failure or any conflict stops before another application is started.
         _lp_conflicts=$(jq -r --argjson d "${planned_desktop[$_lp_i]}" --argjson s "${planned_slot[$_lp_i]}" \
             '.windows[] | select(.intended.desktop == $d and .intended.slot == $s) | .managed_id' <<< "$_lp_managed") || return 1
         [[ -z $_lp_conflicts ]] || { plan_error "managed desktop/slot conflict [$_lp_conflicts]"; return 2; }
-        # Observed overlap is a visual warning, never evidence of managed ownership.
+        # Exclude UUIDs in ListManaged, then consider observed windows on this
+        # desktop (or all desktops). The four strict inequalities test positive
+        # frame-rectangle intersection; touching edges do not count. jq -e is
+        # used as a yes/no gate; no match means no warning. This branch neither
+        # adopts windows nor rejects the plan, and is not an identity proof.
         if jq -e --argjson managed "$_lp_managed" --argjson d "${planned_desktop[$_lp_i]}" \
             --argjson x "${planned_x[$_lp_i]}" --argjson y "${planned_y[$_lp_i]}" \
             --argjson w "${planned_width[$_lp_i]}" --argjson h "${planned_height[$_lp_i]}" '
@@ -211,24 +467,54 @@ launch_preflight() {
         fi
     done
 }
+# @usage launch_preflight [ENTRY_INDEX]
+# @args optional index is accepted from open_plan but does not limit this scan
+# @ret 0 on completion; 2 for prerequisite/recipe/conflict refusals;
+# @append 1 for broker/query/schema or unresolved global state failures
+# @deps validate_launch_recipe_pair, launch_resource, rdp_configured_job,
+# @append bash, jq, qdbus6, python3, application executables and sibling helpers
+# @vars reads planned_* arrays, config, bus/path/iface, *_bounds and timeouts,
+# @append caller-local _op_single, launch_finished, launch_done_entry, header warn
+# @vars writes planned_local_path and planned_remote_uri
+# @req validated plan; completion maps belong only to this invocation
+# @rule completed/handled entries avoid self-conflict; global health checks remain
+# @rule retained missing registrations still reserve their desktop/slot
+# @note checks local prerequisites and D-Bus state without launching applications
+# @warn preflight is a snapshot, not an atomic reservation or authorization token
 
 # The CLI exits after open_plan returns. Keep FD 9 open for that invocation's
 # lifetime; kernel flock cleanup handles normal exit, cancellation and signals.
 # Never unlink this file: replacing its inode could allow two simultaneous locks.
-lock_configured_launcher() {
+lock_configured_launcher() # Hold the private serial-launch flock until the invoking CLI exits
+{
+    # Use the configured user's runtime directory, not a shared /tmp pathname.
+    # -O tests ownership by this effective user, -L rejects a symlink, and GNU
+    # stat %a must report exactly 700. An unavailable/unsafe directory fails
+    # closed rather than falling back to an unprotected lock location.
     local _ll_runtime=${XDG_RUNTIME_DIR:-} _ll_file
     if [[ -z $_ll_runtime || ! -d $_ll_runtime || -L $_ll_runtime || ! -O $_ll_runtime ]] ||
         [[ $(stat -c %a -- "$_ll_runtime" 2>/dev/null) != 700 ]]; then
         j_msg "-${err}" -p 'Configured launch requires a user-owned mode-700 XDG_RUNTIME_DIR'
         return 1
     fi
+    # flock supplies kernel descriptor-based exclusion; no hand-rolled PID
+    # file or stale-process guessing is used. Reject a missing tool.
     command -v flock >/dev/null || { j_msg "-${err}" -p 'Configured launch requires flock'; return 1; }
+    # Within the private directory, reject a symlink or any existing object
+    # that is not a regular file owned by this user. Existing safe lock files
+    # are reused to preserve the inode on which other launchers may be waiting.
     _ll_file=$_ll_runtime/joetoo-kwin-launch.lock
     if [[ -L $_ll_file ]] || { [[ -e $_ll_file ]] && [[ ! -f $_ll_file || ! -O $_ll_file ]]; }; then
         j_msg "-${err}" -p 'Unsafe configured-launch lock file'; return 1
     fi
-    # Runtime directory is private; creation permissions are private as well.
+    # The no-op ':' opens/creates the lock using append redirection without
+    # truncation. Parentheses scope umask 077 to this subshell only; they do not
+    # change the invoking shell's umask. Failure returns before opening FD 9.
     if ! (umask 077; : >> "$_ll_file"); then return 1; fi
+    # exec with no command leaves FD 9 open in this shell. flock -n attempts an
+    # exclusive lock without waiting. On Busy, close the descriptor and return
+    # 1; on success leave it open until CLI exit. Application/worker spawn paths
+    # must close their inherited copy or they could retain the lock afterward.
     exec 9>>"$_ll_file" || return 1
     if ! flock -n 9; then
         exec 9>&-
@@ -236,51 +522,103 @@ lock_configured_launcher() {
         return 1
     fi
 }
+# @usage lock_configured_launcher
+# @ret 0 when locked; 1 for unsafe runtime/lock path, Busy or lock setup failure
+# @deps stat, flock, j_msg
+# @vars reads XDG_RUNTIME_DIR and header err severity; opens caller FD 9
+# @req user-owned, nonsymlink mode-700 runtime directory
+# @rule keep the lock inode; unlinking it could permit independent simultaneous locks
+# @rule launched applications and persistent workers must close inherited FD 9
+# @note creation umask is scoped to a subshell, leaving the caller's umask unchanged
+# @note returning does not unlock; invocation exit releases the descriptor lock
 
-open_plan() {
+open_plan() # Confirm and execute a serial plan, then finalize each successful cohort
+{
+    # Counters and cohort state live only for this invocation. _op_i, the
+    # single-recipe fields, timestamp and restore intent are deliberately local
+    # but visible to called Bash functions through dynamic scope; adapters use
+    # that context without reconstructing the recipe or geometry.
     local _op_dir _op_i _op_failed=0 _op_initial_failed=0 _op_rc _op_state _op_status _op_group _op_payload _op_layout _op_try
     local _op_attempted=0 _op_completed=0 _op_single="" launch_attempt_timestamp launch_intent_json=""
+    # Quoted "$@" preserves each -L operand, including an empty target. No
+    # operands select configured -o; any operands mark single mode, with exact
+    # count/field validation performed in the existing CLI/check_plan path.
     local -a _op_single_fields=("$@")
     (( $# == 0 )) || _op_single=single
+    # These maps live for this invocation only. A handled clean failure is not
+    # a success; it is skipped on recheck without freeing any registry reservation.
     local -A launch_finished=() launch_done_entry=()
     local -a _op_entries=()
+    # Acquire serial-launch exclusion before validation/confirmation, retaining
+    # FD 9 throughout the mission. Resolve this library's physical directory
+    # with cd/pwd in a subshell (do not change the caller's cwd); require the
+    # session bashrc used by Konsole. Failure releases the lock only at CLI exit.
     lock_configured_launcher || return 1
     _op_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || return 1
     # When sourced, this helper's directory is libexec.
     launch_session_file=${_op_dir}/joetoo-kwin-session.bashrc
     [[ -r $launch_session_file ]] || return 1
+    # These arrays receive preflight-normalized Dolphin inputs. check_plan
+    # loads defaults/config/CLI settings, validates recipes, allocates logical
+    # slots and shared geometry, runs initial preflight and renders the plan.
+    # Its return is propagated; no application has been started at this point.
     declare -a planned_local_path=() planned_remote_uri=()
     check_plan launch || return $?
     local _op_required=0 _op_desktop _op_capacity _op_class
     local -a _op_argv
+    # Find the highest requested logical desktop; KWin needs at least this
+    # many desktops, even if the plan omits intermediate desktop numbers.
+    # The helper snapshot pins the current KWin owner and ordered desktop IDs;
+    # its numeric count is required before proposing any additions.
     for _op_desktop in "${planned_desktop[@]}"; do
         (( _op_desktop <= _op_required )) || _op_required=$_op_desktop
     done
     _op_capacity=$(launch_resource snapshot) || return 1
     local _op_current
     _op_current=$(jq -er '.count | select(type == "number")' <<< "$_op_capacity") || return 1
+    # Tell the operator whether confirmation will also provision desktops.
+    # No removal, renaming or desktop switch is requested by this helper path.
     if (( _op_current >= _op_required )); then
         j_msg "-${notice}" -p "KWin desktops: current [${_op_current}], required [${_op_required}]; existing desktop capacity is adequate"
     else
         j_msg "-${notice}" -p "KWin desktops: current [${_op_current}], required [${_op_required}]; append [$((_op_required - _op_current))] missing desktops after confirmation"
     fi
+    # Negative confirmation returns/exits before provisioning or child launch.
+    # After yes, provision checks the pinned owner/ID prefix and appends only
+    # missing desktops; it retains any partial additions on failure. Reuse its
+    # returned inventory as the baseline for subsequent no-creation checks.
     confirm_continue_or_exit || return 1
     _op_capacity=$(launch_resource provision "$_op_required" "$_op_capacity") || return 1
+    # desktop_groups preserves first-seen desktop order; the inner scan keeps
+    # recipe order within each group. _op_entries contains only this group's
+    # successful registration IDs, never IDs from failed or earlier groups.
     for _op_group in "${desktop_groups[@]}"; do
       _op_entries=()
       for ((_op_i=0; _op_i<${#planned_desktop[@]}; _op_i++)); do
         [[ ${planned_desktop[$_op_i]} == "$_op_group" ]] || continue
         # Recheck after confirmation and between entries; broker independently
         # guards each actual submission against concurrent conflicting launches.
+        # Clear the prior recipe's optional export metadata before whole-remaining-
+        # plan preflight. A refusal stops with current counts and leaves this
+        # cohort unfinalized; previously launched windows are not rolled back.
         launch_intent_json=""
         if ! launch_preflight "$_op_i"; then
             j_msg "-${err}" -p "Incomplete layout: completed [$_op_completed], failed [$_op_failed], skipped [$(( ${#planned_desktop[@]} - _op_attempted ))]; current cohort not finalized"
             return 1
         fi
+        # Immediately before this attempt, verify that KWin owner, desktop IDs
+        # and capacity still match. Unlike provision, verify may not create any.
+        # Capture one timestamp now (not at configuration time) for this attempt's
+        # messages. A clock-helper failure uses a diagnostic placeholder only.
         _op_capacity=$(launch_resource verify "$_op_required" "$_op_capacity") || return 1
         launch_attempt_timestamp=$(timestamp) || launch_attempt_timestamp=unavailable
         j_msg "-${notice}" -p "[$launch_attempt_timestamp] Launching desktop [${planned_desktop[$_op_i]}] slot [${planned_slot[$_op_i]}]"
         _op_class=${planned_program[$_op_i]}
+        # Build an argv array, not a command string: "${_op_argv[@]}" later keeps
+        # paths/URIs as literal arguments without eval or word splitting. Dolphin
+        # --new-window asks for a distinct managed window; -- ends option parsing.
+        # SFTP uses its validated URI and advisory; local mode uses the validated
+        # filesystem path. Neither branch claims remote authentication success.
         if [[ $_op_class == dolphin ]]; then
             if [[ ${planned_mode[$_op_i]} == sftp ]]; then
                 _op_argv=(dolphin --new-window -- "${planned_remote_uri[$_op_i]}")
@@ -292,13 +630,28 @@ open_plan() {
         elif [[ $_op_class == sdl-freerdp ]]; then
             _op_argv=() # RDP consumes its structured job, never a Konsole command.
         else
+            # VNC ignores this generic argv in launch_configured_window; only the
+            # Konsole adapter executes this original interactive-Bash command.
+            # env supplies mode/target to the session rcfile as data. --separate
+            # requests a new Konsole process; -e starts the following command.
+            # bash --rcfile selects our startup file and -i keeps the original
+            # Bash interactive after a local program or foreground SSH returns.
             _op_argv=(env JOETOO_SESSION_MODE="${planned_mode[$_op_i]}" JOETOO_SESSION_TARGET="${planned_target[$_op_i]}"
                 konsole --separate -e bash --rcfile "$launch_session_file" -i)
         fi
+        # Capture the validated original recipe/effective settings before starting
+        # this entry. A command error stops (2); JSON null only warns because some
+        # legacy launchable recipes cannot be safely exported for -S. Metadata is
+        # passed to registration, never used as window ownership authority.
         launch_intent_json=$(configured_restore_intent) || return 2
         if [[ $launch_intent_json == null ]]; then
             j_msg "-${warn}" -p 'Recipe remains launchable but cannot be faithfully exported by -S'
         fi
+        # Count actual attempts separately from successes/skips. Invoke the
+        # adapter in if/else to retain its real status immediately; IDs/result JSON
+        # are shared outputs in this shell, not lost in a command-substitution
+        # subshell. A nonzero result counts as failure even if clean continuation
+        # is subsequently permitted.
         _op_attempted=$((_op_attempted + 1))
         if launch_configured_window "$_op_class" "${planned_slot[$_op_i]}" "${planned_desktop[$_op_i]}" \
             "${planned_x[$_op_i]}" "${planned_y[$_op_i]}" "${planned_width[$_op_i]}" "${planned_height[$_op_i]}" \
@@ -308,6 +661,11 @@ open_plan() {
             _op_failed=$((_op_failed + 1))
             j_msg "-${err}" -p 'Window failed; layout is incomplete'
         fi
+        # Only a positively verified pre-registration cleanup receipt permits
+        # remote failure continuation. It marks this recipe handled, excludes it
+        # from stacking, and allows the next iteration's fresh preflight. Unknown
+        # cleanup or a registered viewer failure stops here without killing that
+        # viewer or pretending its historical slot became reusable.
         if [[ $_op_class == sdl-freerdp || $_op_class == vncviewer ]] && (( _op_rc != 0 )); then
             if [[ $LAUNCH_CLEAN_FAILURE ]]; then
                 # This entry is handled, not successful or a reusable historical slot.
@@ -321,14 +679,25 @@ open_plan() {
         fi
         # A local wait failure is not proof that broker work ended. Independently
         # require terminal exact-ID results before starting another transaction.
+        # All nonzero remote results have already continued or returned above,
+        # so this legacy VNC rc-2 branch adds no reachable case in current flow.
+        # The exact-ID checks below still matter for generic launch failures.
         if [[ $_op_class == vncviewer && $_op_rc == 2 ]]; then
             j_msg "-${err}" -p 'VNC launch cancelled or finalization unresolved; stopping subsequent launches'; return 1
         fi
+        # A surviving completion path must have both request IDs; empty fields
+        # cannot be used to poll whichever broker transaction happens to be current.
         [[ -n $launch_registration_id && -n $launch_placement_id ]] || return 1
         if [[ $_op_class == sdl-freerdp ]]; then
-            # Stage 2 conservatively stops on every unsuccessful RDP result;
-            # generalized known-clean continuation belongs to Stage 3.
+            # Known-clean pending failures have already continued above. A surviving
+            # RDP success must agree with the exact registered UUID and registry record.
             (( _op_rc == 0 )) || return 1
+            # RDP uses its own nested registration/placement result, not the generic
+            # PollManagedLaunch protocol. Require terminal local completion, identical
+            # managed ID/UUID in both phases and explicitly unverified remote state.
+            # Then query that managed ID and cross-check present/succeeded status,
+            # UUID and original registration request against the broker registry.
+            # Any mismatch or failed query stops; a frontend label alone is insufficient.
             jq -e '.state == "completed" and .registration.state == "registered"
                 and .placement.placement == "succeeded" and .remote_session == "unverified"
                 and .registration.window_uuid == .placement.window_uuid
@@ -339,11 +708,18 @@ open_plan() {
                 and .window.placement == "succeeded" and .window.window_uuid == $result.registration.window_uuid
                 and .window.request_id == $result.registration.request_id' <<< "$_op_state" >/dev/null || return 1
         else
+        # Generic/VNC paths use PollManagedLaunch JSON plus Status's textual
+        # OK/ERROR prefix for the exact placement ID. Require a terminal registration
+        # state (including VNC timeout/ambiguity); local process return alone cannot
+        # prove broker work ended. Nonterminal/unknown placement stops the schedule.
         _op_state=$(qdbus6 "$bus" "$path" "$iface.PollManagedLaunch" "$launch_registration_id") || return 1
         jq -e --arg class "$_op_class" '.state == "registered" or .state == "failed" or ($class == "vncviewer" and (.state == "timeout" or .state == "ambiguous"))' <<< "$_op_state" >/dev/null || return 1
         _op_status=$(qdbus6 "$bus" "$path" "$iface.Status" "$launch_placement_id") || return 1
         case $_op_status in OK*|ERROR*) ;; *) j_msg "-${err}" -p 'Unresolved placement; stopping incomplete layout'; return 1 ;; esac
         fi
+        # Terminal results make the entry handled for later preflight. Only rc 0
+        # adds a compact {registration_request_id,layer} JSON object to the cohort;
+        # failed entries keep the aggregate result incomplete and never enter it.
         launch_done_entry[$_op_i]=$TRUE
         if (( _op_rc == 0 )); then
             _op_completed=$((_op_completed + 1))
@@ -351,22 +727,42 @@ open_plan() {
                 '{registration_request_id:$id,layer:$layer}')")
         fi
       done
+      # Registration IDs bind only this successful cohort. The resident owns
+      # one-shot stacking/focus; previously verified frame placement stays separate.
       if (( ${#_op_entries[@]} > 0 )); then
+        # printf emits one JSON object per successful entry. jq -s slurps them
+        # into an array and -c emits compact payload JSON, with validated focus
+        # budgets. Single -L adds lower+settle for under, otherwise raise; configured
+        # -o adds neither flag and retains normal under/panel/over cohort behavior.
+        # This operation arranges stacking/focus, not the already-verified frames.
         _op_payload=$(printf '%s\n' "${_op_entries[@]}" | jq -sc \
             --argjson timeout "$initial_focus_timeout_ms" --argjson interval "$initial_focus_poll_interval_ms" \
             --argjson settle "$single_lower_settle_ms" --arg single "$_op_single" --arg layer "${planned_layer[0]}" \
             '{entries:.,focus_timeout_ms:$timeout,focus_poll_interval_ms:$interval} +
              (if $single == "single" and $layer == "under" then {single_lower:true,lower_settle_ms:$settle}
               elif $single == "single" then {single_raise:true} else {} end)') || return 1
+        # SubmitInitialLayout returns a transaction ID. Invoke the registered KWin
+        # shortcut so the resident can claim it and apply the owned UUID cohort;
+        # successful shortcut IPC is dispatch, not proof of stacking completion.
+        # Either call failing stops rather than submitting a duplicate/retry.
         _op_layout=$(qdbus6 "$bus" "$path" "$iface.SubmitInitialLayout" "$_op_payload") || return 1
         qdbus6 org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut joetoo_bridge_initial_layout >/dev/null || return 1
         _op_state=""
         j_msg "-${notice}" -p "Initializing desktop [$_op_group] stack/focus; geometry remains separately verified"
+        # Poll the returned transaction ID only. SUCCEEDED/FAILED are terminal;
+        # PENDING/RUNNING sleep 0.1 seconds, at most 100 iterations. IPC/JSON or
+        # unknown state stops immediately. This is an iteration bound, not an exact
+        # 10-second wall deadline (bus calls also take time); it does not cancel
+        # or retry a transaction that remains active.
         for ((_op_try=0; _op_try<100; _op_try++)); do
             _op_state=$(qdbus6 "$bus" "$path" "$iface.InitialLayoutStatus" "$_op_layout") || return 1
             _op_status=$(jq -er '.state' <<< "$_op_state") || return 1
             case $_op_status in SUCCEEDED|FAILED) break ;; PENDING|RUNNING) sleep .1 ;; *) return 1 ;; esac
         done
+        # Finish the announce/report line using terminal status, not dispatch
+        # success. A success-rendering failure returns 1; failure rendering is
+        # ignored because the operation is already incomplete. Keep the JSON
+        # at info severity for precise native-result inspection.
         j_msg "-${notice}" -pn "Desktop [$_op_group] initial stacking/focus result:"
         if [[ $_op_status == SUCCEEDED ]]; then
             report_action 0 "$notice" || return 1
@@ -374,14 +770,27 @@ open_plan() {
             report_action 1 "$notice" || :
         fi
         j_msg "-${info}" -m "Initial layout: $_op_state"
+        # A terminal FAILED cohort is counted and permits later desktop groups;
+        # an exhausted poll still in PENDING/RUNNING is unresolved and stops.
+        # Neither case rolls back application placement or closes verified windows.
         if [[ $_op_status != SUCCEEDED ]]; then
             j_msg "-${err}" -p "Initial stack/focus incomplete: $_op_state"
             [[ $_op_status == FAILED ]] || return 1
             _op_initial_failed=$((_op_initial_failed + 1))
         fi
       fi
+      # All entries in this group are handled, including clean pending failures.
+      # Marking the group prevents its own reservations from failing subsequent
+      # preflight; it does not promote any failed entry to successful.
       launch_finished[$_op_group]=$TRUE
     done
+    # Keep cohort failure separate from individual window placement counts.
+    # Skipped means never attempted; completed is incremented only after a
+    # successful adapter plus terminal broker checks. Final report_action
+    # returns failure for either entry or cohort failure, and may also return
+    # failure for a presentation fault after an otherwise successful mission.
+    # The CLI's outer mission wrapper separately restores its control window;
+    # initial cohort focus here is not the final keyboard-focus policy.
     if (( _op_initial_failed > 0 )); then
         j_msg "-${err}" -p "Initial stacking/focus incomplete for [$_op_initial_failed] desktop groups; window placement results remain separate"
     fi
@@ -389,3 +798,26 @@ open_plan() {
     j_msg "-${notice}" -pn "Configured layout: [$(( ${#planned_desktop[@]} - _op_failed ))/${#planned_desktop[@]}] windows completed ..."
     if (( _op_failed == 0 && _op_initial_failed == 0 )); then report_action 0 "$notice"; else report_action 1 "$notice"; fi
 }
+# @usage open_plan
+# @cont open_plan DESKTOP PROGRAM MODE TARGET [LAYER]
+# @args no operands: configured plan; operands: single-recipe CLI launch
+# @ret normal completion returns report_action status for aggregate entry/cohort
+# @append outcome; early failures propagate validation status or return 1/2
+# @deps lock_configured_launcher, check_plan, launch_preflight, launch_resource,
+# @append configured_restore_intent, launch_configured_window, sftp_launch_advisory,
+# @append confirm_continue_or_exit, timestamp, jq, qdbus6, sleep, j_msg, report_action
+# @vars reads planner/configuration globals, bus/path/iface, header severities and
+# @append TRUE/FALSE; supplies dynamic _op_i, _op_single, _op_single_fields,
+# @append launch_attempt_timestamp, launch_intent_json and completion maps to callees
+# @vars sets launch_session_file and consumes adapter result IDs/cleanup flags
+# @req called by the CLI whose exit releases FD 9; session bashrc must be readable
+# @rule plan validation and capacity inspection precede confirmation;
+# @append desktop provisioning follows confirmation, and fresh preflight
+# @append checks precede each serial application launch
+# @rule only successful entries join the desktop's one-shot initial-layout cohort
+# @rule unresolved remote ownership/cleanup stops subsequent launches; verified clean
+# @append pending failures may continue but leave the overall plan incomplete
+# @note header confirmation may exit the CLI directly on a negative answer
+# @note placement, initial stacking/focus and remote usability are separate outcomes
+# @warn early failure may leave verified windows or appended desktops in place;
+# @append this function provides neither atomic layout application nor rollback
