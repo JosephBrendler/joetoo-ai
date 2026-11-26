@@ -214,7 +214,7 @@ class PlannerTests(PlannerHarness, unittest.TestCase):
                       'terminal_width_percent=0', 'terminal_height_percent=101',
                       'terminal_gap_percent=99', 'terminal_row_gap_percent=99',
                       'terminal_top_percent=20', 'terminal_left_percent=20',
-                      'graphical_width_percent=99', 'graphical_top_percent=20',
+                      'graphical_width_percent=100', 'graphical_top_percent=20',
                       'screen_width=999999999999999999999999999999999',
                       'screen_width=01920', 'screen_width="1+2"', 'unset screen_width'):
             with self.subTest(extra=extra):

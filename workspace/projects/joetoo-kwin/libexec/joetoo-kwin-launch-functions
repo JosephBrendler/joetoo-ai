@@ -164,37 +164,64 @@ configured_restore_intent() # Encode the original recipe and allowlisted effecti
 # Encode a validated recipe and existing budgets; targets never become shell code.
 rdp_configured_job() # Serialize one planned RDP entry without evaluating its target
 {
-    local -a _rj_query=()
-    # _op_i comes from open_plan, or launch_preflight's shadowing local. Raw
-    # slurp (-Rs) makes all target stdin one JSON string, never jq/shell code.
-    # --argjson parses validated numbers/objects; --arg makes timeout strings
-    # that configured_job subsequently validates and converts to integer budgets.
+    local -a _jq_args=()
+    local _jq_object_constructor=""
+
+    # _op_i comes from open_plan, or launch_preflight's shadowing local
     # The jq object combines plan frame/slot, global RDP settings and registration
     # bounds; optional intent is omitted when null. Invalid JSON fails this job
     # build, so callers stop rather than invoke a frontend with partial data.
     # RDP uses the existing VNC-named call/placement budgets; these are mechanical
-    # waits, separate from registration and remote authentication.
+    # waits, separate from registration and remote authentication
+
     # Note: MANPAGER=cat man jq | grep -E ' -R:| -s:| --argjson| --arg '
-    #   --raw-input / -R:          - pass each line of text to the filter as a string (not json)
     #   --slurp / -s:              - read the input stream into an array and run the filter just once
+    #   --raw-input / -R:          - pass each line of text to the filter as a string (not json)
+    #   (but -Rs makes all target stdin one JSON string, instead of one array - still run filter only once)
     #   --arg name value:          - --arg foo 123 will bind $foo to "123".
     #   --argjson name JSON-text:  - --argjson foo 123 makes $foo available witn value 123.
+    #   (--argjson parses validated numbers/objects; --arg makes timeout strings
+    #    that configured_job subsequently validates and converts to integer budgets)
 
-    # construct query in in an array for readability
-    _rj_query=( jq -Rs )
-# resume edit here -->
-    printf '%s' "${planned_target[$_op_i]}" | jq -Rs \
-        --argjson intent "${launch_intent_json:-null}" \
-        --argjson settings "$rdp_settings" \
-        --argjson bounds "$rdp_bounds" --arg call "$vnc_dbus_timeout_ms" \
-        --arg placement "$vnc_placement_timeout_ms" \
-        --argjson desktop "${planned_desktop[$_op_i]}" --argjson slot "${planned_slot[$_op_i]}" \
-        --argjson x "${planned_x[$_op_i]}" --argjson y "${planned_y[$_op_i]}" \
-        --argjson width "${planned_width[$_op_i]}" --argjson height "${planned_height[$_op_i]}" '
-        {target:.,settings:$settings,desktop:$desktop,slot:$slot,x:$x,y:$y,width:$width,height:$height,
-         bounds:$bounds,
-         mechanical:{call_timeout_ms:$call,placement_timeout_ms:$placement}} +
-         (if $intent == null then {} else {intent:$intent} end)'
+    # built the json query args in in an array for readability
+    _jq_args=( -Rs )   #..........................................#slurp raw inputinto an array
+    _jq_args+=( --argjson intent "${launch_intent_json:-null}" )  # intent
+    _jq_args+=( --argjson settings "$rdp_settings" )  #...........# settings
+    _jq_args+=( --argjson bounds "$rdp_bounds" )  #...............# bounds
+    _jq_args+=( --arg call "$vnc_dbus_timeout_ms" )  #............# dbus call timeout (same as for vnc)
+    _jq_args+=( --arg placement "$vnc_placement_timeout_ms" )  #..# placement timeout (same as for vnc)
+    _jq_args+=( --argjson desktop "${planned_desktop[$_op_i]}" )  # desktop
+    _jq_args+=( --argjson slot "${planned_slot[$_op_i]}" )  #.....# slot
+    _jq_args+=( --argjson x "${planned_x[$_op_i]}" )  #...........# x
+    _jq_args+=( --argjson y "${planned_y[$_op_i]}" )  #...........# y
+    _jq_args+=( --argjson width "${planned_width[$_op_i]}" )  #...# width
+    _jq_args+=( --argjson height "${planned_height[$_op_i]}" )  #.# height
+
+    # build the json query object constructor as a single-quoted string to avoid bash expansion
+    # (match the field values passed as --arg and --argjson key:value pairs;
+    #  note that call and placement are nexted under mechanical, and match exact intent even if null)
+    _jq_object_constructor='{'
+    _jq_object_constructor+='target:.'   #..........# set the "target" key to . (entire current input value piped in from printf)
+    _jq_object_constructor+=',settings:$settings'   # assign each JSON key to the corresponding jq internal variable
+    _jq_object_constructor+=',desktop:$desktop'
+    _jq_object_constructor+=',slot:$slot'
+    _jq_object_constructor+=',x:$x'
+    _jq_object_constructor+=',y:$y'
+    _jq_object_constructor+=',width:$width'
+    _jq_object_constructor+=',height:$height'
+    _jq_object_constructor+=',bounds:$bounds'
+    _jq_object_constructor+=',mechanical:'   # create a nested JSON object under the "mechanical" key
+        _jq_object_constructor+='{'
+        _jq_object_constructor+='call_timeout_ms:$call'
+        _jq_object_constructor+=',placement_timeout_ms:$placement'
+        _jq_object_constructor+='}'
+    _jq_object_constructor+='}'
+    _jq_object_constructor+=' + '   # append object merge operator
+    _jq_object_constructor+='(if $intent == null then {} '   # conditionally append intent or empty object
+    _jq_object_constructor+='else {intent:$intent} end)'
+
+    # now pipe the raw json from this indexed target to the query formed above
+    printf '%s' "${planned_target[$_op_i]}" | jq "${_jq_args[@]}" "$_jq_object_constructor"
 }
 # @usage rdp_configured_job
 # @ret jq status; writes a structured job to stdout on success
