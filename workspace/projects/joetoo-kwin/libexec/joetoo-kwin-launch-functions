@@ -165,7 +165,7 @@ configured_restore_intent() # Encode the original recipe and allowlisted effecti
 rdp_configured_job() # Serialize one planned RDP entry without evaluating its target
 {
     local -a _jq_args=()
-    local _jq_object_constructor=""
+    local _jq_filter_string=""
 
     # _op_i comes from open_plan, or launch_preflight's shadowing local
     # The jq object combines plan frame/slot, global RDP settings and registration
@@ -184,7 +184,7 @@ rdp_configured_job() # Serialize one planned RDP entry without evaluating its ta
     #    that configured_job subsequently validates and converts to integer budgets)
 
     # built the json query args in in an array for readability
-    _jq_args=( -Rs )   #..........................................#slurp raw inputinto an array
+    _jq_args=( -Rs )   #..........................................# slurp raw inputinto a single string; run filter once
     _jq_args+=( --argjson intent "${launch_intent_json:-null}" )  # intent
     _jq_args+=( --argjson settings "$rdp_settings" )  #...........# settings
     _jq_args+=( --argjson bounds "$rdp_bounds" )  #...............# bounds
@@ -197,31 +197,34 @@ rdp_configured_job() # Serialize one planned RDP entry without evaluating its ta
     _jq_args+=( --argjson width "${planned_width[$_op_i]}" )  #...# width
     _jq_args+=( --argjson height "${planned_height[$_op_i]}" )  #.# height
 
-    # build the json query object constructor as a single-quoted string to avoid bash expansion
-    # (match the field values passed as --arg and --argjson key:value pairs;
-    #  note that call and placement are nexted under mechanical, and match exact intent even if null)
-    _jq_object_constructor='{'
-    _jq_object_constructor+='target:.'   #..........# set the "target" key to . (entire current input value piped in from printf)
-    _jq_object_constructor+=',settings:$settings'   # assign each JSON key to the corresponding jq internal variable
-    _jq_object_constructor+=',desktop:$desktop'
-    _jq_object_constructor+=',slot:$slot'
-    _jq_object_constructor+=',x:$x'
-    _jq_object_constructor+=',y:$y'
-    _jq_object_constructor+=',width:$width'
-    _jq_object_constructor+=',height:$height'
-    _jq_object_constructor+=',bounds:$bounds'
-    _jq_object_constructor+=',mechanical:'   # create a nested JSON object under the "mechanical" key
-        _jq_object_constructor+='{'
-        _jq_object_constructor+='call_timeout_ms:$call'
-        _jq_object_constructor+=',placement_timeout_ms:$placement'
-        _jq_object_constructor+='}'
-    _jq_object_constructor+='}'
-    _jq_object_constructor+=' + '   # append object merge operator
-    _jq_object_constructor+='(if $intent == null then {} '   # conditionally append intent or empty object
-    _jq_object_constructor+='else {intent:$intent} end)'
+    # build a jq filter that constructs the RDP job JSON object;
+    # each single-quoted bash fragment preserves jq's $variable references;
+    # nest call/placement timeouts under "mechanical";
+    # merge the optional restore intent only when it is not null
+    # build the jq filter as a single-quoted string to avoid bash expansion
+    _jq_filter_string='{'
+    _jq_filter_string+='target:.'   #..........# set the "target" key to . (entire current input value piped in from printf)
+    _jq_filter_string+=',settings:$settings'   # assign each JSON key to the corresponding jq internal variable
+    _jq_filter_string+=',desktop:$desktop'
+    _jq_filter_string+=',slot:$slot'
+    _jq_filter_string+=',x:$x'
+    _jq_filter_string+=',y:$y'
+    _jq_filter_string+=',width:$width'
+    _jq_filter_string+=',height:$height'
+    _jq_filter_string+=',bounds:$bounds'
+    _jq_filter_string+=',mechanical:'   # create a nested JSON object under the "mechanical" key
+        _jq_filter_string+='{'
+        _jq_filter_string+='call_timeout_ms:$call'
+        _jq_filter_string+=',placement_timeout_ms:$placement'
+        _jq_filter_string+='}'
+    _jq_filter_string+='}'
+    _jq_filter_string+=' + '   # append object merge operator
+    _jq_filter_string+='(if $intent == null then {} '   # conditionally append intent or empty object
+    _jq_filter_string+='else {intent:$intent} end)'
 
-    # now pipe the raw json from this indexed target to the query formed above
-    printf '%s' "${planned_target[$_op_i]}" | jq "${_jq_args[@]}" "$_jq_object_constructor"
+    # now pipe the target text to jq; -Rs reads it as one string;
+    # the filter constructs the job JSON from that string and the supplied arguments
+    printf '%s' "${planned_target[$_op_i]}" | jq "${_jq_args[@]}" "$_jq_filter_string"
 }
 # @usage rdp_configured_job
 # @ret jq status; writes a structured job to stdout on success
@@ -239,48 +242,107 @@ launch_configured_rdp() # Run the owned RDP frontend and retain its structured l
     # a verified clean pending failure instead ends the worker and owned child.
     # Bash locals shadow caller variables; the timestamp initializer reuses the
     # caller's timestamp when nonempty, or obtains one for a direct adapter call.
-    local _rl_job _rl_rc
+    local _lr_job _lr_rc _jq_filter_string
     local launch_attempt_timestamp=${launch_attempt_timestamp:-$(timestamp)}
-    # Clear shared output state so an earlier entry's IDs or clean-failure flag
-    # cannot be mistaken for this attempt. Failure to build the current job
-    # returns 2 before starting any RDP frontend.
-    launch_registration_id=""; launch_placement_id=""; launch_rdp_result=""; LAUNCH_CLEAN_FAILURE=$FALSE
-    _rl_job=$(rdp_configured_job) || return 2
-    j_msg "-${notice}" -p "[$launch_attempt_timestamp] Starting owned SDL RDP viewer; remote authentication remains unverified"
-    # <<< supplies a here-string (JSON plus newline) on FD 3, selected by
+    local -a _lr_python_args=() _jq_args=()
+    local _lr_helper=""
+    local msg=""
+    _lr_helper="$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_rdp_launch.py"
+
+    # (re)initialize shared output state
+    # failure to build the current job returns 2 before starting any RDP frontend
+    launch_registration_id=""
+    launch_placement_id=""
+    launch_rdp_result=""
+    LAUNCH_CLEAN_FAILURE=$FALSE
+    _lr_job=$(rdp_configured_job) || return 2
+
     # --job-fd; ordinary stdin stays available for the interactive session.
-    # 9>&- closes the inherited launcher flock descriptor in the child only.
     # Capture stdout and the real frontend rc in if/else; using ! then $? would
     # capture the inverted condition instead. Stderr remains separately visible.
-    if launch_rdp_result=$(python3 "$(dirname -- "${BASH_SOURCE[0]}")/joetoo_kwin_rdp_launch.py" \
-        --job-fd 3 3<<< "$_rl_job" 9>&-); then _rl_rc=0; else _rl_rc=$?; fi
-    j_msg "-${info}" -m "[$launch_attempt_timestamp] RDP local outcome (remote login unverified): $launch_rdp_result"
-    # The RDP schema nests registration and placement. jq -r emits raw strings;
+
+    # build the Python frontend argument vector
+    _lr_python_args=( "$_lr_helper" )   # python frontend pathname
+    _lr_python_args+=( --job-fd 3 )   #.# read structured job json from fd 3 (rather than 0, stdin)
+
+    # FD 3 receives the JSON job plus a trailing newline via a here-string;
+    # ordinary stdin (FD 0) remains available for interactive use
+    # FD 9 is the configured-launch flock descriptor; close it for the
+    # frontend process so it cannot be retained by the supervised worker
+    #
+    # capture stdout into launch_rdp_result and preserve the frontend's actual exit status
+    # (using ! with $? would capture the inverted status)
+    # ordinary stderr remains available for independent diagnostics
+
+    # syntax 3<<< "$_lr_job" supplies the json job as a here-string on fd 3, appending a newline
+    # --job-fd 3 tells the Python frontend to read its job from FD 3, not ordinary standard input (FD 0)
+    # 9>&- closes the inherited launcher lock descriptor fd 9 w/o closing it in the calling shell
+
+    # launch rdp viewer
+    msg="[$launch_attempt_timestamp] Starting owned SDL RDP viewer; remote authentication is unverified"
+    j_msg "-${notice}" -p "$msg"
+    if launch_rdp_result=$( python3 "${_lr_python_args[@]}" 3<<< "$_lr_job" 9>&-); then _lr_rc=0; else _lr_rc=$?; fi
+    j_msg "-${info}" -p -n "[$launch_attempt_timestamp] RDP local outcome (remote login unverified): [$launch_rdp_result]"
+
+    # build _jq_args in an array for readability
+    _jq_args=( -r )   # emit raw strings
+
+    # The RDP schema nests registration and placement.
     # the // operator substitutes for absent/null/false values, falling back
-    # from registration.request_id to cleanup.request_id, then an empty string;
-    # placement may legitimately lack an ID on pre-registration failure. The
-    # here-string feeds captured JSON to jq; syntax failure returns 2. Empty
-    # IDs are checked later only on paths that require completed transactions.
-    launch_registration_id=$(jq -r '.registration.request_id // .cleanup.request_id // ""' <<< "$launch_rdp_result") || return 2
-    launch_placement_id=$(jq -r '.placement.request_id // ""' <<< "$launch_rdp_result") || return 2
-    # Emit only the allowlisted diagnostic code supplied by this owned mission's
-    # frontend. The fixed message does not forward arbitrary client-log text or
-    # assert that a password specifically was wrong. It changes no outcome.
-    if (( _rl_rc != 0 )) && jq -e '.phase == "registration" and .diagnostic == "rdp_nla_logon_rejected"' \
-        <<< "$launch_rdp_result" >/dev/null; then
+    # from registration.request_id to cleanup.request_id, then an empty string
+    # in both below, the <<< here-string feeds the json captured above to jq; syntax failure returns 2;
+    # empty IDs are checked later only on paths that require completed transactions
+
+    # use jq to assign launch_registration_id
+    # build the jq filter as a single-quoted string to avoid bash expansion
+    _jq_filter_string='.registration.request_id'
+    _jq_filter_string+=' // '
+    _jq_filter_string+='.cleanup.request_id'
+    _jq_filter_string+=' //  ""'
+    launch_registration_id=$(jq "${_jq_args[@]}" "$_jq_filter_string" <<< "$launch_rdp_result") || return 2
+
+    # use jq to assign launch_placement_id
+    # build the jq filter as a single-quoted string to avoid bash expansion
+    _jq_filter_string='.placement.request_id // ""'
+    # placement may legitimately lack an ID on pre-registration failure
+    launch_placement_id=$(jq "${_jq_args[@]}" "$_jq_filter_string" <<< "$launch_rdp_result") || return 2
+
+    # build _jq_args in an array for readability
+    _jq_args=( -e )   #   --exit-status / -e:    - fails for false/null or no selected result
+
+    # if the launch produced a non-zero exit status,
+    # use jq -e to check for the specific allowlisted NLA logon-rejection diagnostic,
+    # and emit a fixed message rather than exposing arbitrary client-log text
+    # build the jq filter as a single-quoted string to avoid bash expansion
+    _jq_filter_string='.phase == "registration" and .diagnostic == "rdp_nla_logon_rejected"'
+
+    if (( _lr_rc != 0 )) && jq "${_jq_args[@]}" "$_jq_filter_string" <<< "$launch_rdp_result" >/dev/null; then
+        # the fixed message avoids spilling potentially sensitive private client-log text
+        # it does not assert that a password specifically was wrong; it changes no outcome
         j_msg "-${err}" -p 'SDL RDP connection failed: remote NLA logon rejected (ERRCONNECT_LOGON_FAILURE 0x00020014)'
     fi
-    # Eligibility is positive machine evidence, not merely a failure label.
-    # The frontend has checked its private worker receipt, child reaping and
-    # broker/source state; require its cleanup confirmation and registration
-    # phase as well. jq -e turns the predicate into a status, >/dev/null hides
-    # its boolean output. Set a pseudo-boolean hint for open_plan; return the
-    # original frontend rc regardless, so continuation still counts as failure.
-    if (( _rl_rc != 0 )) && jq -e '.continuation_eligible == true and .cleanup_confirmed == true
-        and .phase == "registration" and (.state == "failed" or .state == "cancelled" or .state == "timeout")' <<< "$launch_rdp_result" >/dev/null; then
+
+    # use jq -e to turn the predicate into a "true/false" status, >/dev/null hides its boolean output,
+    # and set a pseudo-boolean hint for open_plan; return the original frontend rc regardless,
+    # so continuation still counts as failure
+
+    # build _jq_args in an array for readability
+    _jq_args=( -e )   #   --exit-status / -e:    - fails for false/null or no selected result
+
+    # build the jq filter as a single-quoted string to avoid bash expansion
+    _jq_filter_string='.continuation_eligible == true'
+    _jq_filter_string+=' and .cleanup_confirmed == true'
+    _jq_filter_string+=' and .phase == "registration"'
+    _jq_filter_string+=' and ('
+        _jq_filter_string+='.state == "failed"'
+        _jq_filter_string+=' or .state == "cancelled"'
+        _jq_filter_string+=' or .state == "timeout"'
+    _jq_filter_string+=')'
+
+    if (( _lr_rc != 0 )) && jq "${_jq_args[@]}" "$_jq_filter_string" <<< "$launch_rdp_result" >/dev/null; then
         LAUNCH_CLEAN_FAILURE=$TRUE
     fi
-    return "$_rl_rc"
+    return "$_lr_rc"
 }
 # @usage launch_configured_rdp
 # @ret frontend exit status; 2 if job construction or result-ID parsing fails
