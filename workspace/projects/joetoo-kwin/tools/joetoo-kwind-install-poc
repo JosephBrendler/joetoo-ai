@@ -184,6 +184,22 @@ def main():
     action, archive = sys.argv[1], Path(sys.argv[2])
     if not archive.is_absolute() or '..' in archive.parts:
         raise ValueError('XDG_STATE_HOME must be an absolute path without .. components')
+    if action == '--update':
+        # The archive and -S persistence share this directory. Existing archive
+        # checks allow 0755 here, but snapshot persistence requires exactly 0700.
+        # Refuse mismatches; never silently change an existing directory's mode.
+        state_dir = archive.parent
+        try:
+            state_info = state_dir.lstat()
+        except FileNotFoundError:
+            pass  # private_directory() creates missing parents with mode 0700.
+        else:
+            if (not stat.S_ISDIR(state_info.st_mode)
+                    or state_info.st_uid != os.geteuid()
+                    or stat.S_IMODE(state_info.st_mode) != 0o700):
+                raise ValueError(
+                    f'joetoo-kwin state directory must be owned by the current user '
+                    f'and have mode 0700: {state_dir}')
     components = ('service', 'daemon', 'registry', 'override', 'resident', 'cli',
                   'vnc_identity', 'vnc_target', 'vnc_launch', 'rdp_launch', 'rdp_target', 'managed_close', 'persistence', 'recovery', 'sftp_target')
     # Match the explicit install -m contract, not the checkout's source modes.
