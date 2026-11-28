@@ -1,24 +1,26 @@
 # Step 1.9 — Version 1 packaging and integration HANDOFF
 
-**Status (2026-11-23): ACTIVE — Step 1.8 accepted/merged; source
-stabilization and Gentoo packaging remain.** This is the **sole active
-joetoo-kwin task dispatcher**. The new Step 1.8 CLI completion (`-s`,
-`-i MANAGED_ID`, and one-shot `-L under`) was merged through
+**Status (2026-11-27): ACTIVE — Step 1.9 source stabilization and readability
+audit in progress; Gentoo release packaging remains open.** This is the
+**sole active joetoo-kwin task dispatcher**. Step 1.8 CLI completion (`-s`,
+`-i MANAGED_ID`, one-shot `-L under`) was accepted/merged through
 [PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36) at
-`main` `67c054c`. Its [archived HANDOFF](../archive/task_step1.8/HANDOFF.md),
-[task README](../archive/task_step1.8/README.md) and
-[merge closure](../archive/task_step1.8/step1.8-pr36-merge-closure-2026-11-23.md)
-preserve the acceptance evidence. Do not recreate the Step 1.8 branch or
-repeat its native acceptance tests for administrative closure.
+`main` `67c054c`; the archive/Step 1.9 transition was subsequently merged
+through PR #37 (`b61655a`). Do not repeat native Step 1.8 acceptance solely
+for administrative closure. Four production files are now maintainer-accepted
+for readability; see [the ordered audit ledger](step1.9-comment-readability-audit-ledger.md).
 
 ## Source, scope, evidence and authority
 
 - **Repository:** `JosephBrendler/joetoo-ai`;
-  `workspace/projects/joetoo-kwin/`. Accepted source baseline
-  `main` at `67c054c` after PR #36. A separate documentation-only
-  archive-transition candidate was committed as `48dc17a` on
-  `task/joetoo-kwin-step1.8-archive-step1.9-resume` and is awaiting
-  maintainer review/merge. Refresh actual HEAD before any new work.
+  `workspace/projects/joetoo-kwin/`. Accepted Step 1.8 baseline was
+  `main` `67c054c`; PR #37 merged the archive transition as `b61655a`.
+  Active stabilization branch:
+  `task/joetoo-kwin-step1.9-packaging-integration`. Latest **pushed**
+  source checkpoint evidenced here: `0dd2ba3` (2026-11-27). This contains
+  the accepted launch-library/session audit (`98ce0d4`) and the subsequently
+  committed/pushed eselect `configs/` update. Refresh real HEAD/worktree
+  before new work; this documentation patch is only a candidate.
 - **Design:** [ARCHITECTURE §9/§11/§12](../ARCHITECTURE.md); the
   [project status](../README.md); [Step 1.8 archived acceptance](../archive/task_step1.8/README.md).
 - **Detailed packaging scope:** [Step 1.9 README](README.md) and
@@ -39,22 +41,47 @@ repeat its native acceptance tests for administrative closure.
   HANDOFF nor the archive permits an agent to modify protected repos or
   administer hosts.
 
+## Source readability audit and selector evidence (2026-11-27)
+
+- **ACCEPTED production files (4):** `joetoo-kwin` and
+  `libexec/joetoo-kwin-plan-functions` (2026-11-25, `f4e9ba92`);
+  `libexec/joetoo-kwin-launch-functions` and
+  `libexec/joetoo-kwin-session.bashrc` (2026-11-27, `98ce0d4`).
+  `tools/joetoo-kwin-stage-upstream` was also in the first acceptance commit,
+  but is a development/reference tool outside the curated release inventory.
+- **Authoritative ordered review checklist:**
+  [step1.9-comment-readability-audit-ledger.md](step1.9-comment-readability-audit-ledger.md).
+  It enumerates **26 production source files**, including the Python broker,
+  KWin JavaScript and three C++ files; `CMakeLists.txt` is a related native
+  build-comment review. A file remains pending until maintainer acceptance.
+- **Selector functional evidence:**
+  [step1.9-eselect-configs-evidence-2026-11-27.md](step1.9-eselect-configs-evidence-2026-11-27.md).
+  The user-owned `configs/` update is committed/pushed (`0dd2ba3`). Before
+  commit, ShellCheck exited 0 and **18/18** focused selector tests passed.
+  This does **not** complete selector comment-audit acceptance or prove
+  packaged-path QA. No `/etc` selector management or installer HOME-plan
+  initialization is intended.
+- **Deferred functional choice:** `plan_defaults()` currently uses local RDP
+  initial client `800x600` and remote `1024x768`; possible local initial
+  `1024x768` is a separate setting change, not reopening the accepted audit.
+
 ## Current next actor and ordered actions
 
-**Next actor: maintainer.** Review and merge the documentation-only
-Step 1.8 archive/Step 1.9 reactivation candidate, then authorize the
-separate Step 1.9 implementation/release-stabilization branch from the
-new accepted `main`. Keep the already approved scope and do not introduce
-a new functional CLI milestone.
+**Next actor: maintainer on the active Step 1.9 branch.** Review the selector
+module's **comments** for possible audit acceptance (the functional `configs/`
+update is already committed), complete the remaining per-file audits using
+the ledger, then finish separate source/package gates. Keep Version 1 scope.
 
 1. **Reconcile source and installed runtime inventory:** include the
    accepted Step 1.8 `libexec/joetoo_kwin_readonly.py`, verify sibling imports
    and all SFTP/RDP/VNC/close/recovery helpers, and repair CLI source-versus-
    installed lookup and both OpenRC `JOETOO_KWIND_EXEC` defaults.
-2. **Human maintainability and provenance review:** inspect comments of
-   every shipped Bash/OpenRC/eselect/Python/JS script, plus licensing,
-   headers, third-party attribution and relevant C++ provenance. Use focused
-   syntax/regression checks for any corrections; avoid unrelated rewrites.
+2. **Human maintainability and provenance review:** follow the ordered
+   audit ledger for pending OpenRC/eselect/Python/JS/**C++** production files,
+   with related CMake commentary; track licensing and third-party provenance
+   separately. Record focused validation and explicit maintainer acceptance.
+   Do not repeat the four accepted Bash audits or mix functional changes into
+   comment-only passes.
 3. **Curate and validate source transfer:** human-run `--plan`, `--apply`,
    `--verify`/`--release-check`, inspect stale/unlisted files and links,
    review the source archive and run `tarup` only when ready.

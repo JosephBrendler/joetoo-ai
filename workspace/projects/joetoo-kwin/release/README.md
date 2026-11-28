@@ -124,7 +124,7 @@ service, or load a native KWin effect.
   companions.
 - [System defaults](config-examples/system/README_system_defaults_conf.md),
   [user defaults](config-examples/user/README_user_defaults_conf.md), and
-  [eselect profiles](eselect/README_eselect_profiles_conf.md) companions.
+  [eselect configs](eselect/README_eselect_configs_conf.md) companions.
 
 ## Build, installation, and distribution notes
 

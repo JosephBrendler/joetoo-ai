@@ -99,7 +99,7 @@ This fragment intentionally omits unresolved license/ABI/dependency details and 
 
 **Two different manifests must not be conflated.** The authoritative **source-to-source** selection is the versioned project-root [`MANIFEST`](../MANIFEST), processed by [`tools/joetoo-kwin-stage-upstream`](../tools/joetoo-kwin-stage-upstream); it includes an optional third field to rename `release/README.md` to upstream root `README.md`. The ebuild's **source-to-installed-file** inventory below is a separate install policy. Presence in the source tarball never implies automatic activation under `/etc`, HOME, or a graphical session.
 
-**Runtime path contract:** `L=/usr/libexec/joetoo-kwin` is the application-private directory. Root-owned package files only; user-owned configs, snapshots and profiles are never written by Portage. The table records intended destinations, **not completed ebuild QA**.
+**Runtime path contract:** `L=/usr/libexec/joetoo-kwin` is the application-private directory. Root-owned package files only; user-owned launch configs, snapshots and other account state are never written by Portage. The table records intended destinations, **not completed ebuild QA**.
 
 | Current curated source path(s) | Function | Proposed installed destination / treatment |
 | --- | --- | --- |
@@ -231,17 +231,17 @@ supported CLI overrides, e.g. -v / -q           highest precedence
 `eselect/joetoo-kwin.eselect` is optional, per-user, and **does not introduce an additional launch-config layer**. The user manually creates valid files under:
 
 ```text
-${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/profiles/<name>.conf
+${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/configs/<name>.conf
 ```
 
 `eselect joetoo-kwin set work.conf` creates (on first selection) or switches (only an existing **valid selector-managed symlink**) the selected plan:
 
 ```text
 ${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf
-    -> profiles/work.conf
+    -> configs/work.conf
 ```
 
-Then the ordinary CLI's user plan selection reads that link. `-f FILE` overrides only which plan is selected, not the additive defaults. The selector never creates profiles, copies templates, executes a profile, overwrites a regular user plan or touches service settings. It validates user ownership/modes, profile syntax and symlink identity; switching an existing link requires GNU `mv --exchange --no-copy` and supported filesystem behavior.
+Then the ordinary CLI's user plan selection reads that link. `-f FILE` overrides only which plan is selected, not the additive defaults. The selector never creates configs, copies templates, executes a config, overwrites a regular user plan or touches service settings. It validates user ownership/modes, config syntax and symlink identity; switching an existing link requires GNU `mv --exchange --no-copy` and supported filesystem behavior.
 
 **Why the current manual snippet fails as a development-install recipe:** the line `cp -n /usr/share/joetoo-kwin/joetoo-kwin-per-run-template.conf ...` is explicitly a **future packaged-resource path**. This path will not exist in an uninstalled `joetoo-ai` source checkout, and the POC installer does not install it. Also, if there is already a *regular* `~/.config/joetoo-kwin/joetoo-kwin.conf`, `eselect ... set` deliberately refuses to overwrite it. A third failure mode is absent/wrongly installed `joetoo-kwin.eselect` module or incompatible GNU `mv`. **Do not call the snippet universally broken** without the actual CLI error; change documentation to distinguish source-tree use and installed-package use, and document these preconditions.
 
@@ -252,12 +252,12 @@ project=~/joetoo-ai/workspace/projects/joetoo-kwin
 config_root=${XDG_CONFIG_HOME:-$HOME/.config}
 case $config_root in /*) ;; *) config_root=$HOME/.config ;; esac
 config_dir=$config_root/joetoo-kwin
-install -d -m 0700 -- "$config_dir/profiles"
-cp -n -- "$project/joetoo-kwin-per-run-template.conf" "$config_dir/profiles/work.conf"
+install -d -m 0700 -- "$config_dir/configs"
+cp -n -- "$project/joetoo-kwin-per-run-template.conf" "$config_dir/configs/work.conf"
 # Inspect/edit the *copy* and ensure your development eselect module is installed.
 # If $config_dir/joetoo-kwin.conf is a regular file, preserve/migrate it first.
 # Validate explicitly without switching the selection:
-"$project/joetoo-kwin" -c -f "$config_dir/profiles/work.conf"
+"$project/joetoo-kwin" -c -f "$config_dir/configs/work.conf"
 # After confirming the module and absence of a conflicting regular user plan:
 eselect joetoo-kwin list
 eselect joetoo-kwin set work.conf
@@ -285,13 +285,13 @@ The source organization is now intentionally **colocated**. A companion is immed
 | `config-examples/system/defaults.conf` (inactive system CLI example) | `config-examples/system/README_system_defaults_conf.md` |
 | `config-examples/user/defaults.conf` (inactive user CLI example) | `config-examples/user/README_user_defaults_conf.md` |
 | `joetoo-kwin-per-run-template.conf`, `joetoo-kwin-template.conf` | `README_joetoo_kwin_launch_conf.md` and `README_joetoo_kwin_templates_conf.md` in source root |
-| `eselect/joetoo-kwin.eselect` | `eselect/README_eselect_profiles_conf.md` |
+| `eselect/joetoo-kwin.eselect` | `eselect/README_eselect_configs_conf.md` |
 
 `docs/configuration-reference.md` is the detailed source of truth for settings and precedence; `docs/joetoo-kwin_user_manual.md` is the operational guide. `release/README.md` (added at `24cd67f`) is intentionally remapped by `MANIFEST` to the **upstream tarball root** `README.md`, not the development project root README. `ARCHITECTURE.md` and the source transfer metadata are also curated.
 
 **Status:** all eight companions and the three release-only examples exist in the development checkout, but their presence does **not** establish parity with `joetoo-upstream`, installation locations, or tarup acceptance. Re-run the human-operated staging script after accepted new Step 1.8 changes. The ebuild must retain the source organization as useful documentation while not installing samples into active per-account or administrator paths. Review relative links in archived docs so omitted `archive/`/`task_1.9/` destinations are not presented as local files.
 
-**Expanded Step 1.9 source-stabilization gate (human):** review the maintainability comments of every script that will ship, including Bash CLI/sourced helpers, OpenRC and eselect files, all shipped Python helpers and resident JS—even if the file's installed mode is 0644. Exclude test fixtures, archived POCs and unshipped tooling. Verify comments describe current behavior (including argument/return contracts, security invariants, and nontrivial flags), do not misstate implemented CLI support, and do not conceal a functional change. Use `validate_scripts`/ShellCheck, `bash -n`, Python syntax checks, JS syntax checks and focused existing tests as appropriate. Review compiled C++ comments as part of the normal native source/provenance check, separately from this script-comment gate. Keep corrections narrowly scoped and accept/review meaningful edits rather than rewriting already clear modules.
+**Step 1.9 source-maintainability gate (human):** follow the ordered `step1.9-comment-readability-audit-ledger.md` for every curated Bash/OpenRC/eselect/Python/JavaScript and native C++ source/header file; review the related CMake build commentary. Exclude tests, archived POCs and unshipped tools. Require accurate contracts, inline explanations of nontrivial implementation blocks, and explicit maintainer acceptance for each file. Run syntax, static analysis, and focused regression checks as appropriate; keep functional changes separate from documentation-only audits.
 
 ## 5. Approved USE policy and subordinate client dependencies
 
@@ -349,7 +349,7 @@ SFTP worker, not Dolphin's underlying local-file capability.
 
 ## 6. Installation, upgrade, removal and package QA
 
-- **No implicit user-state mutation:** install into `/usr` and selected root-owned `/etc` paths only; never create/edit user active plans, profiles, `~/.local`, the user's OpenRC `rc.conf`, `XDG_STATE_HOME` history, or runtime checkpoint. Never run `eselect`, development HOME installer, viewer or `rc-service -U ... start` in ebuild hooks.
+- **No implicit user-state mutation:** install into `/usr` and selected root-owned `/etc` paths only; never create/edit user active plans, candidate configs, `~/.local`, the user's OpenRC `rc.conf`, `XDG_STATE_HOME` history, or runtime checkpoint. Never run `eselect`, development HOME installer, viewer or `rc-service -U ... start` in ebuild hooks.
 - **Service separation:** `/etc/user/init.d/joetoo-kwind` is a non-root `rc-service -U` OpenRC unit, **not** `/etc/init.d/joetoo-kwind` and not a root service. Preserve current `rc_cgroup_cleanup=NO`; service stop/restart must not terminate Konsole/SSH/RDP/VNC children. No implicit start/stop/restart on merge/unmerge.
 - **Migrations:** existing `~/.local/bin/joetoo-kwin` may shadow `/usr/bin`; existing account override from the POC may direct OpenRC to user `~/.local/libexec`; user active `joetoo-kwin.conf` may be a regular file and selector refuses to overwrite it. Provide explicit read-only diagnosis and opt-in instructions; never change a user config automatically.
 - **Private state:** preserve existing mode-700 runtime directories, mode-600 snapshots and history across package operations; do not adopt stale UUIDs after a new compositor session.

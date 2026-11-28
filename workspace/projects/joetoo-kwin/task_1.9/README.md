@@ -1,16 +1,17 @@
 # Step 1.9 — Version 1 packaging and integration
 
-**Status (2026-11-23): ACTIVE, resumed after Step 1.8 acceptance and
-merge.** The intervening CLI-completion task was reviewed and merged through
-[PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36), making
-`67c054c` the accepted `joetoo-ai/main` source baseline. Its
-[archived evidence](../archive/task_step1.8/README.md) and
-[merge closure](../archive/task_step1.8/step1.8-pr36-merge-closure-2026-11-23.md)
-are historical; Step 1.9 does not rerun the whole native CLI validation
-matrix solely because of packaging. No production ebuild, published tarball,
-installed-path checks or native packaged-path acceptance is yet claimed.
-The [active dispatcher](HANDOFF.md) identifies the next actor and reserved
-authorizations; this README records scope and history.
+**Status (2026-11-27): ACTIVE — Step 1.9 stabilization and source audit in
+progress.** Step 1.8 was accepted/merged through
+[PR #36](https://github.com/JosephBrendler/joetoo-ai/pull/36) at `67c054c`,
+then the archive/Step 1.9 transition through PR #37 at `b61655a`.
+On `task/joetoo-kwin-step1.9-packaging-integration`, the maintainer has
+accepted four production source readability audits, most recently in
+`98ce0d4`; the `eselect` `configs/` change passed focused checks and was
+committed and pushed in `0dd2ba3`. Its **comment audit** remains pending.
+No accepted source tarball, production ebuild, installed-image QA or
+packaged-path native
+acceptance is claimed. [HANDOFF.md](HANDOFF.md) remains the active dispatcher;
+see the [ordered audit ledger](step1.9-comment-readability-audit-ledger.md).
 
 ## Objective and release boundary
 
@@ -57,6 +58,31 @@ source-tree validation.
   verification. The native Wayland KWin effect and XWayland XCB helper remain
   core, separate from the optional legacy native-X11 effect.
 
+## Source readability audit progress — 2026-11-27
+
+The maintainability skill requires a per-file ledger. The
+[ordered source audit ledger](step1.9-comment-readability-audit-ledger.md)
+was created from `MANIFEST`: **26 production files**, including shell,
+OpenRC, eselect, Python, KWin JavaScript, and three C++ files; review CMake
+build commentary with the C++ files. **Four production files are ACCEPTED:**
+`joetoo-kwin` and `libexec/joetoo-kwin-plan-functions` on 2026-11-25
+(`f4e9ba92`); `libexec/joetoo-kwin-launch-functions` and
+`libexec/joetoo-kwin-session.bashrc` on 2026-11-27 (`98ce0d4`). The
+accepted development/reference `tools/joetoo-kwin-stage-upstream` is not a
+curated production file. Do not recommend another audit of an accepted file.
+
+The user-only `eselect joetoo-kwin` selection convention is now
+`~/.config/joetoo-kwin/configs/*.conf` with
+`~/.config/joetoo-kwin/joetoo-kwin.conf -> configs/NAME.conf` (subject to
+`XDG_CONFIG_HOME`). The corrected patch was applied to the maintainer's
+working tree, passed ShellCheck and **18/18** focused selector tests,
+and was committed/pushed in `0dd2ba3`; details are in
+[selector evidence](step1.9-eselect-configs-evidence-2026-11-27.md).
+Its separate source-comment audit has not been accepted.
+`tools/joetoo-kwind-install-poc` does not manage those per-run files.
+The packaging contract draft still contains old `profiles/` references and
+must be reconciled before source transfer.
+
 ## Remaining Step 1.9 stabilization work — resumed
 
 1. **Use the accepted Step 1.8 CLI baseline.** Preserve its
@@ -69,15 +95,13 @@ source-tree validation.
    for source-checkout and installed `/usr/bin`/`/usr/libexec/joetoo-kwin/`
    layouts. Synchronize both global OpenRC and user-service broker executable
    defaults; retain no automatic user-home initialization or service start.
-3. **Human maintainability-comment audit of EVERY shipped script, excluding
-   test fixtures.** Inspect Bash CLI and sourced helpers, the OpenRC user
-   service, eselect module, all curated Python broker/launcher modules and
-   KWin JavaScript, even when installed as non-executable data. Fix misleading
-   comments, clarify argument/return/status contracts, security-sensitive
-   assumptions and non-obvious command options. Keep behavior-changing
-   edits separately identifiable and run syntax/lint plus focused tests.
-   Compiled native C++ gets its own source/header review; this specific
-   interpreted-script audit does not imply a C++ redesign.
+3. **Human source maintainability/comment audit of every curated production
+   code file, excluding test fixtures.** Follow the ledger for remaining
+   OpenRC, eselect, Python, JS and C++ files, including native header contracts
+   and related CMake commentary. Explain nontrivial implementation blocks,
+   interfaces and failure paths; validate comment-only edits without changing
+   functional behavior. The four accepted Bash source files need no repeat
+   audit. Track functional/default changes separately.
 4. **Source release review.** Correct stale relative links in curated docs,
    final copyright/SPDX attribution and header exceptions, and source-only
    README; run human `--plan` → `--apply` → `--release-check` and inspect
@@ -99,7 +123,7 @@ precedence and stage gates. The `MANIFEST` supplies exact curated source paths;
   native plugin and XCB close helper, explicit OpenRC user-service lifecycle;
   optional native-X11 plugin policy remains a bounded ebuild decision.
 - Correct protected global configuration and inert override examples;
-  selector module installed but never run automatically; user profiles,
+  selector module installed but never run automatically; user configs,
   snapshots, and HOME configuration never rewritten by Portage.
 - Human-reviewed script comments, final source provenance, tarball file listing,
   package/ebuild QA, and native **packaged-path** acceptance against the chosen
@@ -110,11 +134,13 @@ precedence and stage gates. The `MANIFEST` supplies exact curated source paths;
 
 ## Current next transition
 
-Step 1.8 is [accepted and archived](../archive/task_step1.8/README.md).
-After the documentation-only archive/transition PR is reviewed, the
-maintainer starts the Step 1.9 source-stabilization implementation branch
-from updated `main`, using [HANDOFF](HANDOFF.md) as the only active
-dispatcher. Next concrete work is the source-versus-installed helper inventory,
-including the read-only helper, plus installed path and OpenRC defaults
-before a source release or ebuild is claimed. Protected repositories, native
-operations and publication remain maintainer-controlled.
+Step 1.8 is [accepted and archived](../archive/task_step1.8/README.md),
+and Step 1.9 is underway on
+`task/joetoo-kwin-step1.9-packaging-integration`. The next comment-audit
+file is `eselect/joetoo-kwin.eselect` (semantic comment review still
+pending despite the committed functional update), followed by the OpenRC user
+service, Python modules, KWin resident JavaScript, and C++ implementation/
+header files, as ordered in the ledger. Complete source/installed-path
+reconciliation, packaging-draft terminology updates, source provenance,
+source staging, tarup, ebuild and packaged-path smoke QA as **separate** gates.
+The maintainer retains control of native operations, commits and publication.

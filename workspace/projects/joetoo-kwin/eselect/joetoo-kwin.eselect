@@ -9,7 +9,7 @@
 # Developed and implemented (with AI assistance) for joetoo-kwin,
 # under Joseph Brendler's direction and maintainer review.
 
-# Module metadata is consumed by the eselect framework.
+## shellcheck says these variables appear unused, but module metadata is consumed by the eselect framework
 # shellcheck disable=SC2034
 DESCRIPTION="Select this user's joetoo-kwin launch config"
 # shellcheck disable=SC2034
@@ -21,11 +21,15 @@ VERSION="1.0"
 # and validates the resulting effective configuration before launching anything.
 jk_owned() {
     local owner mode
+    # assign owner and mode by process substitution using stat
     read -r owner mode < <(stat -c '%u %a' -- "$1") || return 1
+    # validate octal mode with umask 022 (dir 755, file 644)
     [[ $owner == "$EUID" && $mode =~ ^[0-7]{3,4}$ ]] && (( (8#$mode & 0022) == 0 ))
 }
 
 jk_paths() {
+    # assign paths for _jk_root, _jk_configs, _jk_active
+    # validate config supplied or default to user $HOME/.conffig as an absolute path
     [[ ${HOME:-} == /* ]] || die -q 'An absolute HOME is required'
     local base=${XDG_CONFIG_HOME:-$HOME/.config}
     [[ $base == /* ]] || base=$HOME/.config
@@ -37,6 +41,7 @@ jk_paths() {
         if [[ ! -d $_jk_root || -L $_jk_root ]] || ! jk_owned "$_jk_root" || ! jk_owned "$(realpath -e -- "$base")"; then
             die -q 'Unsafe configuration directory ownership, permissions or symlink'
         fi
+        # validate config root and configs directory within it
         _jk_root=$(realpath -e -- "$_jk_root") || die -q 'Cannot resolve configuration directory'
         _jk_configs=$_jk_root/configs; _jk_active=$_jk_root/joetoo-kwin.conf
     fi
@@ -48,45 +53,62 @@ jk_paths() {
 }
 
 jk_config() {
+    # use C locale locally (mainly to collate file/link pathnames)
     local LC_ALL=C
+    # validate $1 as a valid bash non-wildcard filename
     [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*\.conf$ && $1 != */* ]] || return 1
     local file=$_jk_configs/$1
+    # validate $1 is an existing file and not a link
     [[ -f $file && -r $file && ! -L $file && $(stat -c '%h' -- "$file") == 1 ]] && jk_owned "$file" && bash -n -- "$file" >/dev/null 2>&1
 }
 
 jk_selected() {
     local link name
+    # validate that _jk_active is a link and owned by user
     [[ -L $_jk_active && $(stat -c '%u' -- "$_jk_active") == "$EUID" ]] || return 1
+    # read the target of the _jk_active link
     link=$(readlink -- "$_jk_active") || return 1
+    # assign name as basename of link pathname
     case $link in
         configs/*) name=${link#configs/} ;;
         "$_jk_configs/"*) name=${link#"$_jk_configs/"} ;;
         *) return 1 ;;
     esac
+    # call jk_config to validate $name
     jk_config "$name" || return 1
+    # double check the name refers to the same _jk_active
     [[ $(realpath -e -- "$_jk_active") == "$_jk_configs/$name" ]] || return 1
+    # emit this name on stdout
     printf '%s\n' "$name"
 }
 
 jk_targets() {
+    # build array listing configs
+    # use C locale locally (mainly to collate file/link pathnames)
     local LC_ALL=C
     _jk_targets=()
     local file name
+    # iterate all .conf files in the configs directory
     for file in "$_jk_configs/"*.conf; do
-        name=${file##*/}
+        name=${file##*/}   # basename
+        # if calling jk_config validates it, add name to list of configs
         jk_config "$name" && _jk_targets+=("$name")
     done
     return 0
 }
 
 describe_list() { echo 'List safe user configs (does not execute them)'; }
+
 do_list() {
     [[ $# == 0 ]] || die -q 'list takes no arguments'
+    # call functions to assign paths for _jk_root, _jk_configs, _jk_active and build array listing configs
     jk_paths; jk_targets
+    # make local copy of targets array
     local selected i targets=("${_jk_targets[@]}")
     # Only the validated named selection earns the framework's highlighted star.
     selected=$(jk_selected) || selected=''
     for (( i = 0; i < ${#targets[@]}; i++ )); do
+        # put a highlight_marker (blue asterisk) on selected target
         [[ ${targets[i]} != "$selected" ]] || targets[i]=$(highlight_marker "${targets[i]}")
     done
     write_list_start 'Available user joetoo-kwin configs:'
@@ -94,10 +116,12 @@ do_list() {
 }
 
 describe_show() { echo 'Show the current user selection'; }
+
 do_show() {
     [[ $# == 0 ]] || die -q 'show takes no arguments'
     jk_paths
     if [[ -L $_jk_active ]]; then
+        # list just the selected config, or error out
         jk_selected || die -q 'Invalid or dangling config selection; inspect it manually'
     elif [[ -e $_jk_active ]]; then
         [[ -f $_jk_active ]] || die -q 'Unexpected configuration object'
@@ -108,7 +132,9 @@ do_show() {
 }
 
 describe_set() { echo 'Select a user config without overwriting a regular plan'; }
+
 describe_set_parameters() { echo '<name.conf|number>'; }
+
 do_set() {
     [[ $# == 1 ]] || die -q 'set requires one config name or list number'
     [[ $EUID != 0 ]] || die -q 'Run config selection as the intended non-root user'
@@ -134,14 +160,17 @@ do_set() {
         previous=$(jk_selected) || die -q 'Selection changed'
     fi
     jk_config "$name" || die -q 'Config changed during selection'
+    # make a temp dir in which to try to create the new link
     _jk_temporary=$(mktemp -d "$_jk_root/.config-select.XXXXXXXX") || die -q 'Cannot prepare selection'
     # Cleanup may remove only our symlink, never a concurrently displaced file.
     trap 'if [[ -L $_jk_temporary/joetoo-kwin.conf ]]; then rm -- "$_jk_temporary/joetoo-kwin.conf"; fi; rmdir -- "$_jk_temporary" 2>/dev/null || write_warning_msg "Preserved displaced object in $_jk_temporary; inspect manually"' EXIT
+    # prepare link for config in temp dir
     ln -s -- "configs/$name" "$_jk_temporary/joetoo-kwin.conf" || die -q 'Cannot prepare config link'
     created=$(stat -c '%d:%i' -- "$_jk_temporary/joetoo-kwin.conf") || die -q 'Cannot inspect prepared link'
     after=absent
     [[ ! -e $_jk_active && ! -L $_jk_active ]] || after=$(stat -c '%d:%i' -- "$_jk_active")
     [[ $before == "$after" ]] || die -q 'Selection changed outside the selector; retry after inspecting it'
+    # if it worked, create new or exchange/replce the old link with the new; verify or die
     if [[ $before == absent ]]; then
         # -n refuses a file created since the last check; check whether mv acted.
         mv -nT -- "$_jk_temporary/joetoo-kwin.conf" "$_jk_active" || die -q 'Cannot select config'

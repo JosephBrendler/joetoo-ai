@@ -69,8 +69,10 @@ plan_defaults() # Reset built-in launch, geometry and operation-policy defaults
     rdp_remote_width=1024
     rdp_remote_height=768
     RDP_SMART_SIZING=$TRUE
-    rdp_initial_client_width=800
-    rdp_initial_client_height=600
+#    rdp_initial_client_width=800
+#    rdp_initial_client_height=600
+    rdp_initial_client_width=1024
+    rdp_initial_client_height=768
     rdp_windowing_backend=auto
     # nla = nla + tls (see configuration guide)
     rdp_security_protocol=nla
