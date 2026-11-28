@@ -1,6 +1,6 @@
 # Copyright 2026 Joseph Brendler
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Real eselect core, disposable executable/module path and user profiles only."""
+"""Real eselect core, disposable executable/module path and user configs only."""
 import os
 from pathlib import Path
 import shutil
@@ -18,7 +18,7 @@ class ProfileTests(unittest.TestCase):
         self.home = self.base / 'home'; self.home.mkdir(mode=0o700)
         self.xdg = self.home / '.config'; self.xdg.mkdir(mode=0o700)
         self.root = self.xdg / 'joetoo-kwin'
-        self.profiles = self.root / 'profiles'
+        self.profiles = self.root / 'configs'
         self.active = self.root / 'joetoo-kwin.conf'
         modules = self.base / 'modules'; modules.mkdir()
         shutil.copyfile(ROOT / 'eselect/joetoo-kwin.eselect', modules / 'joetoo-kwin.eselect')
@@ -54,10 +54,10 @@ class ProfileTests(unittest.TestCase):
         self.profile(); self.profile('b.conf')
         self.assertIn('a.conf', self.run_selector('list'))
         self.run_selector('set', '1')
-        self.assertEqual(os.readlink(self.active), 'profiles/a.conf')
+        self.assertEqual(os.readlink(self.active), 'configs/a.conf')
         self.assertIn('a.conf', self.run_selector('show'))
         self.run_selector('set', 'b.conf')
-        self.assertEqual(os.readlink(self.active), 'profiles/b.conf')
+        self.assertEqual(os.readlink(self.active), 'configs/b.conf')
         self.assertIn('b.conf', self.run_selector('show'))
 
     def test_list_marks_only_the_valid_selected_profile(self):
@@ -78,7 +78,7 @@ class ProfileTests(unittest.TestCase):
         self.assertNotIn('*', self.run_selector('list'))
         self.active.unlink()
         outside = self.home / 'outside.conf'; outside.write_text('# outside\n')
-        for target in ('profiles/absent.conf', str(outside)):
+        for target in ('configs/absent.conf', str(outside)):
             self.active.symlink_to(target)
             self.assertNotIn('*', self.run_selector('list'))
             self.run_selector('show', good=False)
@@ -119,7 +119,7 @@ class ProfileTests(unittest.TestCase):
     def test_dangling_and_foreign_active_symlinks_require_manual_review(self):
         self.profile()
         outside = self.home / 'other.conf'; outside.write_text('# retain\n')
-        for target in ('profiles/absent.conf', str(outside)):
+        for target in ('configs/absent.conf', str(outside)):
             with self.subTest(target=target):
                 self.active.symlink_to(target)
                 self.run_selector('show', good=False)
@@ -147,7 +147,7 @@ class ProfileTests(unittest.TestCase):
             self.run_selector('set', 'a.conf', good=False)
         self.run_selector('set', 'a.conf')
         self.assertTrue(lock.is_file())
-        self.assertFalse(list(self.root.glob('.profile-select.*')))
+        self.assertFalse(list(self.root.glob('.config-select.*')))
 
     def test_target_removed_during_switch_restores_previous_selection(self):
         self.profile(); target=self.profile('b.conf');self.run_selector('set','a.conf')
@@ -156,9 +156,9 @@ class ProfileTests(unittest.TestCase):
         mover.write_text('#!/bin/bash\nrm -- "$DROP_PROFILE"\nexec /bin/mv "$@"\n');mover.chmod(0o755)
         self.env.update(PATH=str(commands)+os.pathsep+os.environ['PATH'],DROP_PROFILE=str(target))
         self.run_selector('set','b.conf',good=False)
-        self.assertEqual(os.readlink(self.active),'profiles/a.conf')
+        self.assertEqual(os.readlink(self.active),'configs/a.conf')
         self.assertTrue(self.active.is_file())
-        self.assertFalse(list(self.root.glob('.profile-select.*')))
+        self.assertFalse(list(self.root.glob('.config-select.*')))
 
     def test_first_selection_does_not_clobber_a_concurrently_created_regular_file(self):
         self.profile()
@@ -180,12 +180,31 @@ class ProfileTests(unittest.TestCase):
         self.run_selector('set','b.conf',good=False)
         self.assertFalse(self.active.is_symlink())
         self.assertEqual(self.active.read_text(),'preserve\n')
-        self.assertFalse(list(self.root.glob('.profile-select.*')))
+        self.assertFalse(list(self.root.glob('.config-select.*')))
+
+    def test_existing_configs_link_can_be_switched(self):
+        self.profile('joetoo-kwin.conf'); self.profile('joetoo-kwin2.conf')
+        self.active.symlink_to('configs/joetoo-kwin.conf')
+        self.assertEqual(self.run_selector('show').strip(), 'joetoo-kwin.conf')
+        self.assertEqual(self.run_selector('list').count('*'), 1)
+        self.run_selector('set', 'joetoo-kwin2.conf')
+        self.assertEqual(os.readlink(self.active), 'configs/joetoo-kwin2.conf')
+        self.assertEqual(self.run_selector('show').strip(), 'joetoo-kwin2.conf')
+
+    def test_legacy_profile_link_requires_manual_migration(self):
+        self.profile()
+        legacy = self.root / 'profiles'
+        legacy.mkdir(mode=0o700)
+        (legacy / 'a.conf').write_text('screen_width=1920\n')
+        self.active.symlink_to('profiles/a.conf')
+        self.run_selector('show', good=False)
+        self.run_selector('set', 'a.conf', good=False)
+        self.assertEqual(os.readlink(self.active), 'profiles/a.conf')
 
     def test_relative_xdg_falls_back_to_home(self):
         self.profile(); self.env['XDG_CONFIG_HOME'] = 'relative'
         self.run_selector('set', 'a.conf')
-        self.assertEqual(os.readlink(self.active), 'profiles/a.conf')
+        self.assertEqual(os.readlink(self.active), 'configs/a.conf')
 
     def test_selected_profile_loaded_and_explicit_f_bypasses_it(self):
         self.profile(); self.run_selector('set', 'a.conf')
@@ -197,5 +216,5 @@ class ProfileTests(unittest.TestCase):
             self.assertIn('DRY RUN: [1]', h.run_cli('-c'))
             h.write_config(['2|konsole|local|btop', '2|konsole|local|btop'])
             self.assertIn('DRY RUN: [2]', h.run_cli('-c', '-f', str(h.config)))
-            self.assertEqual(os.readlink(self.active), 'profiles/a.conf')
+            self.assertEqual(os.readlink(self.active), 'configs/a.conf')
         finally: h.doCleanups()

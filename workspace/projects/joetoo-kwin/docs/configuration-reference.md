@@ -4,7 +4,7 @@
 
 This is documentation, not a sourced defaults file. It describes the current
 implementation, including layered CLI defaults and the optional user-owned
-profile selector. Accepted Increment 4 Stage 3 behavior is unchanged. The short
+config selector. Accepted Increment 4 Stage 3 behavior is unchanged. The short
 `joetoo-kwin-per-run-template.conf` at the project root is the copyable starting
 point. In an installed package, use the resource path in the packaging section.
 
@@ -24,8 +24,8 @@ The implemented precedence, lowest to highest, is:
 1. Built-in `plan_defaults()`.
 2. Optional `/etc/joetoo-kwin/defaults.conf`.
 3. Optional `${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/defaults.conf`.
-4. One selected per-run plan: explicit `-f FILE`, otherwise the XDG user
-   `joetoo-kwin/joetoo-kwin.conf`, with `/etc/joetoo-kwin/joetoo-kwin.conf`
+4. One selected per-run plan: explicit `-f FILE`, otherwise
+   `${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf`, with `/etc/joetoo-kwin/joetoo-kwin.conf`
    as fallback only when the user plan is absent.
 5. Supported explicit CLI overrides (`-v`/`-q` verbosity adjustments).
 
@@ -52,8 +52,8 @@ ownership, fail-closed cleanup and other safety invariants are not configurable
 toggles. Derived slots, managed IDs, UUIDs and internal transaction constants
 are not plan settings.
 
-Profile selection is optional: a regular existing user plan remains valid,
-and explicit `-f` works independently of the selected profile. The selector
+Config selection is optional: a regular existing user plan remains valid,
+and explicit `-f` works independently of the selected config. The selector
 never changes system defaults or daemon configuration.
 
 ## Recovery and last-good snapshot controls
@@ -278,77 +278,92 @@ This example requires an appropriate native Wayland host for actual launch.
 Use `-c` to inspect a copied, edited plan. A successful dry run is not native
 backend, endpoint, authentication or placement acceptance.
 
-## User-owned profiles and migration
+## User-owned configs and default selection
 
-The optional `eselect joetoo-kwin` module uses the same XDG directory as the CLI.
-It does not bootstrap configuration/profile directories or populate HOME with
-plans. Users create their profiles explicitly. A requested `set` creates only
-its private lock, temporary publication directory and selection link. As the intended **non-root** user, after package installation:
+`eselect joetoo-kwin` selects which per-run configuration the ordinary
+`joetoo-kwin -o` command loads when `-f FILE` is absent. Both the selectable
+configs and the active symlink are in the **user's** XDG configuration directory;
+the selector never scans, creates or changes links under `/etc`.
+
+The selector reads only regular `.conf` files under
+`${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/configs/` (a relative
+`XDG_CONFIG_HOME` falls back to `$HOME/.config`). `set NAME` creates or changes
+`${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/joetoo-kwin.conf` as a symlink
+to `configs/NAME`. For example:
+
+```text
+~/.config/joetoo-kwin/
+├── configs/
+│   ├── joetoo-kwin.conf
+│   └── joetoo-kwin2.conf
+└── joetoo-kwin.conf -> configs/joetoo-kwin.conf
+```
+
+Neither Portage nor `eselect list/show` creates user configs. As the intended
+**non-root** user, create and review the files explicitly:
 
 ```bash
 config_root=${XDG_CONFIG_HOME:-$HOME/.config}
 case $config_root in /*) ;; *) config_root=$HOME/.config ;; esac
 config_dir=$config_root/joetoo-kwin
-install -d -m 0700 -- "$config_dir/profiles"
-cp -n -- /usr/share/joetoo-kwin/joetoo-kwin-per-run-template.conf "$config_dir/profiles/work.conf"
-# Inspect/edit work.conf for the display, desired recipes and overrides first.
+install -d -m 0700 -- "$config_dir/configs"
+cp -n -- /usr/share/joetoo-kwin/joetoo-kwin-per-run-template.conf "$config_dir/configs/joetoo-kwin.conf"
+chmod 600 -- "$config_dir/configs/joetoo-kwin.conf"
+# Edit/review the copied configuration before executing trusted Bash:
+joetoo-kwin -c -f "$config_dir/configs/joetoo-kwin.conf"
 eselect joetoo-kwin list
-eselect joetoo-kwin set work.conf && joetoo-kwin -c
+eselect joetoo-kwin set joetoo-kwin.conf
 eselect joetoo-kwin show
+joetoo-kwin -c  # Verify what the selected default would launch.
 # End of commands
-
 ```
 
-`list` gives names/numbers; `set` accepts a safe basename such as `work.conf`
-or its current list number. Prefer names for stable scripts. `show` reports
-the selected name, an unchanged regular configuration, or no user selection.
-The resulting user-plan symlink is `joetoo-kwin.conf -> profiles/work.conf`.
-The CLI sources that plan normally; the selector itself never executes profiles.
-Validate another plan with `joetoo-kwin -c -f FILE` without changing the selection.
-Use confirmed `-o` only after reviewing the effective plan and runtime preflight.
+`list` shows names/numbers from `configs/*.conf`; `set` accepts a listed
+basename or number, and `show` reports the selected config. The default link
+above is `joetoo-kwin.conf -> configs/joetoo-kwin.conf`. `joetoo-kwin -o`
+loads that file after the normal optional defaults layers. `-f FILE` selects
+another per-run plan without changing the symlink or suppressing defaults.
+The CLI's `/etc/joetoo-kwin/joetoo-kwin.conf` fallback remains independent:
+`eselect` does not manage it, and the fallback is used only if no user plan exists.
 
-Profile names must start with an ASCII letter/digit, contain only ASCII letters,
-digits, underscore, dot or hyphen, and end in `.conf`. The module accepts only
-readable regular user-owned files with one link and valid Bash syntax, not
-symlink/hardlink profiles, arbitrary absolute paths or directory traversal.
-Configuration/profile directories must be user-owned, non-symlink directories
-without group/other write permission; the XDG base must also be owned and not
-writable by others. An existing symlinked XDG base can resolve to a safe owned
-directory, but the `joetoo-kwin` and `profiles` subdirectories cannot be symlinks.
-The CLI's pre-existing trusted-file behavior remains broader: the optional
-selector does not prohibit an existing manually managed plan or explicit `-f`.
+Config basenames must start with an ASCII letter/digit, contain only ASCII
+letters, digits, underscore, dot or hyphen, and end in `.conf`. The selector
+accepts only readable, user-owned regular files with one hard link and valid
+Bash syntax, never symlink configs, arbitrary absolute paths or traversal.
+The `joetoo-kwin` and `configs` directories must be user-owned, non-symlink
+directories without group/other write permission. The XDG base must also be
+owned and not group/other writable; an existing symlinked XDG base may resolve
+to a safe owned directory. The CLI's `-f` policy is independent and remains
+broader. All selected files are **trusted executable Bash** when loaded by
+the CLI; `eselect` checks syntax but never sources them.
 
-The selector refuses to replace a regular file, foreign/dangling active symlink
-or unexpected object. Existing valid relative or canonical absolute profile
-symlinks may be switched. A retained private lock serializes selector actions;
-Busy selection fails without waiting indefinitely. First publication uses no-clobber rename. Switching uses GNU
-`mv --exchange --no-copy`: the displaced object is preserved and checked before cleanup, so a
-concurrently substituted regular file is restored rather than discarded. Target
-rechecks roll back a switch if the target disappears. If interference prevents
-restoration, the displaced object is retained in a reported private temporary
-directory for manual recovery; success is never claimed.
-Do not concurrently rewrite/remove profiles or the active plan outside the
-selector: the advisory lock coordinates selector invocations, not arbitrary
-editors. Revalidate after manually editing a selected trusted Bash file.
+`set` refuses to replace a regular active config, a dangling/foreign symlink,
+or an unexpected object. It can switch an existing valid `configs/NAME` link
+(relative or canonical absolute). Its retained private lock serializes selector
+invocations; the legacy lock filename is retained for compatibility with older
+module versions. First selection uses no-clobber rename; later switches use
+GNU `mv --exchange --no-copy`, preserving and verifying the displaced link.
+An unsupported filesystem or an unsafe race fails without claiming success.
+Do not concurrently rewrite/remove configs or the active link outside `eselect`;
+its advisory lock does not coordinate arbitrary editors.
 
-For an existing **regular** user plan, first preserve it deliberately. Do not
-run these migration steps blindly, and choose an unused backup filename:
+If `joetoo-kwin.conf` is an existing **regular file**, preserve it before asking
+`eselect` to create its link. Inspect paths/backups first; do not run blindly:
 
 ```bash
 # config_dir is the user configuration directory resolved above.
-cp -n -- "$config_dir/joetoo-kwin.conf" "$config_dir/profiles/migrated.conf"
-cmp -s -- "$config_dir/joetoo-kwin.conf" "$config_dir/profiles/migrated.conf" &&
+cp -n -- "$config_dir/joetoo-kwin.conf" "$config_dir/configs/migrated.conf"
+cmp -s -- "$config_dir/joetoo-kwin.conf" "$config_dir/configs/migrated.conf" &&
     mv -n -- "$config_dir/joetoo-kwin.conf" "$config_dir/joetoo-kwin.conf.backup"
 eselect joetoo-kwin set migrated.conf && joetoo-kwin -c
 # End of commands
-
 ```
 
-If a backup already exists, inspect it and choose another name. A non-moved
-regular plan makes `set` refuse safely. Invalid/dangling/foreign links require
-manual inspection and preservation before removal; the module does not repair
-or migrate them automatically. Deleting a selected profile later makes the CLI
-fail on the dangling selection instead of using the system plan.
+If a backup already exists, select a different name. Existing links into the
+old `profiles/` directory are **not** automatically converted; migrate their
+files and links deliberately. The selector leaves invalid links untouched.
+Deleting a selected config makes the CLI fail on its dangling selection rather
+than silently using the `/etc` fallback.
 
 ## Packaging integration — maintainer actions
 

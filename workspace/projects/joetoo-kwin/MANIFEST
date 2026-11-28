@@ -73,7 +73,7 @@ config-template|joetoo-kwin-template.conf
 config-readme|README_joetoo_kwin_launch_conf.md
 config-readme|README_joetoo_kwin_templates_conf.md
 selector|eselect/joetoo-kwin.eselect
-config-readme|eselect/README_eselect_profiles_conf.md
+config-readme|eselect/README_eselect_configs_conf.md
 
 docs|docs/configuration-reference.md
 docs|docs/joetoo-kwin_user_manual.md

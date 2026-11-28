@@ -55,7 +55,7 @@ changes user-owned files and OpenRC configuration but does not start the service
 Check validates its explicit inventory, not every possible host prerequisite.
 Use the reviewed deployment setup for the CLI and its colocated planner/helpers;
 copying just the Bash executable is insufficient. No package should populate
-users' HOME profiles automatically.
+users' HOME launch configs automatically.
 
 The native effect must match the running KWin/kwin-x11 SDK/ABI and be explicitly
 loaded through supported KWin mechanisms. Follow the
@@ -189,7 +189,7 @@ Known-clean owned pending failures may allow serial continuation with an overall
 incomplete/nonzero outcome. Busy, source/owner loss or uncertain cleanup stops
 unsafe continuation.
 
-### Configuration and profiles
+### Configuration and config selection
 
 The built-in panel and graphical regions are defined in `plan_defaults()`;
 their current percentages are tabulated in the configuration reference.
@@ -212,31 +212,37 @@ location is `/usr/share/joetoo-kwin/joetoo-kwin-per-run-template.conf` when inst
 by reviewed packaging; the source checkout carries that file at its root.
 No geometry autodetection is implied by the example screen dimensions.
 
-An installed optional `eselect joetoo-kwin` module uses the user's
-`joetoo-kwin/profiles/` directory and default-plan symlink. Switching needs no
-root and never sources a profile. Choose an unused filename and edit it first:
+The optional `eselect joetoo-kwin` module selects a user-owned config under
+`${XDG_CONFIG_HOME:-$HOME/.config}/joetoo-kwin/configs/`, linking the chosen
+file at `joetoo-kwin/joetoo-kwin.conf`. It never searches or manages `/etc`.
+For example, `joetoo-kwin.conf -> configs/joetoo-kwin.conf` is the default
+loaded by `joetoo-kwin -o` unless `-f FILE` selects another plan.
+
+As the ordinary non-root user, create and inspect a config before selecting it:
 
 ```bash
 cfg_base=${XDG_CONFIG_HOME:-$HOME/.config}
 [[ $cfg_base == /* ]] || cfg_base=$HOME/.config
 cfg=$cfg_base/joetoo-kwin
-mkdir -p -- "$cfg/profiles"
-cp -n -- /usr/share/joetoo-kwin/joetoo-kwin-per-run-template.conf "$cfg/profiles/work.conf"
-chmod 600 -- "$cfg/profiles/work.conf"
-# Edit work.conf for this host, then inspect without launching:
-joetoo-kwin -c -f "$cfg/profiles/work.conf"
+install -d -m 0700 -- "$cfg/configs"
+cp -n -- /usr/share/joetoo-kwin/joetoo-kwin-per-run-template.conf "$cfg/configs/joetoo-kwin.conf"
+chmod 600 -- "$cfg/configs/joetoo-kwin.conf"
+# Review/edit the file, then validate without launching:
+joetoo-kwin -c -f "$cfg/configs/joetoo-kwin.conf"
 eselect joetoo-kwin list
-eselect joetoo-kwin set work.conf
+eselect joetoo-kwin set joetoo-kwin.conf
 eselect joetoo-kwin show
+joetoo-kwin -c
 # End of commands
-
 ```
 
-The list marks the selected valid profile with `*`; numeric selection also works.
-A preexisting regular default configuration is not a named selection and is not
-silently overwritten by `set`. Do not bypass ownership/containment/symlink checks.
-Explicit `-f` does not change profile selection. A relative XDG value is ignored
-by the application; set an absolute value before using the example shell `cfg`.
+`list` shows valid files under `configs/`, marking the selected config with
+`*`; `set` accepts a filename or listed number. `set` refuses to overwrite an
+existing regular default config; preserve and migrate it deliberately first.
+A symlink into the former `profiles/` directory also requires manual migration.
+Neither the selector nor package installation creates user configs automatically.
+Explicit `-f` does not change the selected symlink. A relative XDG value falls
+back to `$HOME/.config` when resolved by the application.
 
 ### Close, recover and restore: different operations
 
