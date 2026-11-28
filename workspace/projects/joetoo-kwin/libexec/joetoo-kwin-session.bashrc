@@ -6,7 +6,7 @@ joetoo_session_mode=${JOETOO_SESSION_MODE-}
 joetoo_session_target=${JOETOO_SESSION_TARGET-}
 unset JOETOO_SESSION_MODE JOETOO_SESSION_TARGET
 # shellcheck source=/dev/null
-[[ ! -r $HOME/.bashrc ]] || source "$HOME/.bashrc"
+[[ -r $HOME/.bashrc ]] && source "$HOME/.bashrc"
 # Use the installed header if the user's interactive setup did not load it.
 if ! declare -F ssh_wrapper >/dev/null; then source /usr/sbin/script_header_joetoo; fi
 case $joetoo_session_mode in
