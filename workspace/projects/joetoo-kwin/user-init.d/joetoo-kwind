@@ -20,19 +20,20 @@ fi
 description="joetoo KWin session D-Bus broker (user service)"
 supervisor="supervise-daemon"
 command="${JOETOO_KWIND_EXEC:-/usr/libexec/joetoo-kwind}"
-# Pass the same resolved configuration to the Python broker.
+
+# pass the same resolved configuration to the Python broker
 export JOETOO_KWIND_RESIDENT_JS="${JOETOO_KWIND_RESIDENT_JS:-/usr/share/joetoo-kwin/joetoo-kwin-resident.js}"
 export JOETOO_KWIND_SCRIPT_NAME="${JOETOO_KWIND_SCRIPT_NAME:-joetoo-bridge}"
 pidfile="${XDG_RUNTIME_DIR}/joetoo-kwin/joetoo-kwind.supervisor.pid"
 
-# Retain OpenRC's default start, stop and status functions. This daemon stays
-# in the foreground and must not supervise or launch Konsole/SSH descendants.
+# retain OpenRC's default start, stop and status functions. This daemon stays
+# in the foreground and must not supervise or launch Konsole/SSH descendants
 respawn_delay=10
 respawn_max=5
 respawn_period=120
 
-# Explicitly override any global OpenRC cgroup cleanup policy for this service.
-# Supervision must never imply permission to terminate managed windows.
+# explicitly override any global OpenRC cgroup cleanup policy for this service;
+# supervision must never imply permission to terminate managed windows
 rc_cgroup_cleanup="NO"
 
 start_pre() {
@@ -40,9 +41,9 @@ start_pre() {
         eerror "joetoo-kwind must run as the graphical user, not root"
         return 1
     fi
-    # rc-service -U runs in the invoking user's environment, not as root.
+    # rc-service -U runs in the invoking user's environment, not as root;
     # HOME must be nonempty and absolute before proceeding:
-    # without it, the XDG fallback could accidentally target /.config.
+    # without it, the XDG fallback could accidentally target /.config
     if [ -z "${HOME:-}" ] || [ "${HOME#/}" = "$HOME" ]; then
         eerror "HOME must be set to an absolute user home directory"
         return 1
@@ -57,7 +58,7 @@ start_pre() {
         eerror "XDG_RUNTIME_DIR must name an existing absolute user runtime directory"
         return 1
     fi
-    # Guard against a misdirected runtime directory, e.g. a stale 'sudo' env.
+    # guard against a misdirected runtime directory, e.g. a stale 'sudo' env
     if [ "$(stat -c %u -- "$XDG_RUNTIME_DIR")" != "$(id -u)" ]; then
         eerror "XDG_RUNTIME_DIR is not owned by the current user"
         return 1
